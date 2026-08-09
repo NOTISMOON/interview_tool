@@ -1,0 +1,95 @@
+
+> interview-tool-web@1.0.0 dev
+> vite
+
+Port 3000 is in use, trying another one...
+
+  [32m[1mVITE[22m v6.4.3[39m  [2mready in [0m[1m627[22m[2m[0m ms[22m
+
+  [32m鉃?[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3001[22m/[39m
+[2m  [32m鉃?[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m[32m  鉃?[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+03:43:37 [vite] (client) Pre-transform error: D:\椤圭洰\interview_tool\web_front\src\pages\Dashboard\Community.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (168:6)
+
+  166 |     </div>
+  167 |
+> 168 |       <Modal
+      |       ^
+  169 |         title="鍙戝竷甯栧瓙"
+  170 |         open={createModalOpen}
+  171 |         onCancel={() => {
+  Plugin: vite:react-babel
+  File: D:/椤圭洰/interview_tool/web_front/src/pages/Dashboard/Community.tsx:168:6
+  172|            setCreateModalOpen(false);
+  173|            setPostTitle('');
+  174|            setPostContent('');
+     |                   ^
+  175|            setPostTags([]);
+  176|            setPostImages([]);
+03:43:37 [vite] Internal server error: D:\椤圭洰\interview_tool\web_front\src\pages\Dashboard\Community.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (168:6)
+
+  166 |     </div>
+  167 |
+> 168 |       <Modal
+      |       ^
+  169 |         title="鍙戝竷甯栧瓙"
+  170 |         open={createModalOpen}
+  171 |         onCancel={() => {
+  Plugin: vite:react-babel
+  File: D:/椤圭洰/interview_tool/web_front/src/pages/Dashboard/Community.tsx:168:6
+  172|            setCreateModalOpen(false);
+  173|            setPostTitle('');
+  174|            setPostContent('');
+     |                   ^
+  175|            setPostTags([]);
+  176|            setPostImages([]);
+      at constructor (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:369:19)
+      at TypeScriptParserMixin.raise (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:6620:19)
+      at TypeScriptParserMixin.jsxParseElementAt (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:4758:18)
+      at TypeScriptParserMixin.jsxParseElement (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:4765:17)
+      at TypeScriptParserMixin.parseExprAtom (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:4775:19)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11102:23)
+      at TypeScriptParserMixin.parseUpdate (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11087:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11067:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:9858:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10920:61)
+      at TypeScriptParserMixin.parseExprOps (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10925:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10902:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10852:21)
+      at D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:9796:39
+      at TypeScriptParserMixin.tryParse (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:6928:20)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:9796:18)
+      at D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10821:39
+      at TypeScriptParserMixin.allowInAnd (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12455:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10821:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12522:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11701:28)
+      at TypeScriptParserMixin.parseExprAtom (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11357:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:4780:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11102:23)
+      at TypeScriptParserMixin.parseUpdate (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11087:21)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11067:23)
+      at TypeScriptParserMixin.parseMaybeUnary (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:9858:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10920:61)
+      at TypeScriptParserMixin.parseExprOps (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10925:23)
+      at TypeScriptParserMixin.parseMaybeConditional (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10902:23)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10852:21)
+      at TypeScriptParserMixin.parseMaybeAssign (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:9807:20)
+      at TypeScriptParserMixin.parseExpressionBase (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10805:23)
+      at D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10801:39
+      at TypeScriptParserMixin.allowInAnd (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12450:16)
+      at TypeScriptParserMixin.parseExpression (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:10801:17)
+      at TypeScriptParserMixin.parseReturnStatement (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:13171:28)
+      at TypeScriptParserMixin.parseStatementContent (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12827:21)
+      at TypeScriptParserMixin.parseStatementContent (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:9529:18)
+      at TypeScriptParserMixin.parseStatementLike (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12796:17)
+      at TypeScriptParserMixin.parseStatementListItem (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12776:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:13345:61)
+      at TypeScriptParserMixin.parseBlockBody (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:13338:10)
+      at TypeScriptParserMixin.parseBlock (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:13326:10)
+      at TypeScriptParserMixin.parseFunctionBody (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12129:24)
+      at TypeScriptParserMixin.parseArrowExpression (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:12104:10)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11713:12)
+      at TypeScriptParserMixin.parseExprAtom (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11357:23)
+      at TypeScriptParserMixin.parseExprAtom (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:4780:20)
+      at TypeScriptParserMixin.parseExprSubscripts (D:\椤圭洰\interview_tool\web_front\node_modules\.pnpm\@babel+parser@7.29.8\node_modules\@babel\parser\lib\index.js:11102:23)

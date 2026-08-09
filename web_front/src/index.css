@@ -1,0 +1,228 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-ink: #0D1117;
+  --color-flame: #FF6B35;
+  --color-flame-hover: #E85D26;
+  --color-flame-light: #FFF3ED;
+  --color-bg: #F6F8FA;
+  --color-surface: #FFFFFF;
+  --color-rock: #5F6B7A;
+  --color-slate: #8B949E;
+  --color-line: #E1E4E8;
+  --color-line-light: #F0F2F5;
+  --color-success: #2DA44E;
+  --color-success-bg: #ECFDF3;
+  --color-error: #CF222E;
+  --color-error-bg: #FFF0F1;
+  --color-warning: #BF8700;
+  --color-warning-bg: #FFF8E6;
+
+  --sidebar-width: 240px;
+  --header-height: 60px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 3px rgba(13, 17, 23, 0.04);
+  --shadow-md: 0 4px 16px rgba(13, 17, 23, 0.06);
+  --shadow-lg: 0 8px 32px rgba(13, 17, 23, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+  color: var(--color-ink);
+  background: var(--color-bg);
+  line-height: 1.6;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input,
+textarea {
+  font-family: inherit;
+}
+
+@layer components {
+  .btn-flame {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--color-flame);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-flame:hover {
+    background: var(--color-flame-hover);
+    box-shadow: 0 4px 16px rgba(255, 107, 53, 0.25);
+  }
+
+  .btn-flame:active {
+    transform: scale(0.98);
+  }
+
+  .btn-flame-lg {
+    padding: 14px 32px;
+    font-size: 16px;
+    border-radius: var(--radius-lg);
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: transparent;
+    color: var(--color-ink);
+    border: 1.5px solid var(--color-line);
+    border-radius: var(--radius-md);
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-ghost:hover {
+    border-color: var(--color-ink);
+    background: var(--color-bg);
+  }
+
+  .btn-ghost:active {
+    transform: scale(0.98);
+  }
+
+  .btn-ghost-lg {
+    padding: 14px 32px;
+    font-size: 16px;
+    border-radius: var(--radius-lg);
+  }
+
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  .card:hover {
+    border-color: var(--color-slate);
+    box-shadow: var(--shadow-md);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .tag-flame {
+    background: var(--color-flame-light);
+    color: var(--color-flame);
+  }
+
+  .tag-success {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+  }
+
+  .tag-ink {
+    background: var(--color-bg);
+    color: var(--color-ink);
+  }
+
+  .section-title {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--color-ink);
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .section-subtitle {
+    font-size: 16px;
+    color: var(--color-rock);
+    line-height: 1.6;
+    max-width: 560px;
+  }
+
+  .section-padding {
+    padding: 80px 0;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, var(--color-flame), #FF8F65);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
