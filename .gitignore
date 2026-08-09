@@ -15,19 +15,24 @@ out/
 .env.test.local
 .env.production.local
 
-# IDE
+# IDE & Editor
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.trae/
+.codegraph/
+.agents/
+skills-lock.json
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs & Error files
 *.log
+error_log.txt
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -36,10 +41,6 @@ pnpm-debug.log*
 # Cache
 .cache/
 *.tsbuildinfo
-
-# CodeGraph
-.codegraph/codegraph.db
-.codegraph/cache/
 
 # Python
 __pycache__/
