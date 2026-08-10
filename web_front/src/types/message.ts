@@ -1,7 +1,7 @@
-export type MessageType = 'system' | 'comment' | 'like' | 'follow' | 'interview' | 'dm';
+export type MessageType = 'system' | 'comment' | 'like' | 'follow' | 'dm';
 
 export interface RelatedContent {
-  type: 'post' | 'report' | 'interview' | 'user';
+  type: 'post' | 'report' | 'user';
   id: string;
   title: string;
   summary?: string;
@@ -68,6 +68,5 @@ export const MESSAGE_TYPE_LABEL: Record<MessageType, string> = {
   comment: '评论',
   like: '点赞',
   follow: '关注',
-  interview: '面试',
   dm: '私信',
 };

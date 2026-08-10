@@ -231,15 +231,6 @@ export const mockMessages: SystemMessage[] = [
     relatedId: 'report_1',
   },
   {
-    id: 'msg6',
-    type: 'interview',
-    title: '新面试邀请：字节跳动前端岗',
-    content: '你收到了一份来自字节跳动的面试邀请，岗位为高级前端工程师，请及时确认面试时间。',
-    isRead: false,
-    createdAt: '3 天前',
-    relatedId: 'interview_1',
-  },
-  {
     id: 'msg7',
     type: 'dm',
     title: 'Go 夜读 给你发了一条私信',

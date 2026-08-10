@@ -7,7 +7,6 @@ import {
   LikeOutlined,
   CommentOutlined,
   TeamOutlined,
-  VideoCameraOutlined,
   MessageOutlined,
 } from '@ant-design/icons';
 import { mockMessages } from '@/mocks/data';
@@ -23,7 +22,6 @@ const MessagesPage = () => {
       case 'like': return <LikeOutlined className="text-[#CF222E]" />;
       case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
       case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
-      case 'interview': return <VideoCameraOutlined className="text-[#5F6B7A]" />;
       case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
       default: return <BellOutlined className="text-[#8B949E]" />;
     }
@@ -35,7 +33,6 @@ const MessagesPage = () => {
       case 'like': return 'bg-[#FFF0F1]';
       case 'comment': return 'bg-[#ECFDF3]';
       case 'follow': return 'bg-[#F6F8FA]';
-      case 'interview': return 'bg-[#F0F2F5]';
       case 'dm': return 'bg-[#FFF3ED]';
       default: return 'bg-[#F6F8FA]';
     }
@@ -75,7 +72,6 @@ const MessagesPage = () => {
           { key: 'like', label: '点赞' },
           { key: 'comment', label: '评论' },
           { key: 'follow', label: '关注' },
-          { key: 'interview', label: '面试' },
           { key: 'dm', label: '私信' },
         ].map((tab) => ({ key: tab.key, label: <span className="text-sm">{tab.label}</span> }))}
       />

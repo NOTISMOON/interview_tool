@@ -7,7 +7,6 @@ import {
   LikeOutlined,
   CommentOutlined,
   TeamOutlined,
-  VideoCameraOutlined,
   MessageOutlined,
   MoreOutlined,
   DeleteOutlined,
@@ -22,7 +21,6 @@ const getIcon = (type: string) => {
     case 'like': return <LikeOutlined className="text-[#CF222E]" />;
     case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
     case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
-    case 'interview': return <VideoCameraOutlined className="text-[#5F6B7A]" />;
     case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
     default: return <BellOutlined className="text-[#8B949E]" />;
   }
@@ -34,7 +32,6 @@ const getIconBg = (type: string) => {
     case 'like': return 'bg-[#FFF0F1]';
     case 'comment': return 'bg-[#ECFDF3]';
     case 'follow': return 'bg-[#F6F8FA]';
-    case 'interview': return 'bg-[#F0F2F5]';
     case 'dm': return 'bg-[#FFF3ED]';
     default: return 'bg-[#F6F8FA]';
   }
@@ -84,8 +81,6 @@ const MessageDetailPage = () => {
       if (messageItem.fromUser) {
         navigate(`/dashboard/user/${messageItem.fromUser.id}`);
       }
-    } else if (messageItem.type === 'interview') {
-      navigate('/dashboard/interview');
     } else if (messageItem.type === 'system') {
       if (messageItem.relatedId?.startsWith('report')) {
         navigate(`/dashboard/report/${messageItem.relatedId}`);
@@ -103,7 +98,6 @@ const MessageDetailPage = () => {
       case 'like': return '查看详情';
       case 'comment': return '查看帖子';
       case 'follow': return '查看主页';
-      case 'interview': return '进入面试';
       case 'dm': return '查看私信';
       default: return '查看详情';
     }
@@ -187,22 +181,6 @@ const MessageDetailPage = () => {
               + 关注
             </button>
           </div>
-        </div>
-      );
-    }
-
-    if (messageItem.type === 'interview') {
-      return (
-        <div
-          className="bg-white border border-[#E1E4E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#FF6B35]/30 transition-all cursor-pointer"
-          onClick={() => navigate('/dashboard/interview')}
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <span className="tag tag-flame">面试邀请</span>
-            <span className="text-xs text-[#8B949E]">字节跳动</span>
-          </div>
-          <h4 className="text-sm font-semibold text-[#0D1117] mb-1">高级前端工程师</h4>
-          <p className="text-xs text-[#5F6B7A]">地点：北京 · 薪资：30K-50K</p>
         </div>
       );
     }
