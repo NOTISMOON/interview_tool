@@ -19,7 +19,7 @@ const MOCK_POSTS: CommunityPost[] = [
   {
     id: '1', title: '前端三年经验，面试字节挂了三次，求大佬指点',
     content: '三年 Vue 经验，最近在学 React，面试总挂在系统设计上...',
-    author: { id: 'u1', nickname: '前端小张', avatar: '' },
+    author: { id: 'u7', nickname: '前端小张', avatar: '' },
     tags: ['面试经验', '前端'], likes: 128, comments: 45, views: 2300,
     isPinned: true, isHot: true, createdAt: '10 分钟前',
   },
@@ -140,7 +140,11 @@ const CommunityPage = () => {
             onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
           >
             <div className="flex items-start gap-3">
-              <Avatar size={36} className="!bg-[#0D1117] flex-shrink-0">{post.author.nickname[0]}</Avatar>
+              <Avatar
+                  size={36}
+                  className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                >{post.author.nickname[0]}</Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5">
                   {post.isPinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
@@ -150,7 +154,10 @@ const CommunityPage = () => {
                 <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content}</p>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 text-xs text-[#8B949E]">
-                    <span>{post.author.nickname}</span>
+                    <span
+                    className="cursor-pointer hover:text-[#FF6B35]"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                  >{post.author.nickname}</span>
                     <span>{post.createdAt}</span>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-[#8B949E]">

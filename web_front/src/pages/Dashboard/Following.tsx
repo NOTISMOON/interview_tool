@@ -24,6 +24,10 @@ const FollowingPage = () => {
     }
   };
 
+  const handleUserClick = (userId: string) => {
+    navigate(`/dashboard/user/${userId}`);
+  };
+
   return (
     <div className="max-w-[700px]">
       <div className="flex items-center gap-4 mb-6">
@@ -56,13 +60,13 @@ const FollowingPage = () => {
                 <Avatar
                   size={44}
                   className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
-                  onClick={() => msg.info('个人主页即将上线')}
+                  onClick={() => handleUserClick(user.id)}
                 >
                   {user.nickname[0]}
                 </Avatar>
                 <div
                   className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => msg.info('个人主页即将上线')}
+                  onClick={() => handleUserClick(user.id)}
                 >
                   <h4 className="text-sm font-semibold text-[#0D1117] truncate">{user.nickname}</h4>
                   <p className="text-xs text-[#5F6B7A] truncate mt-0.5">{user.bio}</p>

@@ -73,7 +73,11 @@ const FeedPage = () => {
               onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
             >
               <div className="flex items-start gap-3">
-                <Avatar size={36} className="!bg-[#0D1117] flex-shrink-0">
+                <Avatar
+                  size={36}
+                  className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                >
                   {post.author.nickname[0]}
                 </Avatar>
                 <div className="flex-1 min-w-0">
@@ -88,7 +92,10 @@ const FeedPage = () => {
                   <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content}</p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-[#8B949E]">
-                      <span className="font-medium text-[#5F6B7A]">{post.author.nickname}</span>
+                      <span
+                        className="font-medium text-[#5F6B7A] cursor-pointer hover:text-[#FF6B35]"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                      >{post.author.nickname}</span>
                       <span className="w-1 h-1 rounded-full bg-[#E1E4E8]" />
                       <span>{post.createdAt}</span>
                     </div>

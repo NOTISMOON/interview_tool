@@ -28,6 +28,10 @@ const FollowersPage = () => {
     }
   };
 
+  const handleUserClick = (userId: string) => {
+    navigate(`/dashboard/user/${userId}`);
+  };
+
   const getButtonContent = (user: UserBrief) => {
     if (user.isFollowing && user.isFollowedBy) {
       return { text: '互相关注', className: 'bg-[#FFF3ED] text-[#FF6B35] border border-[#FF6B35]/20' };
@@ -73,16 +77,16 @@ const FollowersPage = () => {
                 {idx > 0 && <div className="border-t border-[#F0F2F5]" />}
                 <div className="flex items-center gap-4 px-5 py-4 hover:bg-[#F6F8FA] transition-colors">
                   <Avatar
-                    size={44}
-                    className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
-                    onClick={() => msg.info('个人主页即将上线')}
-                  >
-                    {user.nickname[0]}
-                  </Avatar>
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => msg.info('个人主页即将上线')}
-                  >
+                  size={44}
+                  className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
+                  onClick={() => handleUserClick(user.id)}
+                >
+                  {user.nickname[0]}
+                </Avatar>
+                <div
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() => handleUserClick(user.id)}
+                >
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-semibold text-[#0D1117] truncate">{user.nickname}</h4>
                       {user.isFollowedBy && (

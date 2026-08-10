@@ -118,11 +118,18 @@ const PostDetailPage = () => {
         </h1>
 
         <div className="flex items-center gap-3 mb-5">
-          <Avatar size={40} className="!bg-[#0D1117] flex-shrink-0 !text-base">
+          <Avatar
+            size={40}
+            className="!bg-[#0D1117] flex-shrink-0 !text-base cursor-pointer"
+            onClick={() => navigate(`/dashboard/user/${post.author.id}`)}
+          >
             {post.author.nickname[0]}
           </Avatar>
           <div>
-            <div className="text-sm font-semibold text-[#0D1117]">{post.author.nickname}</div>
+            <div
+              className="text-sm font-semibold text-[#0D1117] cursor-pointer hover:text-[#FF6B35]"
+              onClick={() => navigate(`/dashboard/user/${post.author.id}`)}
+            >{post.author.nickname}</div>
             <div className="text-xs text-[#8B949E]">{post.createdAt}</div>
           </div>
         </div>
