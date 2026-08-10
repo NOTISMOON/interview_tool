@@ -17,6 +17,7 @@ import FeedPage from '@/pages/Dashboard/Feed';
 import CommunityPage from '@/pages/Dashboard/Community';
 import MessagesPage from '@/pages/Dashboard/Messages';
 import MessageDetailPage from '@/pages/Dashboard/MessageDetail';
+import ChatPage from '@/pages/Dashboard/ChatPage';
 import UserPage from '@/pages/Dashboard/UserPage';
 import ProfilePage from '@/pages/Dashboard/Profile';
 import PostDetailPage from '@/pages/Dashboard/PostDetail';
@@ -72,6 +73,7 @@ const App = () => {
         <Route path="community" element={<CommunityPage />} />
         <Route path="messages" element={<MessagesPage />} />
         <Route path="messages/:id" element={<MessageDetailPage />} />
+        <Route path="messages/chat/:userId" element={<ChatPage />} />
         <Route path="user/:id" element={<UserPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="community/post/:id" element={<PostDetailPage />} />
