@@ -16,6 +16,7 @@ import ReportPage from '@/pages/Dashboard/Report';
 import FeedPage from '@/pages/Dashboard/Feed';
 import CommunityPage from '@/pages/Dashboard/Community';
 import MessagesPage from '@/pages/Dashboard/Messages';
+import MessageDetailPage from '@/pages/Dashboard/MessageDetail';
 import ProfilePage from '@/pages/Dashboard/Profile';
 import PostDetailPage from '@/pages/Dashboard/PostDetail';
 import FollowingPage from '@/pages/Dashboard/Following';
@@ -69,6 +70,7 @@ const App = () => {
         <Route path="feed" element={<FeedPage />} />
         <Route path="community" element={<CommunityPage />} />
         <Route path="messages" element={<MessagesPage />} />
+        <Route path="messages/:id" element={<MessageDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="community/post/:id" element={<PostDetailPage />} />
         <Route path="following" element={<FollowingPage />} />

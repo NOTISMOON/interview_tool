@@ -1,26 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Tabs } from 'antd';
+import { Tabs } from 'antd';
 import {
   ArrowLeftOutlined,
   BellOutlined,
   LikeOutlined,
   CommentOutlined,
   TeamOutlined,
+  VideoCameraOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
+import { mockMessages } from '@/mocks/data';
 import type { SystemMessage } from '@/types';
-
-const MOCK_MESSAGES: SystemMessage[] = [
-  { id: '1', type: 'system', title: '欢迎加入面试教练', content: '上传你的简历，AI 将为你生成个性化面试题。', isRead: false, createdAt: '刚刚' },
-  { id: '2', type: 'like', title: '新的点赞', content: '你的面试报告获得了 3 个点赞', isRead: true, createdAt: '2 小时前', relatedId: 'report_1' },
-  { id: '3', type: 'comment', title: '新的评论', content: '前端小张 评论了你的帖子', isRead: true, createdAt: '5 小时前', relatedId: 'post_1' },
-  { id: '4', type: 'follow', title: '新的关注', content: '上岸的鱼 关注了你', isRead: true, createdAt: '昨天', relatedId: 'u2' },
-  { id: '5', type: 'system', title: '面试报告已生成', content: '你的 AI 模拟面试报告已生成，总得分 82 分', isRead: true, createdAt: '昨天', relatedId: 'report_1' },
-];
 
 const MessagesPage = () => {
   const navigate = useNavigate();
-  const { message } = App.useApp();
   const [activeTab, setActiveTab] = useState('all');
 
   const getIcon = (type: string) => {
@@ -29,6 +23,8 @@ const MessagesPage = () => {
       case 'like': return <LikeOutlined className="text-[#CF222E]" />;
       case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
       case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
+      case 'interview': return <VideoCameraOutlined className="text-[#5F6B7A]" />;
+      case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
       default: return <BellOutlined className="text-[#8B949E]" />;
     }
   };
@@ -39,12 +35,22 @@ const MessagesPage = () => {
       case 'like': return 'bg-[#FFF0F1]';
       case 'comment': return 'bg-[#ECFDF3]';
       case 'follow': return 'bg-[#F6F8FA]';
+      case 'interview': return 'bg-[#F0F2F5]';
+      case 'dm': return 'bg-[#FFF3ED]';
       default: return 'bg-[#F6F8FA]';
     }
   };
 
-  const filtered = activeTab === 'all' ? MOCK_MESSAGES : MOCK_MESSAGES.filter((m) => m.type === activeTab);
-  const unreadCount = MOCK_MESSAGES.filter((m) => !m.isRead).length;
+  const filtered = activeTab === 'all' ? mockMessages : mockMessages.filter((m) => m.type === activeTab);
+  const unreadCount = mockMessages.filter((m) => !m.isRead).length;
+
+  const handleMessageClick = (msg: SystemMessage) => {
+    if (msg.type === 'dm') {
+      navigate(`/dashboard/messages/chat/${msg.fromUser?.id || 'u3'}`);
+    } else {
+      navigate(`/dashboard/messages/${msg.id}`);
+    }
+  };
 
   return (
     <div>
@@ -69,6 +75,8 @@ const MessagesPage = () => {
           { key: 'like', label: '点赞' },
           { key: 'comment', label: '评论' },
           { key: 'follow', label: '关注' },
+          { key: 'interview', label: '面试' },
+          { key: 'dm', label: '私信' },
         ].map((tab) => ({ key: tab.key, label: <span className="text-sm">{tab.label}</span> }))}
       />
 
@@ -77,7 +85,7 @@ const MessagesPage = () => {
           <div
             key={msg.id}
             className={`bg-white border rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer ${!msg.isRead ? 'border-[#FF6B35]/30 bg-[#FFF3ED]/30' : 'border-[#E1E4E8]'}`}
-            onClick={() => message.info('消息详情即将上线')}
+            onClick={() => handleMessageClick(msg)}
           >
             <div className="flex items-start gap-3">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${getIconBg(msg.type)}`}>
