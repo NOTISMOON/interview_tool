@@ -17,6 +17,28 @@ export interface UserBrief {
   isFollowedBy?: boolean;
 }
 
+export interface UserProfile {
+  id: string;
+  nickname: string;
+  avatar?: string;
+  bio: string;
+  isFollowing: boolean;
+  isFollowedBy?: boolean;
+  followingCount: number;
+  followersCount: number;
+  postsCount: number;
+  posts: import('./community').CommunityPost[];
+  activities: ActivityItem[];
+}
+
+export interface ActivityItem {
+  id: string;
+  type: 'like' | 'comment' | 'follow' | 'post';
+  content: string;
+  relatedId?: string;
+  createdAt: string;
+}
+
 export interface LoginForm {
   email: string;
   password: string;

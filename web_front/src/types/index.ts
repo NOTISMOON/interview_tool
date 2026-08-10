@@ -1,4 +1,4 @@
-export type { User, UserBrief, LoginForm, RegisterForm } from './user';
+export type { User, UserBrief, UserProfile, ActivityItem, LoginForm, RegisterForm } from './user';
 export type {
   Resume,
   ParsedResumeContent,
@@ -17,5 +17,5 @@ export {
   QUESTION_TYPE_COLOR,
 } from './interview';
 export type { Post, PostComment, CommunityPost, CommunityState } from './community';
-export type { Message, MessageType } from './message';
+export type { Message, SystemMessage, MessageType, RelatedContent, DmConversation, DmMessage } from './message';
 export { MESSAGE_TYPE_LABEL } from './message';
