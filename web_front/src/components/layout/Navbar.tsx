@@ -65,10 +65,10 @@ const Navbar = () => {
                 登录
               </button>
               <button
-                onClick={() => navigate('/register')}
+                onClick={() => navigate('/login')}
                 className="btn-flame"
               >
-                免费注册
+                登录 / 注册
               </button>
             </>
           )}

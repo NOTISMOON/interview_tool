@@ -43,6 +43,7 @@ interface AppState {
 
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
+  loginWithGithub: () => Promise<void>;
   logout: () => void;
   updateUser: (nickname: string, avatar?: string) => void;
   addResume: (resume: Resume) => void;
@@ -82,6 +83,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         id: '1',
         email,
         nickname,
+        followingCount: 0,
+        followersCount: 0,
+        followingIds: [],
+      },
+      isLoggedIn: true,
+    });
+  },
+
+  loginWithGithub: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    set({
+      user: {
+        id: 'github_user',
+        email: 'github@interview.dev',
+        nickname: 'GitHub 用户',
+        avatar: 'https://avatars.githubusercontent.com/u/0?v=4',
         followingCount: 0,
         followersCount: 0,
         followingIds: [],

@@ -6,7 +6,6 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 
 import LandingPage from '@/pages/Landing';
 import LoginPage from '@/pages/Login';
-import RegisterPage from '@/pages/Register';
 
 import DashboardHome from '@/pages/Dashboard/Home';
 import InterviewPage from '@/pages/Dashboard/Interview';
@@ -54,7 +53,7 @@ const App = () => {
         }
       />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
 
       <Route
         path="/dashboard"

@@ -87,7 +87,7 @@ const LandingPage = () => {
               基于真实简历，AI 为你生成个性化面试题。多轮练习、深度分析，让每一次面试都成为你拿 offer 的底气。
             </p>
             <div className="flex items-center gap-4">
-              <button onClick={() => navigate('/register')} className="btn-flame btn-flame-lg text-base">
+              <button onClick={() => navigate('/login')} className="btn-flame btn-flame-lg text-base">
                 免费开始练习
                 <RightOutlined />
               </button>
@@ -214,7 +214,7 @@ const LandingPage = () => {
               <p className="text-[#8B949E] mb-8 max-w-md mx-auto">
                 免费注册，上传简历，AI 即刻为你生成面试题。每一次练习，都离 offer 更近一步。
               </p>
-              <button onClick={() => navigate('/register')} className="btn-flame btn-flame-lg text-base">
+              <button onClick={() => navigate('/login')} className="btn-flame btn-flame-lg text-base">
                 免费注册，开始练习
               </button>
             </div>
