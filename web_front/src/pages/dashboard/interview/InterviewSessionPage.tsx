@@ -8,7 +8,7 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
-import { mockReport } from '@/mocks/data';
+import { mockReport } from '@/lib/mocks/data';
 import { QUESTION_TYPE_LABEL } from '@/types';
 
 const { TextArea } = Input;

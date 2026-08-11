@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, App } from 'antd';
 import { ArrowLeftOutlined, TeamOutlined } from '@ant-design/icons';
-import { mockFollowersList } from '@/mocks/data';
+import { mockFollowersList } from '@/lib/mocks/data';
 import type { UserBrief } from '@/types';
 
 const FollowersPage = () => {

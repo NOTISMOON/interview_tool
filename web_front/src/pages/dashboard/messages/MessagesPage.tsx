@@ -9,7 +9,7 @@ import {
   TeamOutlined,
   MessageOutlined,
 } from '@ant-design/icons';
-import { mockMessages } from '@/mocks/data';
+import { mockMessages } from '@/lib/mocks/data';
 import type { SystemMessage } from '@/types';
 
 const MessagesPage = () => {

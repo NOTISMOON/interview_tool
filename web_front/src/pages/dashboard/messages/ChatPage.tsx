@@ -7,7 +7,7 @@ import {
   UserAddOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { mockDmConversations } from '@/mocks/data';
+import { mockDmConversations } from '@/lib/mocks/data';
 import type { DmConversation, DmMessage } from '@/types';
 
 const ChatPage = () => {

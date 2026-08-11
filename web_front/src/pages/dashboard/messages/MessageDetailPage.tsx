@@ -12,7 +12,7 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons';
 import { MESSAGE_TYPE_LABEL } from '@/types';
-import { mockMessages } from '@/mocks/data';
+import { mockMessages } from '@/lib/mocks/data';
 import type { SystemMessage } from '@/types';
 
 const getIcon = (type: string) => {

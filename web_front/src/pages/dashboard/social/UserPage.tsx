@@ -12,7 +12,7 @@ import {
   TeamOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
-import { mockUserProfiles } from '@/mocks/data';
+import { mockUserProfiles } from '@/lib/mocks/data';
 import { useAppStore } from '@/store';
 import type { UserProfile, CommunityPost, ActivityItem } from '@/types';
 

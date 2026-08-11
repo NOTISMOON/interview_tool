@@ -10,7 +10,7 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
-import { mockReport } from '@/mocks/data';
+import { mockReport } from '@/lib/mocks/data';
 
 const ReportPage = () => {
   const { id } = useParams<{ id: string }>();

@@ -12,7 +12,7 @@ import {
   FireOutlined,
   PushpinOutlined,
 } from '@ant-design/icons';
-import { mockPostDetailComments } from '@/mocks/data';
+import { mockPostDetailComments } from '@/lib/mocks/data';
 import type { CommunityPost } from '@/types';
 
 const MOCK_POSTS: CommunityPost[] = [

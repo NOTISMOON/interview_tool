@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { useAppStore } from '@/store';
-import { mockQuestions } from '@/mocks/data';
+import { mockQuestions } from '@/lib/mocks/data';
 
 const { Dragger } = Upload;
 

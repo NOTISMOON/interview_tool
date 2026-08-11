@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState, CommunityPost } from '@/types';
-import { mockQuestions, mockReport } from '@/mocks/data';
+import { mockQuestions, mockReport } from '@/lib/mocks/data';
 
 const MOCK_FOLLOWED_POSTS: CommunityPost[] = [
   {
