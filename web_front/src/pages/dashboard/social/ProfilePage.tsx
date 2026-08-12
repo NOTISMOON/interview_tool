@@ -61,7 +61,16 @@ const ProfilePage = () => {
     setEditModalOpen(false);
   };
 
-  const menuGroups = [
+  interface MenuItem {
+    icon: React.ReactNode;
+    label: string;
+    count?: number | string;
+    color: string;
+    bg: string;
+    onClick: () => void;
+  }
+
+  const menuGroups: { title: string; items: MenuItem[] }[] = [
     {
       title: '数据',
       items: [
@@ -159,7 +168,7 @@ const ProfilePage = () => {
                     {item.icon}
                   </div>
                   <span className="flex-1 text-sm font-medium text-[#0D1117]">{item.label}</span>
-                  {item.count !== undefined && <span className="text-xs text-[#8B949E] mr-1">{item.count}</span>}
+                  {'count' in item && item.count !== undefined && <span className="text-xs text-[#8B949E] mr-1">{item.count}</span>}
                   <RightOutlined className="text-[#E1E4E8] text-xs" />
                 </button>
               </div>

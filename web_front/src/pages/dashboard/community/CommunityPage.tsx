@@ -143,7 +143,7 @@ const CommunityPage = () => {
               <Avatar
                   size={36}
                   className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                  onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
                 >{post.author.nickname[0]}</Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5">
@@ -156,7 +156,7 @@ const CommunityPage = () => {
                   <div className="flex items-center gap-3 text-xs text-[#8B949E]">
                     <span
                     className="cursor-pointer hover:text-[#FF6B35]"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                    onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
                   >{post.author.nickname}</span>
                     <span>{post.createdAt}</span>
                   </div>

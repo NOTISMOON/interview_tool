@@ -109,7 +109,12 @@ export const mockQuestions: InterviewQuestion[] = [
 ];
 
 export const mockReport: InterviewReport = {
+  id: 'report_1',
   totalScore: 82,
+  interviewTime: '2026-08-10 14:30',
+  resumeName: '前端开发工程师_张三.pdf',
+  type: 'full',
+  questionCount: 7,
   summary:
     '整体表现良好，展现了扎实的前端技术功底和项目经验。在 React 相关技术问题上回答较为深入，但部分系统设计类问题可以更加全面。沟通表达清晰，具备良好的学习能力和问题解决能力。',
   strengths: [

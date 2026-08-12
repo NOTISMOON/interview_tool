@@ -7,7 +7,7 @@ import {
   ThunderboltOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import type { UploadProps } from 'antd';
+import type { UploadProps, UploadFile } from 'antd';
 import { useAppStore } from '@/store';
 import { mockQuestions } from '@/lib/mocks/data';
 
@@ -15,7 +15,7 @@ const { Dragger } = Upload;
 
 const InterviewPage = () => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [generating, setGenerating] = useState(false);
   const navigate = useNavigate();
   const { message } = App.useApp();
@@ -45,9 +45,9 @@ const InterviewPage = () => {
     setGenerating(true);
     addResume({
       id: `resume_${Date.now()}`,
-      name: fileList[0].name,
+      fileName: fileList[0].name,
       uploadTime: new Date().toISOString(),
-      status: 'parsed',
+      status: 'ready',
     });
     await new Promise((r) => setTimeout(r, 2000));
     setGenerating(false);

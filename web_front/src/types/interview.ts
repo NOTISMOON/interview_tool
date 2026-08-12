@@ -11,12 +11,17 @@ export interface InterviewQuestion {
 }
 
 export interface InterviewReport {
+  id: string;
   totalScore: number;
   summary: string;
   strengths: string[];
   weaknesses: string[];
   suggestions: string[];
   questionDetails: InterviewQuestion[];
+  interviewTime: string;
+  resumeName: string;
+  type: 'full' | 'quick';
+  questionCount: number;
 }
 
 export type InterviewStatus = 'idle' | 'in_progress' | 'completed';

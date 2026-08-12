@@ -10,7 +10,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    host: '0.0.0.0', // 监听所有地址，允许外部访问（内网穿透需要）
+    allowedHosts: true ,// 完全关闭主机检查（最快捷）
+    port: 5645,
     open: true,
   },
 });
