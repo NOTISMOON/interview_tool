@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState, CommunityPost } from '@/types';
 import { mockQuestions, mockReport } from '@/lib/mocks/data';
+import { githubCallback } from '@/lib/api/auth';
+import type { GithubUser } from '@/lib/api/auth';
 
 const MOCK_FOLLOWED_POSTS: CommunityPost[] = [
   {
@@ -43,7 +45,8 @@ interface AppState {
 
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
-  loginWithGithub: () => Promise<void>;
+  handleGithubCallback: (code: string) => Promise<void>;
+  initAuth: () => void;
   logout: () => void;
   updateUser: (nickname: string, avatar?: string) => void;
   addResume: (resume: Resume) => void;
@@ -51,6 +54,18 @@ interface AppState {
   submitAnswer: (questionId: string, answer: string) => void;
   completeInterview: (report: InterviewReport) => void;
   nextQuestion: () => void;
+}
+
+function mapGithubUser(githubUser: GithubUser): User {
+  return {
+    id: String(githubUser.id),
+    email: githubUser.email || '',
+    nickname: githubUser.name || githubUser.login,
+    avatar: githubUser.avatar_url,
+    followingCount: 0,
+    followersCount: 0,
+    followingIds: [],
+  };
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -91,23 +106,31 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  loginWithGithub: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    set({
-      user: {
-        id: 'github_user',
-        email: 'github@interview.dev',
-        nickname: 'GitHub 用户',
-        avatar: 'https://avatars.githubusercontent.com/u/0?v=4',
-        followingCount: 0,
-        followersCount: 0,
-        followingIds: [],
-      },
-      isLoggedIn: true,
-    });
+  handleGithubCallback: async (code: string) => {
+    const res = await githubCallback({ code });
+    localStorage.setItem('auth_token', res.access_token);
+    const user = mapGithubUser(res.user);
+    localStorage.setItem('auth_user', JSON.stringify(user));
+    set({ user, isLoggedIn: true });
+  },
+
+  initAuth: () => {
+    const token = localStorage.getItem('auth_token');
+    const userStr = localStorage.getItem('auth_user');
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr) as User;
+        set({ user, isLoggedIn: true });
+      } catch {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+      }
+    }
   },
 
   logout: () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
     set({
       user: null,
       isLoggedIn: false,

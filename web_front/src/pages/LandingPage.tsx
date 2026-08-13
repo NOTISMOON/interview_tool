@@ -203,25 +203,6 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
-
-      <section className="py-20">
-        <div className="max-w-[1200px] mx-auto px-8">
-          <div className="bg-[#0D1117] rounded-3xl p-16 text-center relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-[#FF6B35]/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#FF6B35]/5 rounded-full blur-3xl" />
-            <div className="relative">
-              <h2 className="text-3xl font-extrabold text-white mb-4">准备好开始了吗？</h2>
-              <p className="text-[#8B949E] mb-8 max-w-md mx-auto">
-                免费注册，上传简历，AI 即刻为你生成面试题。每一次练习，都离 offer 更近一步。
-              </p>
-              <button onClick={() => navigate('/login')} className="btn-flame btn-flame-lg text-base">
-                免费注册，开始练习
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <footer className="border-t border-[#E1E4E8] py-12">
         <div className="max-w-[1200px] mx-auto px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">

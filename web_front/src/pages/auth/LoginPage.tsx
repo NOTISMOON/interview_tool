@@ -1,24 +1,20 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button, App, Divider } from 'antd';
-import { GithubOutlined, ArrowLeftOutlined, SafetyCertificateOutlined, ThunderboltOutlined, RocketOutlined } from '@ant-design/icons';
-import { useAppStore } from '@/store';
+import { GithubOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { getGithubAuthUrl } from '@/lib/api/auth';
 
 const LoginPage = () => {
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const { message } = App.useApp();
-  const loginWithGithub = useAppStore((s) => s.loginWithGithub);
 
   const handleGithubLogin = async () => {
     setLoading(true);
     try {
-      await loginWithGithub();
-      message.success('授权成功，欢迎回来');
-      navigate('/dashboard', { replace: true });
+      const { authorize_url } = await getGithubAuthUrl();
+      window.location.href = authorize_url;
     } catch {
-      message.error('GitHub 授权失败，请重试');
-    } finally {
+      message.error('获取授权地址失败，请重试');
       setLoading(false);
     }
   };

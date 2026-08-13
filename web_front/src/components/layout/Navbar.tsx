@@ -60,12 +60,6 @@ const Navbar = () => {
             <>
               <button
                 onClick={() => navigate('/login')}
-                className="text-sm font-medium text-[#5F6B7A] hover:text-[#0D1117] px-3 py-2 rounded-lg transition-colors"
-              >
-                登录
-              </button>
-              <button
-                onClick={() => navigate('/login')}
                 className="btn-flame"
               >
                 登录 / 注册

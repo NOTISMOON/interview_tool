@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAppStore } from '@/store';
 
 import Navbar from '@/components/layout/Navbar';
@@ -6,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 
 import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
+import CallbackPage from '@/pages/auth/CallbackPage';
 
 import DashboardHome from '@/pages/dashboard/HomePage';
 import InterviewPage from '@/pages/dashboard/interview/InterviewPage';
@@ -42,6 +44,12 @@ const PublicLayout = ({ children }: { children: React.ReactNode }) => (
 );
 
 const App = () => {
+  const initAuth = useAppStore((s) => s.initAuth);
+
+  useEffect(() => {
+    initAuth();
+  }, []);
+
   return (
     <Routes>
       <Route
@@ -53,6 +61,7 @@ const App = () => {
         }
       />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/callback" element={<CallbackPage />} />
       <Route path="/register" element={<Navigate to="/login" replace />} />
 
       <Route
