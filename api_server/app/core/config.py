@@ -1,5 +1,7 @@
 """应用配置模块，从环境变量中读取配置。"""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -22,8 +24,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # GitHub OAuth配置
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/github/callback"
+
     model_config = {
-        "env_file": ".env",
+        "env_file": str(Path(__file__).resolve().parent.parent.parent / ".env"),
         "env_file_encoding": "utf-8",
     }
 
