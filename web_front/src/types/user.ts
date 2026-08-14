@@ -1,11 +1,27 @@
+/** 个人资料字段可见性设置 */
+export interface ProfileVisibility {
+  gender: boolean;
+  birthday: boolean;
+  bio: boolean;
+  location: boolean;
+  phone: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
   nickname: string;
   avatar?: string;
+  gender?: 'male' | 'female' | 'other';
+  birthday?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
   followingCount: number;
   followersCount: number;
   followingIds: string[];
+  /** 个人资料字段可见性设置 */
+  profileVisibility: ProfileVisibility;
 }
 
 export interface UserBrief {
@@ -21,7 +37,11 @@ export interface UserProfile {
   id: string;
   nickname: string;
   avatar?: string;
+  gender?: 'male' | 'female' | 'other';
+  birthday?: string;
   bio: string;
+  phone?: string;
+  location?: string;
   isFollowing: boolean;
   isFollowedBy?: boolean;
   followingCount: number;
@@ -29,6 +49,8 @@ export interface UserProfile {
   postsCount: number;
   posts: import('./community').CommunityPost[];
   activities: ActivityItem[];
+  /** 个人资料字段可见性设置 */
+  profileVisibility?: ProfileVisibility;
 }
 
 export interface ActivityItem {

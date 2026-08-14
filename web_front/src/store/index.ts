@@ -48,7 +48,8 @@ interface AppState {
   handleGithubCallback: (code: string) => Promise<void>;
   initAuth: () => void;
   logout: () => void;
-  updateUser: (nickname: string, avatar?: string) => void;
+  updateUser: (updates: Partial<Pick<User, 'nickname' | 'avatar' | 'gender' | 'birthday' | 'bio' | 'phone' | 'location' | 'profileVisibility'>>) => void;
+  removeResume: (resumeId: string) => void;
   addResume: (resume: Resume) => void;
   startInterview: (resumeId: string, questions: InterviewQuestion[]) => void;
   submitAnswer: (questionId: string, answer: string) => void;
@@ -62,9 +63,21 @@ function mapGithubUser(githubUser: GithubUser): User {
     email: githubUser.email || '',
     nickname: githubUser.name || githubUser.login,
     avatar: githubUser.avatar_url,
+    gender: 'other',
+    birthday: '',
+    bio: '',
+    phone: '',
+    location: '',
     followingCount: 0,
     followersCount: 0,
     followingIds: [],
+    profileVisibility: {
+      gender: true,
+      birthday: true,
+      bio: true,
+      location: true,
+      phone: false,
+    },
   };
 }
 
@@ -83,9 +96,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         id: '1',
         email,
         nickname: email.split('@')[0],
+        gender: 'other',
+        birthday: '',
+        bio: '',
+        phone: '',
+        location: '',
         followingCount: 23,
         followersCount: 156,
         followingIds: ['u2', 'u3', 'u4', 'u5'],
+        profileVisibility: {
+          gender: true,
+          birthday: true,
+          bio: true,
+          location: true,
+          phone: false,
+        },
       },
       isLoggedIn: true,
     });
@@ -98,9 +123,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         id: '1',
         email,
         nickname,
+        gender: 'other',
+        birthday: '',
+        bio: '',
+        phone: '',
+        location: '',
         followingCount: 0,
         followersCount: 0,
         followingIds: [],
+        profileVisibility: {
+          gender: true,
+          birthday: true,
+          bio: true,
+          location: true,
+          phone: false,
+        },
       },
       isLoggedIn: true,
     });
@@ -138,17 +175,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  updateUser: (nickname: string, avatar?: string) => {
+  updateUser: (updates) => {
     set((state) => {
       if (!state.user) return state;
       return {
         user: {
           ...state.user,
-          nickname,
-          ...(avatar !== undefined ? { avatar } : {}),
+          ...updates,
         },
       };
     });
+  },
+
+  removeResume: (resumeId: string) => {
+    set((state) => ({
+      resumes: state.resumes.filter((r) => r.id !== resumeId),
+    }));
   },
 
   addResume: (resume: Resume) => {

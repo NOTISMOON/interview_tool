@@ -1,4 +1,4 @@
-export type { User, UserBrief, UserProfile, ActivityItem, LoginForm, RegisterForm } from './user';
+export type { User, UserBrief, UserProfile, ActivityItem, LoginForm, RegisterForm, ProfileVisibility } from './user';
 export type {
   Resume,
   ParsedResumeContent,
