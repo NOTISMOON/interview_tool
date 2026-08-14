@@ -95,7 +95,7 @@ const DashboardLayout = () => {
               onClick={() => navigate('/dashboard/messages')}
               className="relative w-9 h-9 rounded-lg flex items-center justify-center text-[#5F6B7A] hover:bg-[#F6F8FA] hover:text-[#0D1117] transition-colors"
             >
-              <Badge dot size="small">
+                                              <Badge dot size="small">
                 <BellOutlined className="text-lg" />
               </Badge>
             </button>
@@ -112,7 +112,7 @@ const DashboardLayout = () => {
           </div>
         </header>
 
-        <main className="p-6">
+        <main className="p-6 h-[calc(100vh-60px)] overflow-y-auto">
           <div className="animate-fade-in-up">
             <Outlet />
           </div>
