@@ -12,6 +12,7 @@ import {
   FireOutlined,
   PushpinOutlined,
 } from '@ant-design/icons';
+import { useAppStore } from '@/store';
 import { mockPostDetailComments } from '@/lib/mocks/data';
 import type { CommunityPost } from '@/types';
 
@@ -57,6 +58,7 @@ const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { message: msg } = App.useApp();
+  const { user } = useAppStore();
   const [isLiked, setIsLiked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [likes, setLikes] = useState(0);
@@ -233,7 +235,7 @@ const PostDetailPage = () => {
       <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
         <h3 className="text-sm font-bold text-[#0D1117] mb-4">发表评论</h3>
         <div className="flex gap-3">
-          <Avatar size={32} className="!bg-[#FF6B35] flex-shrink-0 !text-xs">我</Avatar>
+          <Avatar size={32} className="!bg-[#FF6B35] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
           <div className="flex-1">
             <textarea
               value={commentText}

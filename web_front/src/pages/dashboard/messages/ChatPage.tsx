@@ -86,7 +86,7 @@ const ChatPage = () => {
   };
 
   return (
-    <div className="max-w-[700px] h-[calc(100vh-120px)] flex flex-col animate-fade-in">
+    <div className="max-w-[700px] h-full flex flex-col animate-fade-in">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
           <button
