@@ -55,8 +55,8 @@ const FavoritesPage = () => {
   };
 
   return (
-    <div className="max-w-[700px]">
-      <div className="flex items-center gap-4 mb-6">
+    <div className="max-w-[700px] flex flex-col h-full">
+      <div className="flex-shrink-0 flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate('/dashboard/profile')}
           className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
@@ -78,7 +78,7 @@ const FavoritesPage = () => {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto space-y-3">
           {favorites.map((post) => (
             <div
               key={post.id}

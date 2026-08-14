@@ -104,30 +104,32 @@ const CommunityPage = () => {
     : availableTags.filter((t) => !postTags.includes(t));
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-[#0D1117]">社区</h1>
-        <button onClick={() => setCreateModalOpen(true)} className="btn-flame">
-          <PlusOutlined /> 发帖
-        </button>
+    <div className="flex flex-col h-full">
+      <div className="flex-shrink-0">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-bold text-[#0D1117]">社区</h1>
+          <button onClick={() => setCreateModalOpen(true)} className="btn-flame">
+            <PlusOutlined /> 发帖
+          </button>
+        </div>
+
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          className="mb-4"
+          items={[
+            { key: 'hot', label: '热门', icon: <FireOutlined /> },
+            { key: 'latest', label: '最新', icon: <ClockCircleOutlined /> },
+            { key: 'tips', label: '面经', icon: <BulbOutlined /> },
+            { key: 'qa', label: '问答', icon: <QuestionCircleOutlined /> },
+          ].map((tab) => ({
+            key: tab.key,
+            label: <span className="flex items-center gap-1.5 text-sm">{tab.icon}{tab.label}</span>,
+          }))}
+        />
       </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        className="mb-4"
-        items={[
-          { key: 'hot', label: '热门', icon: <FireOutlined /> },
-          { key: 'latest', label: '最新', icon: <ClockCircleOutlined /> },
-          { key: 'tips', label: '面经', icon: <BulbOutlined /> },
-          { key: 'qa', label: '问答', icon: <QuestionCircleOutlined /> },
-        ].map((tab) => ({
-          key: tab.key,
-          label: <span className="flex items-center gap-1.5 text-sm">{tab.icon}{tab.label}</span>,
-        }))}
-      />
-
-      <div className="space-y-3">
+      <div className="flex-1 overflow-y-auto space-y-3">
         {MOCK_POSTS.filter((p) => {
           if (activeTab === 'hot') return p.isHot;
           if (activeTab === 'tips') return p.tags.includes('面试经验') || p.tags.includes('经验分享');

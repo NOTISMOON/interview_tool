@@ -15,8 +15,8 @@ const HistoryPage = () => {
   const reportList = Object.values(reports);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-col h-full">
+      <div className="flex-shrink-0 flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-[#0D1117]">面试记录</h1>
         <button onClick={() => navigate('/dashboard/interview')} className="btn-flame">
           <PlayCircleOutlined /> 开始面试
@@ -31,7 +31,7 @@ const HistoryPage = () => {
           <button onClick={() => navigate('/dashboard/interview')} className="btn-flame">开始首次面试</button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto space-y-3">
           {reportList
             .sort((a, b) => new Date(b.interviewTime).getTime() - new Date(a.interviewTime).getTime())
             .map((report) => {

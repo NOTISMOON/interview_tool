@@ -21,32 +21,34 @@ const FeedPage = () => {
     : followedPosts;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-[#0D1117]">动态</h1>
-          <p className="text-sm text-[#5F6B7A] mt-1">
-            关注了 <span className="font-semibold text-[#FF6B35]">{user?.followingCount ?? 0}</span> 人
-          </p>
+    <div className="flex flex-col h-full">
+      <div className="flex-shrink-0">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-bold text-[#0D1117]">动态</h1>
+            <p className="text-sm text-[#5F6B7A] mt-1">
+              关注了 <span className="font-semibold text-[#FF6B35]">{user?.followingCount ?? 0}</span> 人
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/dashboard/community')}
+            className="btn-ghost"
+          >
+            <UserAddOutlined /> 发现更多
+          </button>
         </div>
-        <button
-          onClick={() => navigate('/dashboard/community')}
-          className="btn-ghost"
-        >
-          <UserAddOutlined /> 发现更多
-        </button>
-      </div>
 
-      <div className="mb-5">
-        <Segmented
-          value={filter}
-          onChange={(val) => setFilter(val as string)}
-          options={[
-            { label: '全部动态', value: 'all' },
-            { label: '热门', value: 'hot', icon: <FireOutlined /> },
-          ]}
-          className="!bg-[#F6F8FA] !p-1 !rounded-xl"
-        />
+        <div className="mb-5">
+          <Segmented
+            value={filter}
+            onChange={(val) => setFilter(val as string)}
+            options={[
+              { label: '全部动态', value: 'all' },
+              { label: '热门', value: 'hot', icon: <FireOutlined /> },
+            ]}
+            className="!bg-[#F6F8FA] !p-1 !rounded-xl"
+          />
+        </div>
       </div>
 
       {filteredPosts.length === 0 ? (
@@ -65,7 +67,7 @@ const FeedPage = () => {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto space-y-3">
           {filteredPosts.map((post) => (
             <div
               key={post.id}

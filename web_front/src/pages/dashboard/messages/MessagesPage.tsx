@@ -50,33 +50,35 @@ const MessagesPage = () => {
   };
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
-        >
-          <ArrowLeftOutlined />
-        </button>
-        <h1 className="text-xl font-bold text-[#0D1117]">消息中心</h1>
-        {unreadCount > 0 && <span className="tag tag-flame">{unreadCount} 条未读</span>}
+    <div className="flex flex-col h-full">
+      <div className="flex-shrink-0">
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          >
+            <ArrowLeftOutlined />
+          </button>
+          <h1 className="text-xl font-bold text-[#0D1117]">消息中心</h1>
+          {unreadCount > 0 && <span className="tag tag-flame">{unreadCount} 条未读</span>}
+        </div>
+
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          className="mb-4"
+          items={[
+            { key: 'all', label: '全部' },
+            { key: 'system', label: '系统' },
+            { key: 'like', label: '点赞' },
+            { key: 'comment', label: '评论' },
+            { key: 'follow', label: '关注' },
+            { key: 'dm', label: '私信' },
+          ].map((tab) => ({ key: tab.key, label: <span className="text-sm">{tab.label}</span> }))}
+        />
       </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        className="mb-4"
-        items={[
-          { key: 'all', label: '全部' },
-          { key: 'system', label: '系统' },
-          { key: 'like', label: '点赞' },
-          { key: 'comment', label: '评论' },
-          { key: 'follow', label: '关注' },
-          { key: 'dm', label: '私信' },
-        ].map((tab) => ({ key: tab.key, label: <span className="text-sm">{tab.label}</span> }))}
-      />
-
-      <div className="space-y-2">
+      <div className="flex-1 overflow-y-auto space-y-2">
         {filtered.map((msg) => (
           <div
             key={msg.id}
