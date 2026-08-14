@@ -11,6 +11,11 @@ import {
   FireOutlined,
   TeamOutlined,
   FileTextOutlined,
+  ManOutlined,
+  WomanOutlined,
+  EnvironmentOutlined,
+  CalendarOutlined,
+  SmileOutlined,
 } from '@ant-design/icons';
 import { mockUserProfiles } from '@/lib/mocks/data';
 import { useAppStore } from '@/store';
@@ -41,6 +46,35 @@ const UserPage = () => {
   }
 
   const isSelf = currentUser?.id === profile.id;
+
+  /** 根据生日计算年龄 */
+  const calcAge = (birthday?: string): number | null => {
+    if (!birthday) return null;
+    const birth = new Date(birthday);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  /** 获取性别显示文本 */
+  const getGenderLabel = (gender?: string): string => {
+    switch (gender) {
+      case 'male': return '男';
+      case 'female': return '女';
+      default: return '未设置';
+    }
+  };
+
+  /** 判断字段是否可见 */
+  const isFieldVisible = (field: keyof NonNullable<UserProfile['profileVisibility']>): boolean => {
+    if (!profile.profileVisibility) return true; // 没有设置时默认可见
+    if (field === 'phone') return false; // 手机号始终不对外展示
+    return profile.profileVisibility[field];
+  };
 
   const handleFollow = () => {
     msgFn.success(profile.isFollowing ? '已取消关注' : '已关注');
@@ -102,8 +136,41 @@ const UserPage = () => {
             )}
           </Avatar>
 
-          <h2 className="text-xl font-extrabold text-[#0D1117] mb-1">{profile.nickname}</h2>
-          <p className="text-sm text-[#5F6B7A] mb-5 max-w-[400px]">{profile.bio}</p>
+          <h2 className="text-xl font-extrabold text-[#0D1117] mb-4">{profile.nickname}</h2>
+
+          {/* 个人资料信息展示 */}
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mb-5 px-2">
+            {isFieldVisible('gender') && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
+                {profile.gender === 'male' ? (
+                  <ManOutlined className="text-[#2DA44E]" />
+                ) : profile.gender === 'female' ? (
+                  <WomanOutlined className="text-[#CF222E]" />
+                ) : (
+                  <UserOutlined className="text-[#8B949E]" />
+                )}
+                {getGenderLabel(profile.gender)}
+              </span>
+            )}
+            {isFieldVisible('birthday') && profile.birthday && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
+                <CalendarOutlined className="text-[#FF6B35]" />
+                {calcAge(profile.birthday) !== null ? `${calcAge(profile.birthday)} 岁` : ''}
+              </span>
+            )}
+            {isFieldVisible('location') && profile.location && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
+                <EnvironmentOutlined className="text-[#2DA44E]" />
+                {profile.location}
+              </span>
+            )}
+            {isFieldVisible('bio') && profile.bio && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
+                <SmileOutlined className="text-[#BF8700]" />
+                {profile.bio}
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-8 mb-5">
             <div className="text-center">
