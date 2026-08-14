@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Divider, Modal, Input, Upload } from 'antd';
+import { Avatar, App, Divider, Modal, Input, Upload, DatePicker, Radio, Empty, Popconfirm, Switch } from 'antd';
+import type { UploadFile } from 'antd';
+import dayjs from 'dayjs';
 import {
   RightOutlined,
   FileTextOutlined,
@@ -17,22 +19,50 @@ import {
   LogoutOutlined,
   EditOutlined,
   CameraOutlined,
+  UploadOutlined,
+  DeleteOutlined,
+  ThunderboltOutlined,
+  EnvironmentOutlined,
+  PhoneOutlined,
+  WomanOutlined,
+  ManOutlined,
+  CalendarOutlined,
+  SmileOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
+import type { ProfileVisibility } from '@/types';
 import { useAppStore } from '@/store';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-  const { user, logout, updateUser, resumes, reports } = useAppStore();
-
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editNickname, setEditNickname] = useState('');
-  const [editAvatar, setEditAvatar] = useState('');
+  const { user, logout, updateUser, resumes, addResume, removeResume, reports } = useAppStore();
 
   const reportList = Object.values(reports);
   const totalScore = reportList.length > 0
     ? Math.round(reportList.reduce((sum, r) => sum + r.totalScore, 0) / reportList.length)
     : 0;
+
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [resumeModalOpen, setResumeModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nickname: '',
+    avatar: '',
+    gender: 'other' as 'male' | 'female' | 'other',
+    birthday: '',
+    bio: '',
+    phone: '',
+    location: '',
+    profileVisibility: {
+      gender: true,
+      birthday: true,
+      bio: true,
+      location: true,
+      phone: false,
+    } as ProfileVisibility,
+  });
+  const [resumeFileList, setResumeFileList] = useState<UploadFile[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const handleLogout = () => {
     modal.confirm({
@@ -46,19 +76,72 @@ const ProfilePage = () => {
   };
 
   const openEditModal = () => {
-    setEditNickname(user?.nickname || '');
-    setEditAvatar(user?.avatar || '');
+    setEditForm({
+      nickname: user?.nickname || '',
+      avatar: user?.avatar || '',
+      gender: user?.gender || 'other',
+      birthday: user?.birthday || '',
+      bio: user?.bio || '',
+      phone: user?.phone || '',
+      location: user?.location || '',
+      profileVisibility: user?.profileVisibility || {
+        gender: true,
+        birthday: true,
+        bio: true,
+        location: true,
+        phone: false,
+      },
+    });
     setEditModalOpen(true);
   };
 
   const handleSaveProfile = () => {
-    if (!editNickname.trim()) {
+    if (!editForm.nickname.trim()) {
       message.warning('昵称不能为空');
       return;
     }
-    updateUser(editNickname.trim(), editAvatar || undefined);
+    updateUser({
+      nickname: editForm.nickname.trim(),
+      avatar: editForm.avatar || undefined,
+      gender: editForm.gender,
+      birthday: editForm.birthday,
+      bio: editForm.bio,
+      phone: editForm.phone,
+      location: editForm.location,
+      profileVisibility: editForm.profileVisibility,
+    });
     message.success('资料已更新');
     setEditModalOpen(false);
+  };
+
+  const handleResumeUpload = () => {
+    if (resumeFileList.length === 0) {
+      message.warning('请先选择简历文件');
+      return;
+    }
+    setUploading(true);
+    const file = resumeFileList[0];
+    addResume({
+      id: `resume_${Date.now()}`,
+      fileName: file.name,
+      uploadTime: new Date().toISOString(),
+      status: 'ready',
+    });
+    setTimeout(() => {
+      setUploading(false);
+      setResumeFileList([]);
+      message.success('简历上传成功');
+    }, 800);
+  };
+
+  const handleDeleteResume = (resumeId: string) => {
+    removeResume(resumeId);
+    message.success('简历已删除');
+  };
+
+  const handleStartInterview = (_resumeId?: string) => {
+    setResumeModalOpen(false);
+    navigate('/dashboard/interview');
   };
 
   interface MenuItem {
@@ -74,7 +157,7 @@ const ProfilePage = () => {
     {
       title: '数据',
       items: [
-        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => navigate('/dashboard/interview') },
+        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => setResumeModalOpen(true) },
         { icon: <HistoryOutlined />, label: '面试记录', count: reportList.length, color: '#2DA44E', bg: '#ECFDF3', onClick: () => navigate('/dashboard/history') },
         { icon: <TrophyOutlined />, label: '平均得分', count: totalScore ? `${totalScore} 分` : '--', color: '#BF8700', bg: '#FFF8E6', onClick: () => navigate('/dashboard/history') },
       ],
@@ -116,6 +199,9 @@ const ProfilePage = () => {
           <div className="flex-1 min-w-0">
             <h3 className="text-white font-bold text-lg truncate">{user?.nickname || '用户'}</h3>
             <p className="text-white/60 text-sm truncate">{user?.email}</p>
+            {user?.bio && (
+              <p className="text-white/40 text-xs mt-0.5 truncate">{user.bio}</p>
+            )}
           </div>
           <button onClick={openEditModal} className="text-white/80 hover:text-white transition-colors">
             <EditOutlined />
@@ -138,7 +224,7 @@ const ProfilePage = () => {
           </div>
           <div
             className="bg-white/10 rounded-xl p-3 text-center cursor-pointer hover:bg-white/15 transition-colors"
-            onClick={() => navigate('/dashboard/interview')}
+            onClick={() => setResumeModalOpen(true)}
           >
             <div className="text-white font-bold text-lg">{resumes.length}</div>
             <div className="text-white/50 text-xs">简历</div>
@@ -187,16 +273,23 @@ const ProfilePage = () => {
       <p className="text-center text-xs text-[#8B949E] mt-8">面试教练 v1.0.0</p>
 
       <Modal
-        title="编辑资料"
+        title={
+          <div className="flex items-center gap-2">
+            <EditOutlined className="text-[#FF6B35]" />
+            <span className="text-lg font-bold text-[#0D1117]">编辑个人资料</span>
+          </div>
+        }
         open={editModalOpen}
         onCancel={() => setEditModalOpen(false)}
         onOk={handleSaveProfile}
         okText="保存"
         cancelText="取消"
-        okButtonProps={{ className: '!bg-[#FF6B35] !border-[#FF6B35] hover:!bg-[#E85D26]' }}
+        okButtonProps={{ className: '!bg-[#FF6B35] !border-[#FF6B35] hover:!bg-[#E85D26] !rounded-lg !px-6' }}
+        cancelButtonProps={{ className: '!rounded-lg !px-6' }}
+        width={520}
         destroyOnClose
       >
-        <div className="py-4">
+        <div className="py-2">
           <div className="flex flex-col items-center mb-6">
             <Upload
               accept="image/*"
@@ -204,7 +297,7 @@ const ProfilePage = () => {
               beforeUpload={(file) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                  setEditAvatar(e.target?.result as string);
+                  setEditForm((prev) => ({ ...prev, avatar: e.target?.result as string }));
                 };
                 reader.readAsDataURL(file);
                 return false;
@@ -212,29 +305,275 @@ const ProfilePage = () => {
             >
               <div className="relative cursor-pointer group">
                 <Avatar
-                  size={72}
-                  src={editAvatar}
-                  className="!bg-[#0D1117] !text-white !font-bold !text-xl"
+                  size={80}
+                  src={editForm.avatar}
+                  className="!bg-[#0D1117] !text-white !font-bold !text-2xl ring-4 ring-[#F6F8FA]"
                 >
-                  {editNickname[0] || 'U'}
+                  {editForm.nickname[0] || 'U'}
                 </Avatar>
                 <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <CameraOutlined className="text-white text-lg" />
+                  <CameraOutlined className="text-white text-xl" />
                 </div>
               </div>
             </Upload>
             <p className="text-xs text-[#8B949E] mt-2">点击头像更换图片</p>
           </div>
-          <div>
-            <label className="text-sm font-medium text-[#0D1117] block mb-2">昵称</label>
-            <Input
-              value={editNickname}
-              onChange={(e) => setEditNickname(e.target.value)}
-              placeholder="请输入昵称"
-              maxLength={20}
-              showCount
-              className="!rounded-lg"
+
+          <div className="space-y-5">
+            <div className="bg-[#F6F8FA] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-3">基础信息</h4>
+              <div>
+                <label className="text-sm font-medium text-[#0D1117] block mb-1.5">昵称</label>
+                <Input
+                  value={editForm.nickname}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, nickname: e.target.value }))}
+                  placeholder="请输入昵称"
+                  maxLength={20}
+                  showCount
+                  className="!rounded-lg"
+                />
+              </div>
+            </div>
+
+            <div className="bg-[#F6F8FA] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-3">个人信息</h4>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium text-[#0D1117]">
+                        <WomanOutlined className="mr-1" />性别
+                      </label>
+                      <Switch
+                        size="small"
+                        checked={editForm.profileVisibility.gender}
+                        onChange={(checked) => setEditForm((prev) => ({
+                          ...prev,
+                          profileVisibility: { ...prev.profileVisibility, gender: checked },
+                        }))}
+                      />
+                    </div>
+                    <Radio.Group
+                      value={editForm.gender}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, gender: e.target.value }))}
+                      optionType="button"
+                      buttonStyle="solid"
+                      size="middle"
+                      className="!w-full"
+                    >
+                      <Radio.Button value="male" className="!w-1/2 !text-center">
+                        <ManOutlined className="mr-1" />男
+                      </Radio.Button>
+                      <Radio.Button value="female" className="!w-1/2 !text-center">
+                        <WomanOutlined className="mr-1" />女
+                      </Radio.Button>
+                    </Radio.Group>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium text-[#0D1117]">
+                        <CalendarOutlined className="mr-1" />生日
+                      </label>
+                      <Switch
+                        size="small"
+                        checked={editForm.profileVisibility.birthday}
+                        onChange={(checked) => setEditForm((prev) => ({
+                          ...prev,
+                          profileVisibility: { ...prev.profileVisibility, birthday: checked },
+                        }))}
+                      />
+                    </div>
+                    <DatePicker
+                      value={editForm.birthday ? dayjs(editForm.birthday) : null}
+                      placeholder="选择生日"
+                      className="!w-full !rounded-lg"
+                      onChange={(_, dateStr) => setEditForm((prev) => ({ ...prev, birthday: dateStr as string }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium text-[#0D1117]">
+                      <SmileOutlined className="mr-1" />个人签名
+                    </label>
+                    <Switch
+                      size="small"
+                      checked={editForm.profileVisibility.bio}
+                      onChange={(checked) => setEditForm((prev) => ({
+                        ...prev,
+                        profileVisibility: { ...prev.profileVisibility, bio: checked },
+                      }))}
+                    />
+                  </div>
+                  <Input.TextArea
+                    value={editForm.bio}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, bio: e.target.value }))}
+                    placeholder="写一句话介绍自己..."
+                    maxLength={100}
+                    showCount
+                    rows={2}
+                    className="!rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#F6F8FA] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-3">联系方式</h4>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium text-[#0D1117]">
+                      <PhoneOutlined className="mr-1" />手机号
+                    </label>
+                    <Switch
+                      size="small"
+                      checked={editForm.profileVisibility.phone}
+                      onChange={(checked) => setEditForm((prev) => ({
+                        ...prev,
+                        profileVisibility: { ...prev.profileVisibility, phone: checked },
+                      }))}
+                    />
+                  </div>
+                  <Input
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="请输入手机号"
+                    maxLength={11}
+                    className="!rounded-lg"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium text-[#0D1117]">
+                      <EnvironmentOutlined className="mr-1" />所在地
+                    </label>
+                    <Switch
+                      size="small"
+                      checked={editForm.profileVisibility.location}
+                      onChange={(checked) => setEditForm((prev) => ({
+                        ...prev,
+                        profileVisibility: { ...prev.profileVisibility, location: checked },
+                      }))}
+                    />
+                  </div>
+                  <Input
+                    value={editForm.location}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, location: e.target.value }))}
+                    placeholder="如：北京、上海、杭州..."
+                    maxLength={30}
+                    className="!rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <FileTextOutlined className="text-[#FF6B35]" />
+            <span className="text-lg font-bold text-[#0D1117]">我的简历</span>
+          </div>
+        }
+        open={resumeModalOpen}
+        onCancel={() => setResumeModalOpen(false)}
+        footer={null}
+        width={560}
+        destroyOnClose
+      >
+        <div className="py-2">
+          {resumes.length === 0 ? (
+            <Empty
+              description="还没有上传简历"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              className="!my-8"
             />
+          ) : (
+            <div className="space-y-2 mb-6 max-h-[300px] overflow-y-auto">
+              {resumes.map((resume) => (
+                <div
+                  key={resume.id}
+                  className="flex items-center gap-3 bg-[#F6F8FA] rounded-xl p-3 hover:bg-[#EDF0F4] transition-colors group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-[#FFF3ED] flex items-center justify-center flex-shrink-0">
+                    <FileTextOutlined className="text-[#FF6B35] text-lg" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#0D1117] truncate">{resume.fileName}</p>
+                    <p className="text-xs text-[#8B949E]">
+                      {new Date(resume.uploadTime).toLocaleDateString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleStartInterview(resume.id)}
+                      className="w-8 h-8 rounded-lg bg-[#FF6B35] flex items-center justify-center hover:bg-[#E85D26] transition-colors"
+                      title="使用此简历去面试"
+                    >
+                      <ThunderboltOutlined className="text-white text-sm" />
+                    </button>
+                    <Popconfirm
+                      title="确定要删除这份简历吗？"
+                      onConfirm={() => handleDeleteResume(resume.id)}
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <button
+                        className="w-8 h-8 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#CF222E] hover:text-[#CF222E] transition-colors"
+                        title="删除简历"
+                      >
+                        <DeleteOutlined className="text-sm" />
+                      </button>
+                    </Popconfirm>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-[#E1E4E8] pt-4">
+            <p className="text-sm font-medium text-[#0D1117] mb-3 flex items-center gap-1.5">
+              <PlusOutlined className="text-[#FF6B35]" />上传新简历
+            </p>
+            <Upload
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+              multiple={false}
+              fileList={resumeFileList}
+              beforeUpload={(file) => {
+                if (file.size / 1024 / 1024 > 10) {
+                  message.error('文件大小不能超过 10MB');
+                  return Upload.LIST_IGNORE;
+                }
+                setResumeFileList([file]);
+                return false;
+              }}
+              onRemove={() => setResumeFileList([])}
+            >
+              <div className="border-2 border-dashed border-[#E1E4E8] rounded-xl p-6 text-center cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF3ED]/50 transition-all">
+                <UploadOutlined className="text-2xl text-[#8B949E] mb-2" />
+                <p className="text-sm text-[#5F6B7A]">点击选择文件</p>
+                <p className="text-xs text-[#8B949E] mt-1">支持 PDF、Word、图片格式，不超过 10MB</p>
+              </div>
+            </Upload>
+            {resumeFileList.length > 0 && (
+              <button
+                onClick={handleResumeUpload}
+                disabled={uploading}
+                className="btn-flame w-full mt-3"
+              >
+                {uploading ? '上传中...' : '确认上传'}
+              </button>
+            )}
           </div>
         </div>
       </Modal>
