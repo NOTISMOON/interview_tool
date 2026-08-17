@@ -1,9 +1,12 @@
-"""安全工具模块，提供JWT令牌的创建与验证功能。"""
+"""安全工具模块，提供JWT令牌的创建与验证、Refresh Token生成与哈希功能。"""
 
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
+
 from app.core.config import settings
 
 
@@ -38,3 +41,24 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return payload
     except jwt.PyJWTError:
         return None
+
+
+def create_refresh_token() -> str:
+    """生成不透明的refresh token（256位随机字符串）。
+
+    Returns:
+        URL安全的随机字符串，作为refresh token明文（仅返回给客户端，服务端只存哈希）。
+    """
+    return secrets.token_urlsafe(settings.REFRESH_TOKEN_BYTES)
+
+
+def hash_token(token: str) -> str:
+    """对token做SHA256哈希，用于Redis存储key。
+
+    Args:
+        token: refresh token明文。
+
+    Returns:
+        token的SHA256十六进制哈希字符串。
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
