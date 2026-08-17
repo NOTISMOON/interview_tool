@@ -1,4 +1,4 @@
-"""认证相关Pydantic模型，定义GitHub OAuth登录的请求和响应结构。"""
+"""认证相关Pydantic模型，定义GitHub OAuth登录、Token刷新与退出的请求和响应结构。"""
 
 from pydantic import BaseModel, Field
 
@@ -15,11 +15,15 @@ class GitHubUserInfo(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    """登录令牌响应模型。"""
+    """登录令牌响应模型（双Token通过HttpOnly Cookie下发，响应体仅返回user）。"""
 
-    access_token: str = Field(..., description="JWT访问令牌")
-    token_type: str = Field(default="bearer", description="令牌类型")
     user: GitHubUserInfo = Field(..., description="用户信息")
+
+
+class RefreshResponse(BaseModel):
+    """刷新Token响应模型（轮转后的新Token对通过Cookie下发，响应体无敏感数据）。"""
+
+    token_type: str = Field(default="bearer", description="令牌类型")
 
 
 class GitHubCallbackRequest(BaseModel):

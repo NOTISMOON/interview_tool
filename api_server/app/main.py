@@ -21,10 +21,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS中间件配置
+# CORS中间件配置：allow_credentials=True时origins不能用通配符，必须明确白名单
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

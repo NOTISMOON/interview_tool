@@ -2,8 +2,11 @@
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.user import User
+from app.repositories.user_repository import user_repository
 from app.schemas.auth import GitHubUserInfo
 
 
@@ -109,18 +112,20 @@ class GitHubOAuthService:
                 html_url=user_data.get("html_url"),
             )
 
-    async def authenticate(self, code: str) -> tuple[GitHubUserInfo, str]:
-        """完成完整的GitHub OAuth认证流程。
+    async def authenticate(self, code: str, db: AsyncSession) -> tuple[GitHubUserInfo, User]:
+        """完成完整的GitHub OAuth认证流程：换令牌、拉取用户信息、查找/创建本地用户。
 
         Args:
             code: GitHub回调返回的授权码。
+            db: 数据库异步会话，用于持久化user/user_auth记录。
 
         Returns:
-            包含 (用户信息, GitHub访问令牌) 的元组。
+            包含 (GitHub用户信息, 本地User记录含user_id) 的元组。
         """
         github_token = await self.exchange_code_for_token(code)
         user_info = await self.get_user_info(github_token)
-        return user_info, github_token
+        user = await user_repository.get_or_create_github_user(db, user_info)
+        return user_info, user
 
 
 github_oauth_service = GitHubOAuthService()
