@@ -19,8 +19,6 @@ export interface GithubUser {
 }
 
 export interface GithubCallbackResponse {
-  access_token: string;
-  token_type: string;
   user: GithubUser;
 }
 
@@ -32,4 +30,9 @@ export async function getGithubAuthUrl(): Promise<GithubLoginResponse> {
 export async function githubCallback(params: GithubCallbackRequest): Promise<GithubCallbackResponse> {
   const { data } = await request.post<GithubCallbackResponse>('/auth/github/callback', params);
   return data;
+}
+
+/** 退出登录：吊销服务端会话并清除HttpOnly Cookie（幂等）。 */
+export async function logout(): Promise<void> {
+  await request.post('/auth/logout');
 }

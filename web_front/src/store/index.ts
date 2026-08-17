@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState, CommunityPost } from '@/types';
 import { mockQuestions, mockReport } from '@/lib/mocks/data';
-import { githubCallback } from '@/lib/api/auth';
+import { githubCallback, logout as logoutApi } from '@/lib/api/auth';
 import type { GithubUser } from '@/lib/api/auth';
 
 const MOCK_FOLLOWED_POSTS: CommunityPost[] = [
@@ -47,7 +47,7 @@ interface AppState {
   register: (email: string, password: string, nickname: string) => Promise<void>;
   handleGithubCallback: (code: string) => Promise<void>;
   initAuth: () => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateUser: (updates: Partial<Pick<User, 'nickname' | 'avatar' | 'gender' | 'birthday' | 'bio' | 'phone' | 'location' | 'profileVisibility'>>) => void;
   removeResume: (resumeId: string) => void;
   addResume: (resume: Resume) => void;
@@ -145,28 +145,33 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   handleGithubCallback: async (code: string) => {
     const res = await githubCallback({ code });
-    localStorage.setItem('auth_token', res.access_token);
+    // token已通过HttpOnly Cookie下发（JS不可读），本地只缓存非敏感的用户展示信息
     const user = mapGithubUser(res.user);
     localStorage.setItem('auth_user', JSON.stringify(user));
     set({ user, isLoggedIn: true });
   },
 
   initAuth: () => {
-    const token = localStorage.getItem('auth_token');
+    // 乐观恢复用户展示信息；会话真实有效性由Cookie生命周期保证，
+    // Cookie过期后任意API的401会触发拦截器自动刷新或跳转登录
     const userStr = localStorage.getItem('auth_user');
-    if (token && userStr) {
+    if (userStr) {
       try {
         const user = JSON.parse(userStr) as User;
         set({ user, isLoggedIn: true });
       } catch {
-        localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
       }
     }
   },
 
-  logout: () => {
-    localStorage.removeItem('auth_token');
+  logout: async () => {
+    // 先吊销服务端会话并清除HttpOnly Cookie，再清理本地状态
+    try {
+      await logoutApi();
+    } catch {
+      // 服务端已失效时忽略，继续清理本地
+    }
     localStorage.removeItem('auth_user');
     set({
       user: null,
