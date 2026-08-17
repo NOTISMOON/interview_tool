@@ -11,6 +11,7 @@ export type {
   InterviewState,
   InterviewStatus,
   QuestionType,
+  QuestionCategory,
 } from './interview';
 export {
   QUESTION_TYPE_LABEL,

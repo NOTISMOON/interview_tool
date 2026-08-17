@@ -25,9 +25,19 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
+  --radius-xl: 20px;
   --shadow-sm: 0 1px 3px rgba(13, 17, 23, 0.04);
   --shadow-md: 0 4px 16px rgba(13, 17, 23, 0.06);
   --shadow-lg: 0 8px 32px rgba(13, 17, 23, 0.08);
+
+  /* 面试间暗色沉浸主题 */
+  --room-bg: #0D1117;
+  --room-text: #E1E4E8;
+  --room-text-strong: #F6F8FA;
+  --room-muted: #5F6B7A;
+  --room-line: rgba(255, 255, 255, 0.06);
+  --room-line-strong: rgba(255, 255, 255, 0.12);
+  --room-surface: rgba(255, 255, 255, 0.03);
 }
 
 * {
@@ -225,4 +235,48 @@ textarea {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ===== 面试间：录音波形条 ===== */
+@keyframes room-wave {
+  0%, 100% { height: 8px; opacity: 0.4; }
+  50% { height: 48px; opacity: 1; }
+}
+
+.room-waveform-bar {
+  width: 5px;
+  border-radius: 3px;
+  background: rgba(255, 107, 53, 0.5);
+  animation: room-wave 1.2s ease-in-out infinite;
+  animation-delay: var(--wave-delay, 0s);
+}
+
+/* 思考倒计时环：最后5秒紧急脉动 */
+@keyframes ring-urgent-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.5; }
+}
+
+/* 录音指示器脉动 */
+@keyframes room-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+/* 面试间头部绿点呼吸 */
+@keyframes room-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 追问标签弹出 */
+@keyframes room-tag-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 面试完成淡入 */
+@keyframes room-fade-in {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
 }

@@ -1,10 +1,17 @@
 export type QuestionType = 'technical' | 'project' | 'behavioral';
 
+/** 题目维度，用于 AI 分析完成后的维度卡片与面试间标签展示 */
+export type QuestionCategory = '技术基础' | '项目经验' | '综合素质' | '架构设计';
+
 export interface InterviewQuestion {
   id: string;
   questionNo: number;
   questionText: string;
   questionType: QuestionType;
+  /** 题目所属维度，缺省时按 questionType 推断 */
+  category?: QuestionCategory;
+  /** 是否为追问题；追问题在面试间会展示「追问」徽标 */
+  followUp?: boolean;
   userAnswer?: string;
   aiScore?: number;
   aiComment?: string;
