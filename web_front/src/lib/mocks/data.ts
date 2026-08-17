@@ -62,50 +62,34 @@ export const mockPostDetailComments: PostComment[] = [
 ];
 
 export const mockQuestions: InterviewQuestion[] = [
-  {
-    id: 'q1',
-    questionNo: 1,
-    questionText: '请简要介绍一下你自己，以及你在前端开发领域的主要技术栈？',
-    questionType: 'behavioral',
-  },
-  {
-    id: 'q2',
-    questionNo: 2,
-    questionText:
-      '你在简历中提到使用 React 开发过大型项目，请介绍一下你在项目中如何处理状态管理？为什么选择这个方案？',
-    questionType: 'project',
-  },
-  {
-    id: 'q3',
-    questionNo: 3,
-    questionText: '请解释一下 React 的 Virtual DOM 的工作原理，以及它相比直接操作 DOM 的优势是什么？',
-    questionType: 'technical',
-  },
-  {
-    id: 'q4',
-    questionNo: 4,
-    questionText:
-      '你的项目中提到了性能优化，请具体说说你做过哪些前端性能优化措施？效果如何衡量？',
-    questionType: 'project',
-  },
-  {
-    id: 'q5',
-    questionNo: 5,
-    questionText: '请描述一下你遇到过的最难的技术问题，以及你是如何解决它的？',
-    questionType: 'behavioral',
-  },
-  {
-    id: 'q6',
-    questionNo: 6,
-    questionText: '如果让你设计一个高并发的实时消息系统，你会考虑哪些技术方案？',
-    questionType: 'technical',
-  },
-  {
-    id: 'q7',
-    questionNo: 7,
-    questionText: '你对未来 3-5 年的职业规划是什么？你希望在这个岗位上获得什么？',
-    questionType: 'behavioral',
-  },
+  { id: 'q1', questionNo: 1, category: '技术基础', questionType: 'technical',
+    questionText: '请描述一下你在项目中是如何处理跨域问题的？' },
+  { id: 'q2', questionNo: 2, category: '技术基础', questionType: 'technical',
+    questionText: 'Vue/React 中父子组件通信有哪些方式？请分别说明适用场景' },
+  { id: 'q3', questionNo: 3, category: '技术基础', questionType: 'technical',
+    questionText: '请解释一下防抖和节流的区别，并在实际项目中举例' },
+  { id: 'q4', questionNo: 4, category: '项目经验', questionType: 'project',
+    questionText: '请介绍一下你最有挑战性的一个项目，你担任什么角色？' },
+  { id: 'q4-f1', questionNo: 4, category: '项目经验', questionType: 'project', followUp: true,
+    questionText: '（追问）在这个项目中遇到过最大的技术难点是什么？如何解决的？' },
+  { id: 'q5', questionNo: 5, category: '项目经验', questionType: 'project',
+    questionText: '你如何保证代码质量和项目的可维护性？' },
+  { id: 'q6', questionNo: 6, category: '项目经验', questionType: 'project',
+    questionText: '在团队协作中，你是如何进行代码评审的？' },
+  { id: 'q7', questionNo: 7, category: '项目经验', questionType: 'project',
+    questionText: '请描述一个你主导的性能优化案例' },
+  { id: 'q7-f1', questionNo: 7, category: '项目经验', questionType: 'project', followUp: true,
+    questionText: '（追问）性能优化后具体提升了多少？使用了哪些监控指标？' },
+  { id: 'q8', questionNo: 8, category: '综合素质', questionType: 'behavioral',
+    questionText: '当你的技术方案与团队其他成员有分歧时，你会如何处理？' },
+  { id: 'q9', questionNo: 9, category: '综合素质', questionType: 'behavioral',
+    questionText: '请描述一次你在压力下按时交付项目的经历' },
+  { id: 'q9-f1', questionNo: 9, category: '综合素质', questionType: 'behavioral', followUp: true,
+    questionText: '（追问）如果再给你一次机会，你会在这个项目中做出哪些不同的决策？' },
+  { id: 'q10', questionNo: 10, category: '架构设计', questionType: 'technical',
+    questionText: '请谈谈你对微前端架构的理解以及适用场景' },
+  { id: 'q11', questionNo: 11, category: '架构设计', questionType: 'technical',
+    questionText: '如果让你设计一个高并发秒杀系统，你会考虑哪些关键点？' },
 ];
 
 export const mockReport: InterviewReport = {
@@ -114,22 +98,22 @@ export const mockReport: InterviewReport = {
   interviewTime: '2026-08-10 14:30',
   resumeName: '前端开发工程师_张三.pdf',
   type: 'full',
-  questionCount: 7,
+  questionCount: 11,
   summary:
-    '整体表现良好，展现了扎实的前端技术功底和项目经验。在 React 相关技术问题上回答较为深入，但部分系统设计类问题可以更加全面。沟通表达清晰，具备良好的学习能力和问题解决能力。',
+    '整体表现良好，展现了扎实的前端技术功底和项目经验。技术基础与项目经验回答较为深入，架构设计类问题可以更加全面。沟通表达清晰，具备良好的学习能力和问题解决能力。',
   strengths: [
-    '前端技术基础扎实，React 生态系统理解深入',
+    '前端技术基础扎实，对跨域、组件通信等高频考点理解深入',
     '有实际的大型项目经验，能结合实践回答问题',
     '沟通表达清晰，逻辑思维能力强',
     '对性能优化有实际经验和量化思维',
   ],
   weaknesses: [
-    '系统设计类问题考虑维度不够全面',
+    '架构设计类问题考虑维度不够全面',
     '部分技术细节可以更深入展开',
     '对后端技术栈了解相对有限',
   ],
   suggestions: [
-    '建议加强对分布式系统和后端架构的学习',
+    '建议加强对分布式系统和高并发架构的学习',
     '可以多关注前端工程化和构建工具链的底层原理',
     '面试中可以更主动地展示自己的思考过程',
     '建议准备一些更有深度的项目案例来展示技术能力',
@@ -138,51 +122,51 @@ export const mockReport: InterviewReport = {
     {
       ...mockQuestions[0],
       userAnswer:
-        '我是一名有5年经验的前端开发工程师，主要技术栈是 React + TypeScript。我参与过多个大型 B 端项目的开发，对组件化开发、状态管理、性能优化有比较深入的了解。',
+        '跨域主要从同源策略说起。开发环境用 Vite/webpack 的 proxy 代理；生产环境用 Nginx 反向代理，或者后端设置 CORS 头，必要时处理预检请求 OPTIONS。涉及 cookie 时还要带上 withCredentials 并配置 Credentials。',
       aiScore: 4,
-      aiComment: '自我介绍简洁明了，突出了核心优势和技术栈，但可以补充一些量化成果。',
+      aiComment: '方案覆盖较全，区分了开发与生产环境，可以补充 JSONP、postMessage 等其他场景。',
     },
     {
       ...mockQuestions[1],
       userAnswer:
-        '我们项目初期使用 Redux，但随着业务复杂度增加，Redux 的样板代码太多。后来我们迁移到了 Zustand，它的 API 更简洁，学习成本低，配合 React Context 做局部状态管理，整体状态管理方案更清晰。',
+        '父子通信常见方式：props/emit、v-model、provide/inject、EventBus、状态管理库。React 中对应 props/callbacks、Context、Redux/Zustand。中大型项目优先用状态管理，简单场景用 props 即可。',
       aiScore: 5,
-      aiComment: '回答很好，展示了从实际问题出发做技术选型的能力，对不同方案的优劣有清晰认识。',
-    },
-    {
-      ...mockQuestions[2],
-      userAnswer:
-        'Virtual DOM 是真实 DOM 的 JavaScript 对象映射。React 通过对比新旧 Virtual DOM 树来计算出最小的 DOM 更新操作。优势在于批量更新减少了真实 DOM 操作次数，并且让跨平台渲染成为可能。',
-      aiScore: 4,
-      aiComment: '基本概念解释准确，可以补充 Fiber 架构和增量渲染相关的知识。',
+      aiComment: '覆盖全面且按场景给出选型建议，体现了工程判断力。',
     },
     {
       ...mockQuestions[3],
       userAnswer:
-        '我们做了代码分割、图片懒加载、虚拟列表、防抖节流、以及使用 Webpack Bundle Analyzer 分析打包体积。优化后首屏加载时间从 4.5s 降到了 1.8s。',
-      aiScore: 5,
-      aiComment: '答案具体且有量化指标，体现了工程实践能力。',
+        '最有挑战的是一个可视化大屏项目，我担任前端负责人。涉及大量实时数据渲染、多图表联动和高频更新，需要在性能和体验之间做平衡。',
+      aiScore: 4,
+      aiComment: '背景交代清楚，角色明确，可补充项目规模和团队大小的量化信息。',
     },
     {
       ...mockQuestions[4],
       userAnswer:
-        '最难的一次是排查一个内存泄漏问题，用户在长时间使用后页面变得很卡。通过 Chrome DevTools 的 Memory Profiler 逐步定位到是事件监听器没有正确移除导致的。',
-      aiScore: 4,
-      aiComment: '展示了问题排查的系统性方法，可以补充一下预防类似问题的措施。',
-    },
-    {
-      ...mockQuestions[5],
-      userAnswer:
-        '我会考虑使用 WebSocket 做实时通信，消息队列做异步处理，Redis 做缓存。前端方面使用虚拟滚动处理大量消息渲染。',
-      aiScore: 3,
-      aiComment: '方案基本正确，但缺乏对一致性、可靠性、消息顺序等关键问题的考虑。',
+        '最大难点是高频数据下图表卡顿。通过虚拟列表、离屏 Canvas、requestAnimationFrame 节流、数据降采样等方式解决，最终将帧率从 15 提升到稳定 60。',
+      aiScore: 5,
+      aiComment: '追问回答具体且有量化指标，展现了系统性优化思路。',
     },
     {
       ...mockQuestions[6],
       userAnswer:
-        '我希望在前端架构方向深入发展，3年内成为技术专家。同时我也希望在这个岗位上能够接触到更多大型项目的架构设计，提升自己的技术深度和广度。',
+        '我主导过一个首屏性能优化：代码分割、图片懒加载、虚拟列表、关键 CSS 内联，配合 Bundle Analyzer 分析。优化后首屏加载从 4.5s 降到 1.8s。',
+      aiScore: 5,
+      aiComment: '答案具体且有量化指标，体现了工程实践能力。',
+    },
+    {
+      ...mockQuestions[10],
+      userAnswer:
+        '微前端是把多个独立前端应用聚合为一个整体。适用场景：遗留系统渐进式重构、多团队并行开发、异构技术栈整合。常见方案有 qiankun、module federation。',
       aiScore: 4,
-      aiComment: '职业规划清晰，有明确的发展方向，与技术岗位的需求匹配。',
+      aiComment: '概念和场景清晰，可补充微前端的缺点（样式隔离、通信复杂度）和取舍。',
+    },
+    {
+      ...mockQuestions[11],
+      userAnswer:
+        '秒杀系统考虑：前端限流（按钮置灰、验证码）、CDN 静态化、网关层令牌桶限流、库存预扣减用 Redis、订单异步化用 MQ、数据库层乐观锁防超卖。',
+      aiScore: 4,
+      aiComment: '方案覆盖从前端到数据库的全链路，可以补充热点账户拆分和降级策略。',
     },
   ],
 };
