@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     FOLLOW_ZSET_REBUILD_LIMIT: int = 1000  # ZSET回源时加载的最近关注记录条数（超出部分读时降级查DB）
     FOLLOW_EMPTY_MARK_TTL: int = 60  # 空关注列表防穿透标记有效期（秒）
 
+    # ---- Outbox 事件投递配置（关注/取关写路径，Transactional Outbox + RabbitMQ） ----
+    OUTBOX_POLL_INTERVAL: float = 0.5  # Relay轮询间隔（秒）
+    OUTBOX_BATCH_SIZE: int = 100  # 单批扫描与投递条数
+    OUTBOX_MAX_RETRY: int = 5  # 投递最大重试次数，超限置死信
+    OUTBOX_RETRY_BASE_DELAY: int = 5  # 重试退避基数（秒），实际延迟=base*2^retry_count
+    OUTBOX_RETENTION_DAYS: int = 7  # 已发布事件保留天数，清理任务超期删除
+    OUTBOX_CLEANUP_BATCH: int = 5000  # 清理任务单批DELETE上限
+    OUTBOX_DEACTIVATED_PAYLOAD_LIMIT: int = 50000  # 注销事件payload中ID列表截断上限
+
     # Cookie与CORS配置（HttpOnly Cookie方案，token不下发前端JS）
     COOKIE_SECURE: bool = False  # 是否仅HTTPS传输，生产环境必须为True
     COOKIE_SAMESITE: str = "lax"  # SameSite策略：lax兼顾CSRF防护与OAuth跳转体验

@@ -1,6 +1,6 @@
 """消费者进程入口模块。
 
-独立进程运行所有注册的消费者，不依赖 FastAPI 生命周期。
+独立进程运行所有注册的消费者与Outbox Relay，不依赖 FastAPI 生命周期。
 通过 `python -m app.mq.runner` 启动，支持优雅关闭（Ctrl+C / SIGTERM）。
 
 流程：
@@ -8,7 +8,8 @@
     2. 建立 RabbitMQ 连接与通道。
     3. 声明全部交换机与队列绑定，确保拓扑就绪。
     4. 实例化 CONSUMER_REGISTRY 中所有消费者并订阅。
-    5. 阻塞运行，等待信号后优雅关闭所有消费者与连接。
+    5. 启动 Outbox Relay（轮询 outbox_event 投递 MQ）。
+    6. 阻塞运行，等待信号后优雅关闭 Relay、消费者与连接。
 """
 
 import asyncio
@@ -20,13 +21,14 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.mq.connection import MQConnection
 from app.mq.consumers import CONSUMER_REGISTRY
+from app.mq.outbox_relay import outbox_relay
 from app.mq.queues import declare_all_queues
 
 logger = logging.getLogger(__name__)
 
 
 async def run_consumers() -> None:
-    """启动所有注册的消费者，阻塞运行至收到停止信号。"""
+    """启动所有注册的消费者与Outbox Relay，阻塞运行至收到停止信号。"""
     setup_logging(logging.INFO)
     logger.info("消费者进程启动 %s v%s", settings.APP_NAME, settings.APP_VERSION)
 
@@ -42,6 +44,9 @@ async def run_consumers() -> None:
     for consumer in consumers:
         await consumer.start()
 
+    # 启动Outbox Relay（事件投递器，与消费者同进程）
+    await outbox_relay.start()
+
     # 注册停止信号，触发优雅关闭
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -52,7 +57,7 @@ async def run_consumers() -> None:
             # Windows 不支持 add_signal_handler，使用 KeyboardInterrupt 兜底
             pass
 
-    logger.info("所有消费者已订阅，阻塞等待消息...")
+    logger.info("所有消费者已订阅，Outbox Relay 运行中，阻塞等待消息...")
 
     # Windows 信号兜底：捕获 KeyboardInterrupt 后触发停止事件
     try:
@@ -60,8 +65,13 @@ async def run_consumers() -> None:
     except KeyboardInterrupt:
         pass
 
-    # 优雅关闭
+    # 优雅关闭：先停Relay（停止新投递），再停消费者，最后关连接
     logger.info("开始优雅关闭所有消费者...")
+    try:
+        await outbox_relay.stop()
+    except Exception:
+        logger.exception("关闭 Outbox Relay 失败")
+
     for consumer in consumers:
         try:
             await consumer.stop()
