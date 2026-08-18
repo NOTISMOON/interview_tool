@@ -1,24 +1,19 @@
-"""关注关系服务模块，编排"可见性校验 → ZSET分页 → DB批量详情 → SET互关判断"读路径。
+"""关注关系服务模块。
 
-读路径（3次网络往返，缓存命中时约2-4ms）:
-    1. 可见性校验: 复用user_service.get_public_profile（走资料缓存），
-       visibility=2对外不存在；visibility=1非关注者返回restricted受限响应。
-    2. ZSET游标分页: 1次Redis往返（ZREVRANGEBYSCORE，多取1条判定has_more）。
-    3. DB批量详情: 1次主键IN查询（过滤注销用户）。
-    4. SET互关判断: 1次Redis pipeline（2次SMISMEMBER覆盖整页）。
+读路径: 编排"可见性校验 → ZSET分页 → DB批量详情 → SET互关判断"（缓存命中约2-4ms）。
+写路径: 关注/取关采用 Transactional Outbox——业务变更与事件写入同一个MySQL本地事务，
+    事务提交即保证事件不丢；独立Relay轮询outbox_event投递RabbitMQ，Consumer异步
+    同步Redis缓存（最终一致，秒级）。写接口不等待MQ/Redis，DB事务内完成全部操作。
 
-降级策略:
-    ZSET仅回源最近REBUILD_LIMIT条，翻页到ZSET尽头且冗余计数表明DB还有更多时，
-    自动降级为DB游标查询补页（老数据访问频率低，性能不敏感）。
-
-一致性: 由后续Outbox+MQ在关注/取关时维护ZSET/SET（最终一致）；
-    缓存未命中时以DB为准回源，可自愈短期不一致。
+写路径一致性核心: 事件INSERT必须与业务操作共用同一同步Session（同一事务），
+    禁止拆成两个会话（拆开则事务提交与事件落库不再原子，宕机可能丢事件）。
 """
 
 import logging
 from datetime import datetime
 
 import redis
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.cache.follow_cache import (
@@ -26,6 +21,8 @@ from app.cache.follow_cache import (
     DIRECTION_FOLLOWING,
     follow_cache,
 )
+from app.models.user_activity import ACTIVITY_TYPE_FOLLOW
+from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.user_repository import sync_user_repository
 from app.schemas.user import (
     FollowItemResponse,
@@ -37,9 +34,146 @@ from app.services.user_service import user_service
 
 logger = logging.getLogger(__name__)
 
+# 用户状态常量：0-禁用
+USER_STATUS_DISABLED = 0
+
+
+class SelfFollowError(Exception):
+    """关注自己异常（路由层转400）。"""
+
+
+class TargetUserNotFoundError(Exception):
+    """目标用户不存在或已注销（路由层转404）。"""
+
+
+class TargetUserForbiddenError(Exception):
+    """目标用户被禁用（路由层转403）。"""
+
 
 class FollowService:
-    """关注/粉丝列表业务编排层（同步）。"""
+    """关注/粉丝列表业务编排层（同步），含读路径与关注/取关写路径。"""
+
+    # ------------------------------------------------------------------
+    # 写路径：关注/取关（Transactional Outbox）
+    # ------------------------------------------------------------------
+
+    def follow(self, db: Session, cache_client: redis.Redis, follower_id: int, following_id: int) -> None:
+        """关注用户：单事务内写关系、计数、动态与Outbox事件，幂等。
+
+        校验顺序: 不能关注自己(400) → 目标注销/不存在(404) → 目标禁用(403)；
+        重复关注由唯一索引兜底，捕获IntegrityError后幂等返回（不重复计数、不发事件）。
+
+        Args:
+            db: 数据库同步会话。
+            cache_client: 同步Redis客户端（事务提交后失效双方资料缓存）。
+            follower_id: 关注者（当前登录用户）ID。
+            following_id: 被关注者ID。
+
+        Raises:
+            SelfFollowError: 关注自己。
+            TargetUserNotFoundError: 目标用户不存在或已注销。
+            TargetUserForbiddenError: 目标用户被禁用。
+        """
+        if follower_id == following_id:
+            raise SelfFollowError("不能关注自己")
+
+        now = datetime.now()
+        try:
+            # 校验与写操作同事务（校验查询会触发autobegin，须在begin()内执行）
+            with db.begin():
+                # get_by_id过滤status=2（注销），目标不可见即等同不存在
+                target = sync_user_repository.get_by_id(db, following_id)
+                if target is None:
+                    raise TargetUserNotFoundError("用户不存在")
+                if target.status == USER_STATUS_DISABLED:
+                    raise TargetUserForbiddenError("用户已被禁用")
+
+                # ① 关注关系（唯一索引uk_follower_following兜底幂等）
+                sync_user_repository.create_follow(db, follower_id, following_id)
+                # ② Outbox事件（同一事务，payload由服务端计算created_at_ms，规避时区换算偏差）
+                sync_outbox_repository.insert_event(
+                    db,
+                    event_type="follow_created",
+                    aggregate_type="user_follow",
+                    aggregate_id=f"{follower_id}:{following_id}",
+                    payload={
+                        "follower_id": follower_id,
+                        "following_id": following_id,
+                        "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                        "created_at_ms": int(now.timestamp() * 1000),
+                    },
+                )
+                # ③④ 双方冗余计数各+1
+                sync_user_repository.increment_following_count(db, follower_id)
+                sync_user_repository.increment_followers_count(db, following_id)
+                # ⑤ 关注动态
+                sync_user_repository.create_activity(
+                    db, follower_id, ACTIVITY_TYPE_FOLLOW, f"关注了 {target.nickname}", following_id
+                )
+        except IntegrityError:
+            # 重复关注（并发或重试场景撞唯一索引）→ 回滚后幂等返回
+            logger.info("重复关注，幂等返回 follower_id=%s following_id=%s", follower_id, following_id)
+            return
+
+        # 事务提交后失效双方资料缓存（计数已变更，下次查询回填最新值）
+        user_service.invalidate_profile_cache(cache_client, follower_id)
+        user_service.invalidate_profile_cache(cache_client, following_id)
+        logger.info("关注成功 follower_id=%s following_id=%s", follower_id, following_id)
+
+    def unfollow(self, db: Session, cache_client: redis.Redis, follower_id: int, following_id: int) -> None:
+        """取消关注：单事务内删关系、修正计数与写Outbox事件，幂等。
+
+        取关无前置状态校验（DELETE rowcount判定）；路径用户不存在/注销返回404；
+        关系本就不存在时直接提交并幂等返回（不产生事件）。
+
+        Args:
+            db: 数据库同步会话。
+            cache_client: 同步Redis客户端（事务提交后失效双方资料缓存）。
+            follower_id: 关注者（当前登录用户）ID。
+            following_id: 被关注者ID。
+
+        Raises:
+            TargetUserNotFoundError: 目标用户不存在或已注销。
+        """
+        now = datetime.now()
+        # 校验与写操作同事务（校验查询会触发autobegin，须在begin()内执行）
+        with db.begin():
+            # 注销用户对外等同不存在；禁用用户仍允许被取关（清理关系）
+            target = sync_user_repository.get_by_id(db, following_id)
+            if target is None:
+                raise TargetUserNotFoundError("用户不存在")
+
+            deleted = sync_user_repository.remove_follow(db, follower_id, following_id)
+            if not deleted:
+                # 未关注过 → 幂等返回，不发事件、不改计数
+                logger.info("取关未关注用户，幂等返回 follower_id=%s following_id=%s", follower_id, following_id)
+                return
+
+            # ① Outbox事件（仅真实删除时）
+            sync_outbox_repository.insert_event(
+                db,
+                event_type="follow_deleted",
+                aggregate_type="user_follow",
+                aggregate_id=f"{follower_id}:{following_id}",
+                payload={
+                    "follower_id": follower_id,
+                    "following_id": following_id,
+                    "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                    "created_at_ms": int(now.timestamp() * 1000),
+                },
+            )
+            # ② 双方冗余计数各-1（复用CAST+GREATEST(0)防无符号溢出）
+            sync_user_repository.decrement_following_count(db, [follower_id])
+            sync_user_repository.decrement_followers_count(db, [following_id])
+
+        # 事务提交后失效双方资料缓存（计数已变更）
+        user_service.invalidate_profile_cache(cache_client, follower_id)
+        user_service.invalidate_profile_cache(cache_client, following_id)
+        logger.info("取关成功 follower_id=%s following_id=%s", follower_id, following_id)
+
+    # ------------------------------------------------------------------
+    # 读路径：关注/粉丝列表
+    # ------------------------------------------------------------------
 
     def list_following(
         self,
