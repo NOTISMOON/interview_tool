@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     COOKIE_REFRESH_PATH: str = "/api/v1/auth"  # refresh_token Cookie路径（仅认证端点发送，缩小暴露面）
     CORS_ORIGINS: list[str] = ["http://localhost:5645"]  # 前端跨域白名单，credentials=True时禁止通配符
 
+    # 前端路由配置（认证中间件长期Token失效时，后端302重定向到该登录页）
+    FRONTEND_LOGIN_URL: str = "http://localhost:5645/login"
+
     # GitHub OAuth配置
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""

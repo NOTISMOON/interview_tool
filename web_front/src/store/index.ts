@@ -38,6 +38,7 @@ const MOCK_FOLLOWED_POSTS: CommunityPost[] = [
 interface AppState {
   user: User | null;
   isLoggedIn: boolean;
+  authLoading: boolean;
   resumes: Resume[];
   currentInterview: InterviewState | null;
   reports: Record<string, InterviewReport>;
@@ -84,6 +85,7 @@ function mapGithubUser(githubUser: GithubUser): User {
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   isLoggedIn: false,
+  authLoading: true,
   resumes: [],
   currentInterview: null,
   reports: {},
@@ -152,16 +154,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   initAuth: () => {
-    // 乐观恢复用户展示信息；会话真实有效性由Cookie生命周期保证，
-    // Cookie过期后任意API的401会触发拦截器自动刷新或跳转登录
     const userStr = localStorage.getItem('auth_user');
     if (userStr) {
       try {
         const user = JSON.parse(userStr) as User;
-        set({ user, isLoggedIn: true });
+        set({ user, isLoggedIn: true, authLoading: false });
       } catch {
         localStorage.removeItem('auth_user');
+        set({ authLoading: false });
       }
+    } else {
+      set({ authLoading: false });
     }
   },
 

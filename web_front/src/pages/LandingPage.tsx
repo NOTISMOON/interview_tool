@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useAppStore } from '@/store';
 import {
   PlayCircleOutlined,
   FileTextOutlined,
@@ -63,6 +64,11 @@ const testimonials = [
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const isLoggedIn = useAppStore((s) => s.isLoggedIn);
+
+  const handleStartPractice = () => {
+    navigate(isLoggedIn ? '/dashboard' : '/login');
+  };
 
   return (
     <div className="bg-[#F6F8FA]">
@@ -87,7 +93,7 @@ const LandingPage = () => {
               基于真实简历，AI 为你生成个性化面试题。多轮练习、深度分析，让每一次面试都成为你拿 offer 的底气。
             </p>
             <div className="flex items-center gap-4">
-              <button onClick={() => navigate('/login')} className="btn-flame btn-flame-lg text-base">
+              <button onClick={handleStartPractice} className="btn-flame btn-flame-lg text-base">
                 免费开始练习
                 <RightOutlined />
               </button>
