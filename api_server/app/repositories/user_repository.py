@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from app.models.user_activity import UserActivity
 from app.models.user_auth import UserAuth
 from app.models.user_follow import UserFollow
 from app.schemas.auth import GitHubUserInfo
@@ -174,6 +175,80 @@ class SyncUserRepository:
             user_id: 用户唯一标识。
         """
         db.execute(update(User).where(User.id == user_id, User.status == 1).values(status=2))
+
+    # ------------------------------------------------------------------
+    # 关注/取关写路径（与Outbox事件同事务，见follow_service）
+    # ------------------------------------------------------------------
+
+    def create_follow(self, db: Session, follower_id: int, following_id: int) -> None:
+        """新增一条关注关系（唯一索引uk_follower_following兜底幂等）。
+
+        Args:
+            db: 数据库同步会话。
+            follower_id: 关注者用户ID。
+            following_id: 被关注者用户ID。
+        """
+        db.add(UserFollow(follower_id=follower_id, following_id=following_id))
+
+    def remove_follow(self, db: Session, follower_id: int, following_id: int) -> bool:
+        """删除一条关注关系（rowcount判定是否真实删除）。
+
+        Args:
+            db: 数据库同步会话。
+            follower_id: 关注者用户ID。
+            following_id: 被关注者用户ID。
+
+        Returns:
+            删除成功返回True；关系本就不存在返回False（幂等取关）。
+        """
+        result = db.execute(
+            delete(UserFollow).where(
+                UserFollow.follower_id == follower_id,
+                UserFollow.following_id == following_id,
+            )
+        )
+        return bool(result.rowcount)
+
+    def increment_following_count(self, db: Session, user_id: int) -> None:
+        """将用户关注数加1（关注事务内维护冗余计数）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 关注者用户ID。
+        """
+        db.execute(
+            update(User).where(User.id == user_id).values(following_count=User.following_count + 1)
+        )
+
+    def increment_followers_count(self, db: Session, user_id: int) -> None:
+        """将用户粉丝数加1（关注事务内维护冗余计数）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 被关注者用户ID。
+        """
+        db.execute(
+            update(User).where(User.id == user_id).values(followers_count=User.followers_count + 1)
+        )
+
+    def create_activity(self, db: Session, user_id: int, activity_type: int, content: str, related_id: int | None) -> None:
+        """写入一条用户动态（如"关注了 xxx"）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 产生动态的用户ID。
+            activity_type: 动态类型（1-点赞 2-评论 3-关注 4-发帖）。
+            content: 动态描述文本。
+            related_id: 关联实体ID（关注动态为被关注者ID）。
+        """
+        db.add(
+            UserActivity(
+                user_id=user_id,
+                type=activity_type,
+                content=content,
+                related_id=related_id,
+            )
+        )
 
     def get_following_ids(self, db: Session, user_id: int) -> list[int]:
         """查询用户关注的人的ID列表（注销时用于修正对方粉丝计数）。

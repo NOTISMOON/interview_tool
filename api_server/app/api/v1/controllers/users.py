@@ -1,4 +1,4 @@
-"""用户管理API端点，提供个人资料读写、可见性控制、他人公开资料查询、账号注销与关注/粉丝列表。"""
+"""用户管理API端点，提供个人资料读写、可见性控制、他人公开资料查询、账号注销、关注/取关与关注/粉丝列表。"""
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
@@ -13,7 +13,12 @@ from app.schemas.user import (
     UserProfileResponse,
     UserUpdateRequest,
 )
-from app.services.follow_service import follow_service
+from app.services.follow_service import (
+    SelfFollowError,
+    TargetUserForbiddenError,
+    TargetUserNotFoundError,
+    follow_service,
+)
 from app.services.user_service import user_service
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
@@ -290,6 +295,81 @@ def list_user_followers(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return result
+
+
+@router.post(
+    "/{user_id}/follow",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="关注用户",
+)
+def follow_user(
+    user_id: int = Path(..., ge=1, description="被关注的用户ID"),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    cache_client: redis.Redis = Depends(get_redis),
+) -> Response:
+    """关注指定用户（Transactional Outbox写路径，重复关注幂等返回204）。
+
+    单事务内完成: 关注关系 + Outbox事件 + 双方计数 + 关注动态；
+    事件由Relay异步投递MQ，Consumer同步Redis缓存（最终一致，秒级）。
+
+    Args:
+        user_id: 被关注的用户ID。
+        payload: JWT认证载荷。
+        db: 数据库同步会话。
+        cache_client: 同步Redis客户端。
+
+    Returns:
+        204 No Content（含重复关注的幂等场景）。
+
+    Raises:
+        HTTPException: 关注自己返回400；目标不存在/已注销返回404；目标被禁用返回403。
+    """
+    try:
+        follow_service.follow(db, cache_client, _get_user_id(payload), user_id)
+    except SelfFollowError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能关注自己")
+    except TargetUserNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    except TargetUserForbiddenError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="用户已被禁用")
+    except Exception:
+        raise HTTPException(status_code=500, detail="关注失败")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/{user_id}/follow",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="取消关注",
+)
+def unfollow_user(
+    user_id: int = Path(..., ge=1, description="被取关的用户ID"),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    cache_client: redis.Redis = Depends(get_redis),
+) -> Response:
+    """取消关注指定用户（幂等：取关未关注的人同样返回204，不产生事件）。
+
+    Args:
+        user_id: 被取关的用户ID。
+        payload: JWT认证载荷。
+        db: 数据库同步会话。
+        cache_client: 同步Redis客户端。
+
+    Returns:
+        204 No Content。
+
+    Raises:
+        HTTPException: 路径用户不存在/已注销返回404。
+    """
+    try:
+        follow_service.unfollow(db, cache_client, _get_user_id(payload), user_id)
+    except TargetUserNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    except Exception:
+        raise HTTPException(status_code=500, detail="取消关注失败")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/me", summary="注销账号")

@@ -17,6 +17,7 @@ import redis
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.user_repository import sync_user_repository
 from app.schemas.user import (
     ProfileVisibilityUpdateRequest,
@@ -217,12 +218,14 @@ class UserService:
         return UserPublicProfileResponse.model_validate(profile)
 
     def delete_account(self, db: Session, cache_client: redis.Redis, user_id: int) -> bool:
-        """注销账号（软删除）：单事务内软删除用户、清理双向关注关系并修正计数。
+        """注销账号（软删除）：单事务内软删除用户、清理双向关注关系、修正计数并写注销事件。
 
         事务步骤:
             1. user.status 置为2（注销）。
             2. 删除该用户所有关注关系（作为关注者与被关注者两个方向）。
             3. 批量修正关联用户冗余计数（被我关注的人粉丝数-1、我的粉丝关注数-1）。
+            4. 写入 user_deactivated Outbox事件（同一事务），由Consumer清理
+               该用户的关注/粉丝缓存及其双向关联键成员（闭环读路径B-14）。
 
         Args:
             db: 数据库同步会话。
@@ -239,7 +242,8 @@ class UserService:
                 if user is None or user.status != 1:
                     return False
 
-                # 注销前先取双向关注关系，用于事务内修正计数
+                # 注销前先取双向关注关系，用于事务内修正计数与事件payload
+                # （必须在删除关系前采集，删除后Consumer无法反查）
                 following_ids = sync_user_repository.get_following_ids(db, user_id)
                 follower_ids = sync_user_repository.get_follower_ids(db, user_id)
 
@@ -248,6 +252,22 @@ class UserService:
                 # 我关注的人：粉丝数-1；我的粉丝：关注数-1
                 sync_user_repository.decrement_followers_count(db, following_ids)
                 sync_user_repository.decrement_following_count(db, follower_ids)
+
+                # 注销事件（同一事务）：payload带双向ID列表，超上限截断靠缓存TTL自愈
+                payload_limit = settings.OUTBOX_DEACTIVATED_PAYLOAD_LIMIT
+                truncated = len(following_ids) > payload_limit or len(follower_ids) > payload_limit
+                sync_outbox_repository.insert_event(
+                    db,
+                    event_type="user_deactivated",
+                    aggregate_type="user",
+                    aggregate_id=str(user_id),
+                    payload={
+                        "user_id": user_id,
+                        "following_ids": following_ids[:payload_limit],
+                        "follower_ids": follower_ids[:payload_limit],
+                        "truncated": truncated,
+                    },
+                )
         except Exception:
             logger.exception("注销账号失败: user_id=%s", user_id)
             raise
