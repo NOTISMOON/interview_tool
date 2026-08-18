@@ -14,12 +14,16 @@ class ExchangeName(str, Enum):
 
     INTERVIEW = "interview.exchange"  # 面试业务交换机（topic，按 routing_key 路由）
     NOTIFICATION = "notification.exchange"  # 通知业务交换机（topic，消息推送）
+    SOCIAL = "social.exchange"  # 社交业务交换机（topic，关注/取关缓存同步）
+    SOCIAL_DLX = "dlx.social"  # 社交业务死信交换机（direct，消费失败消息存档）
 
 
 # 交换机类型映射：交换机名称 -> aio_pika.ExchangeType
 EXCHANGE_TYPE_MAP: dict[ExchangeName, aio_pika.ExchangeType] = {
     ExchangeName.INTERVIEW: aio_pika.ExchangeType.TOPIC,
     ExchangeName.NOTIFICATION: aio_pika.ExchangeType.TOPIC,
+    ExchangeName.SOCIAL: aio_pika.ExchangeType.TOPIC,
+    ExchangeName.SOCIAL_DLX: aio_pika.ExchangeType.DIRECT,
 }
 
 

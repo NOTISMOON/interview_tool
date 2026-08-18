@@ -22,6 +22,21 @@ class QueueName(str, Enum):
     # 通知业务队列
     NOTIFICATION_DELIVER = "notification.deliver.queue"  # 通知投递队列
 
+    # 社交业务队列（关注/取关缓存同步，消费失败经DLX进死信队列存档）
+    SOCIAL_FOLLOW_CACHE = "social.follow.cache.queue"  # 关注缓存同步队列
+    SOCIAL_FOLLOW_CACHE_DLQ = "social.follow.cache.dlq"  # 关注缓存同步死信队列（仅存档不消费）
+
+
+# 队列声明参数（仅含DLX配置的队列需要，声明时携带才能生效）。
+# social.follow.cache.queue 消费失败 nack(requeue=False) 后由 Broker 转投死信队列，
+# 消除既有"直接丢弃"的静默丢失，支撑人工重放与告警。
+QUEUE_DECLARE_ARGUMENTS: dict[QueueName, dict[str, str]] = {
+    QueueName.SOCIAL_FOLLOW_CACHE: {
+        "x-dead-letter-exchange": ExchangeName.SOCIAL_DLX.value,
+        "x-dead-letter-routing-key": "social.follow.cache.dead",
+    },
+}
+
 
 @dataclass(frozen=True)
 class QueueBinding:
@@ -56,6 +71,28 @@ QUEUE_BINDINGS: list[QueueBinding] = [
         exchange=ExchangeName.NOTIFICATION,
         routing_key="notification.deliver",
     ),
+    # 关注缓存同步：三类事件路由到同一队列，顺序消费保证同一关系事件有序
+    QueueBinding(
+        queue=QueueName.SOCIAL_FOLLOW_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.follow.created",
+    ),
+    QueueBinding(
+        queue=QueueName.SOCIAL_FOLLOW_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.follow.deleted",
+    ),
+    QueueBinding(
+        queue=QueueName.SOCIAL_FOLLOW_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.user.deactivated",
+    ),
+    # 死信队列：消费失败消息存档，仅人工重放，不消费
+    QueueBinding(
+        queue=QueueName.SOCIAL_FOLLOW_CACHE_DLQ,
+        exchange=ExchangeName.SOCIAL_DLX,
+        routing_key="social.follow.cache.dead",
+    ),
 ]
 
 
@@ -64,7 +101,7 @@ async def declare_queue(
     name: QueueName,
     durable: bool = True,
 ) -> aio_pika.RobustQueue:
-    """声明指定名称的队列（不存在则创建）。
+    """声明指定名称的队列（不存在则创建），自动携带该队列的声明参数（如DLX）。
 
     Args:
         channel: RabbitMQ 异步通道。
@@ -74,7 +111,65 @@ async def declare_queue(
     Returns:
         aio_pika.RobustQueue 实例。
     """
-    return await channel.declare_queue(name=name.value, durable=durable)
+    return await channel.declare_queue(
+        name=name.value,
+        durable=durable,
+        arguments=QUEUE_DECLARE_ARGUMENTS.get(name),
+    )
+
+
+def get_dead_letter_queue(name: QueueName) -> QueueName | None:
+    """依据队列DLX声明参数，从绑定关系中推导其死信队列。
+
+    Args:
+        name: 主队列名称枚举。
+
+    Returns:
+        对应的死信队列枚举，未配置DLX或无法推导时返回None。
+    """
+    args = QUEUE_DECLARE_ARGUMENTS.get(name)
+    if not args:
+        return None
+    dlx = args.get("x-dead-letter-exchange")
+    dlx_routing_key = args.get("x-dead-letter-routing-key")
+    for binding in QUEUE_BINDINGS:
+        if binding.exchange.value == dlx and binding.routing_key == dlx_routing_key:
+            return binding.queue
+    return None
+
+
+async def ensure_queue_topology(channel: aio_pika.RobustChannel, name: QueueName) -> aio_pika.RobustQueue:
+    """声明指定队列并建立其全部绑定（含死信队列），确保消费者独立启动时拓扑就绪。
+
+    仅declare不bind时，消息发往交换机后无路由可达会被Broker静默丢弃，
+    因此消费者订阅前必须确保绑定已存在；死信队列也一并声明，
+    否则消费失败消息经DLX路由时因目标队列不存在而被丢弃，存档失效。
+
+    Args:
+        channel: RabbitMQ异步通道。
+        name: 队列名称枚举。
+
+    Returns:
+        已声明并完成绑定的队列实例。
+    """
+
+    async def _declare_and_bind(target: QueueName) -> aio_pika.RobustQueue:
+        """声明目标队列并建立其全部交换机绑定（幂等）。"""
+        target_queue = await declare_queue(channel, target)
+        for binding in QUEUE_BINDINGS:
+            if binding.queue == target:
+                exchange = await declare_exchange(channel, binding.exchange)
+                await target_queue.bind(exchange, routing_key=binding.routing_key)
+        return target_queue
+
+    queue = await _declare_and_bind(name)
+
+    # 死信队列随主队列一并声明绑定（DLX目标不存在时死信消息直接丢弃）
+    dlq = get_dead_letter_queue(name)
+    if dlq is not None:
+        await _declare_and_bind(dlq)
+
+    return queue
 
 
 async def declare_all_queues(

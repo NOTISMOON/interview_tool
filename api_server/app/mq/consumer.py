@@ -5,8 +5,9 @@
 
 ACK/Reject 策略：
     - 处理成功：ack（消息从队列移除）。
-    - 处理失败（业务异常）：nack 并 requeue=False（进入死信或丢弃，避免无限重试）。
-    - 解析失败（消息格式错误）：nack 并 requeue=False（毒消息直接丢弃）。
+    - 处理失败（业务异常）：reject 并 requeue=False（配置了DLX的队列进入死信队列
+      存档，未配置则丢弃，避免无限重试）。
+    - 解析失败（消息格式错误）：reject 并 requeue=False（毒消息丢弃）。
     - 网络异常：依赖 RobustChannel 自动重连，消息不 ACK，Broker 会重新投递。
 """
 
@@ -19,7 +20,7 @@ from typing import Any
 import aio_pika
 
 from app.mq.connection import MQConnection
-from app.mq.queues import QueueName, declare_queue
+from app.mq.queues import QueueName, ensure_queue_topology
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,14 @@ class MQMessage:
         timestamp: 消息发送时间（ISO 字符串）。
         payload: 业务负载字典。
         raw: aio_pika 原始 IncomingMessage 对象，用于 ACK/Nack 操作。
+        routing_key: 消息路由键（默认空串，同一队列消费多类事件时用于区分来源）。
     """
 
     message_id: str
     timestamp: str
     payload: dict[str, Any]
     raw: aio_pika.IncomingMessage
+    routing_key: str = ""
 
 
 class BaseConsumer(abc.ABC):
@@ -66,11 +69,15 @@ class BaseConsumer(abc.ABC):
     async def start(self) -> str:
         """启动消费者，订阅指定队列。
 
+        订阅前确保该队列的完整拓扑（队列声明+交换机绑定+死信队列），
+        独立启动场景（未经runner统一声明）下仅声明不绑定会导致
+        消息发往交换机后无路由可达而被Broker静默丢弃。
+
         Returns:
             consumer_tag 字符串，用于后续取消订阅。
         """
         channel = await MQConnection.get_channel()
-        self._queue = await declare_queue(channel, self.queue_name)
+        self._queue = await ensure_queue_topology(channel, self.queue_name)
 
         self._consumer_tag = await self._queue.consume(self._on_message)
         logger.info(
@@ -91,6 +98,9 @@ class BaseConsumer(abc.ABC):
     async def _on_message(self, message: aio_pika.IncomingMessage) -> None:
         """消息到达回调，负责解析、分发与异常兜底。
 
+        异常向外抛出后由 message.process 统一 reject(requeue=False)：
+        队列配置了 DLX 时进入死信队列存档（支撑人工重放），未配置则丢弃。
+
         Args:
             message: aio_pika IncomingMessage 对象。
         """
@@ -99,24 +109,24 @@ class BaseConsumer(abc.ABC):
             try:
                 mq_msg = self._parse(message)
             except Exception:
-                # 解析失败：毒消息，直接丢弃，避免无限重投
+                # 解析失败：毒消息，reject不重投，避免无限重投
                 logger.exception(
-                    "消息解析失败，已丢弃 queue=%s message_id=%s",
+                    "消息解析失败，将reject丢弃 queue=%s message_id=%s",
                     self.queue_name.value,
                     message_id,
                 )
-                return
+                raise
 
             try:
                 await self.handle_message(mq_msg)
             except Exception:
-                # 业务处理失败：nack 不重投，避免循环（生产应配死信队列）
+                # 业务处理失败：reject不重投避免循环；配置DLX的队列由死信队列存档
                 logger.exception(
-                    "消息处理失败，已丢弃 queue=%s message_id=%s",
+                    "消息处理失败，将reject queue=%s message_id=%s",
                     self.queue_name.value,
                     message_id,
                 )
-                return
+                raise
 
             logger.info(
                 "消息处理成功 queue=%s message_id=%s",
@@ -145,6 +155,7 @@ class BaseConsumer(abc.ABC):
             timestamp=envelope["timestamp"],
             payload=envelope["payload"],
             raw=message,
+            routing_key=message.routing_key or "",
         )
 
     @abc.abstractmethod
