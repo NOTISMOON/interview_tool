@@ -2,6 +2,7 @@
 
 Redis键设计:
     refresh_token:{sha256(token)} → JSON({"user_id", "login", "created_at"})，TTL 7天。
+    user:deactivated:{user_id} → 注销吊销标记（用户服务写入），refresh时校验拒绝续签。
 """
 
 import json
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 # Redis中refresh token键前缀
 REFRESH_TOKEN_PREFIX = "refresh_token:"
+# 已注销用户吊销标记键前缀（由用户服务在注销时写入）
+USER_DEACTIVATED_PREFIX = "user:deactivated:"
 
 
 class TokenPair(NamedTuple):
@@ -95,6 +98,14 @@ class AuthService:
             )
 
         data = json.loads(raw)
+        # 校验用户是否已注销：注销账号时写入吊销标记，拒绝续签
+        if await redis.exists(f"{USER_DEACTIVATED_PREFIX}{data.get('user_id')}"):
+            await redis.delete(key)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="账号已注销",
+            )
+
         # 轮转：删除旧token，使其立即失效（防重放攻击）
         await redis.delete(key)
 

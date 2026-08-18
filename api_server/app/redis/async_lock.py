@@ -213,18 +213,14 @@ class AsyncRedisLock:
             interval = self._renew_interval / 1000
             while not self._stop_event.is_set():
                 try:
-                    await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=interval
-                    )
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=interval)
                     break
                 except asyncio.TimeoutError:
                     try:
                         if not await self.renew():
                             break
                     except Exception:
-                        logger.exception(
-                            "Watchdog renew failed for lock %s", self._name
-                        )
+                        logger.exception("Watchdog renew failed for lock %s", self._name)
 
         self._watchdog_task = asyncio.create_task(_run())
 
@@ -244,9 +240,7 @@ class AsyncRedisLock:
 
     async def __aenter__(self) -> "AsyncRedisLock":
         if not await self.acquire():
-            raise LockAcquireError(
-                f"获取锁 '{self._name}' 失败，已重试 {self._retry_count} 次"
-            )
+            raise LockAcquireError(f"获取锁 '{self._name}' 失败，已重试 {self._retry_count} 次")
         return self
 
     async def __aexit__(
@@ -264,4 +258,5 @@ class AsyncRedisLock:
 
 class LockAcquireError(Exception):
     """获取锁失败异常。"""
+
     pass

@@ -39,6 +39,10 @@ WHITELIST_PATHS: frozenset[str] = frozenset(
     }
 )
 
+# 游客可读路径前缀（仅GET放行）：公开资源类接口，写操作仍强制登录。
+# /api/v1/users/{user_id} 查看他人公开资料；/users/me 由端点内依赖兜底返回401。
+WHITELIST_GET_PREFIXES: tuple[str, ...] = ("/api/v1/users/",)
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """基于HttpOnly Cookie双Token的认证中间件。"""
@@ -67,6 +71,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # 白名单路径放行
         if request.url.path in WHITELIST_PATHS:
+            return await call_next(request)
+
+        # 游客可读资源：GET请求且路径命中前缀白名单时放行（未登录也可读）
+        if request.method == "GET" and request.url.path.startswith(WHITELIST_GET_PREFIXES):
             return await call_next(request)
 
         # 读取Cookie中的access_token与refresh_token

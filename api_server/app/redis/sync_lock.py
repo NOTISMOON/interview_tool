@@ -217,9 +217,7 @@ class RedisLock:
                     if not self.renew():
                         break
                 except Exception:
-                    logger.exception(
-                        "Watchdog renew failed for lock %s", self._name
-                    )
+                    logger.exception("Watchdog renew failed for lock %s", self._name)
 
         self._watchdog = threading.Thread(target=_run, daemon=True)
         self._watchdog.start()
@@ -235,9 +233,7 @@ class RedisLock:
 
     def __enter__(self) -> "RedisLock":
         if not self.acquire():
-            raise LockAcquireError(
-                f"获取锁 '{self._name}' 失败，已重试 {self._retry_count} 次"
-            )
+            raise LockAcquireError(f"获取锁 '{self._name}' 失败，已重试 {self._retry_count} 次")
         return self
 
     def __exit__(
@@ -255,4 +251,5 @@ class RedisLock:
 
 class LockAcquireError(Exception):
     """获取锁失败异常。"""
+
     pass

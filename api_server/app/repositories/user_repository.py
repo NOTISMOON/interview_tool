@@ -1,11 +1,20 @@
-"""用户数据访问层（异步），封装 user / user_auth 表操作，供认证流程使用。"""
+"""用户数据访问层，封装 user / user_auth / user_follow 表操作。
 
-from sqlalchemy import select
+包含两个类:
+    - UserRepository: 异步实现，供认证（Agent类高并发）流程使用。
+    - SyncUserRepository: 同步实现，供用户管理等普通业务（增删改查）使用。
+"""
+
+from datetime import datetime
+
+from sqlalchemy import Integer, cast, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.user_auth import UserAuth
+from app.models.user_follow import UserFollow
 from app.schemas.auth import GitHubUserInfo
 
 # 认证方式常量：2-GitHub
@@ -15,9 +24,7 @@ PROVIDER_GITHUB = 2
 class UserRepository:
     """用户数据访问层（异步），提供OAuth用户查找与创建。"""
 
-    async def get_auth_by_provider(
-        self, db: AsyncSession, provider: int, provider_user_id: str
-    ) -> UserAuth | None:
+    async def get_auth_by_provider(self, db: AsyncSession, provider: int, provider_user_id: str) -> UserAuth | None:
         """根据认证方式与第三方用户标识查询认证记录。
 
         Args:
@@ -127,4 +134,264 @@ class UserRepository:
         return user
 
 
+class SyncUserRepository:
+    """用户数据访问层（同步），供用户管理普通业务使用。
+
+    查询统一过滤 status IN (0, 1)，注销用户（status=2）对外不可见。
+    """
+
+    # 用户可见状态集合：0-禁用 1-正常（2-注销不可见）
+    VISIBLE_STATUS = (0, 1)
+
+    def get_by_id(self, db: Session, user_id: int) -> User | None:
+        """根据ID查询用户（注销用户不可见）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+
+        Returns:
+            User对象，不存在或已注销返回None。
+        """
+        stmt = select(User).where(User.id == user_id, User.status.in_(self.VISIBLE_STATUS))
+        return db.execute(stmt).scalar_one_or_none()
+
+    def update_profile(self, db: Session, user_id: int, update_data: dict) -> None:
+        """更新用户个人资料字段（仅更新update_data中提交的字段）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+            update_data: 待更新字段字典，如 {"nickname": "新昵称"}。
+        """
+        db.execute(update(User).where(User.id == user_id, User.status.in_(self.VISIBLE_STATUS)).values(**update_data))
+
+    def soft_delete(self, db: Session, user_id: int) -> None:
+        """软删除用户（status置为2-注销），不物理删除数据。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+        """
+        db.execute(update(User).where(User.id == user_id, User.status == 1).values(status=2))
+
+    def get_following_ids(self, db: Session, user_id: int) -> list[int]:
+        """查询用户关注的人的ID列表（注销时用于修正对方粉丝计数）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+
+        Returns:
+            被关注用户ID列表。
+        """
+        stmt = select(UserFollow.following_id).where(UserFollow.follower_id == user_id)
+        return [row[0] for row in db.execute(stmt).all()]
+
+    def get_follower_ids(self, db: Session, user_id: int) -> list[int]:
+        """查询用户的粉丝ID列表（注销时用于修正对方关注计数）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+
+        Returns:
+            粉丝用户ID列表。
+        """
+        stmt = select(UserFollow.follower_id).where(UserFollow.following_id == user_id)
+        return [row[0] for row in db.execute(stmt).all()]
+
+    def delete_follow_relations(self, db: Session, user_id: int) -> None:
+        """删除用户的所有关注关系（双向：作为关注者与被关注者）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+        """
+        db.execute(delete(UserFollow).where(or_(UserFollow.follower_id == user_id, UserFollow.following_id == user_id)))
+
+    def decrement_following_count(self, db: Session, user_ids: list[int]) -> None:
+        """批量将指定用户的关注数减1（下限0），注销清理时修正冗余计数。
+
+        Args:
+            db: 数据库同步会话。
+            user_ids: 待修正的用户ID列表。
+        """
+        if not user_ids:
+            return
+        db.execute(
+            update(User).where(User.id.in_(user_ids))
+            # 列为INT UNSIGNED，先CAST成有符号避免0-1无符号溢出（MySQL 1690）
+            .values(following_count=func.greatest(cast(User.following_count, Integer) - 1, 0))
+        )
+
+    def decrement_followers_count(self, db: Session, user_ids: list[int]) -> None:
+        """批量将指定用户的粉丝数减1（下限0），注销清理时修正冗余计数。
+
+        Args:
+            db: 数据库同步会话。
+            user_ids: 待修正的用户ID列表。
+        """
+        if not user_ids:
+            return
+        db.execute(
+            update(User).where(User.id.in_(user_ids))
+            # 列为INT UNSIGNED，先CAST成有符号避免0-1无符号溢出（MySQL 1690）
+            .values(followers_count=func.greatest(cast(User.followers_count, Integer) - 1, 0))
+        )
+
+    def is_following(self, db: Session, follower_id: int, following_id: int) -> bool:
+        """判断follower_id是否关注了following_id（命中uk_follower_following索引）。
+
+        Args:
+            db: 数据库同步会话。
+            follower_id: 关注者用户ID。
+            following_id: 被关注者用户ID。
+
+        Returns:
+            存在关注关系返回True，否则False。
+        """
+        stmt = select(UserFollow.id).where(
+            UserFollow.follower_id == follower_id,
+            UserFollow.following_id == following_id,
+        )
+        return db.execute(stmt).first() is not None
+
+    def batch_get_by_ids(self, db: Session, user_ids: list[int]) -> dict[int, User]:
+        """根据ID批量查询用户（主键IN查询，注销用户过滤）。
+
+        用于关注/粉丝列表：ZSET分页拿到ID后批量取详情。
+
+        Args:
+            db: 数据库同步会话。
+            user_ids: 用户ID列表。
+
+        Returns:
+            {user_id: User}字典，不含不存在或已注销的用户。
+        """
+        if not user_ids:
+            return {}
+        stmt = select(User).where(User.id.in_(user_ids), User.status.in_(self.VISIBLE_STATUS))
+        return {user.id: user for user in db.execute(stmt).scalars().all()}
+
+    def fetch_recent_following(self, db: Session, user_id: int, limit: int) -> list[tuple[int, datetime]]:
+        """查询用户最近N条关注记录（ZSET回源用，命中idx_follower_created覆盖索引）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+            limit: 最多返回条数。
+
+        Returns:
+            [(被关注用户ID, 关注时间), ...]按关注时间倒序。
+        """
+        stmt = (
+            select(UserFollow.following_id, UserFollow.created_at)
+            .where(UserFollow.follower_id == user_id)
+            .order_by(UserFollow.created_at.desc())
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt).all()]
+
+    def fetch_recent_followers(self, db: Session, user_id: int, limit: int) -> list[tuple[int, datetime]]:
+        """查询用户最近N条粉丝记录（ZSET回源用，命中idx_following_created覆盖索引）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+            limit: 最多返回条数。
+
+        Returns:
+            [(粉丝用户ID, 关注时间), ...]按关注时间倒序。
+        """
+        stmt = (
+            select(UserFollow.follower_id, UserFollow.created_at)
+            .where(UserFollow.following_id == user_id)
+            .order_by(UserFollow.created_at.desc())
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt).all()]
+
+    def fetch_all_following_ids(self, db: Session, user_id: int) -> list[int]:
+        """查询用户全部关注ID（SET回源用，全量保证SMISMEMBER判断准确）。
+
+        注意: 关注数超过10万后此查询变慢，届时需演进为分批SADD（见功能模块流程文档）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+
+        Returns:
+            被关注用户ID全量列表。
+        """
+        stmt = select(UserFollow.following_id).where(UserFollow.follower_id == user_id)
+        return [row[0] for row in db.execute(stmt).all()]
+
+    def fetch_all_follower_ids(self, db: Session, user_id: int) -> list[int]:
+        """查询用户全部粉丝ID（SET回源用，全量保证SMISMEMBER判断准确）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户唯一标识。
+
+        Returns:
+            粉丝用户ID全量列表。
+        """
+        stmt = select(UserFollow.follower_id).where(UserFollow.following_id == user_id)
+        return [row[0] for row in db.execute(stmt).all()]
+
+    def fetch_following_page_from_db(
+        self, db: Session, user_id: int, before: datetime | None, limit: int
+    ) -> list[tuple[User, datetime]]:
+        """DB降级查询关注列表页（ZSET部分重建尽头后的补页，JOIN过滤注销用户）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 列表属主用户ID。
+            before: 游标时间（查询created_at严格早于该值的记录），首页为None。
+            limit: 最多返回条数。
+
+        Returns:
+            [(User, 关注时间), ...]按关注时间倒序，已过滤注销用户。
+        """
+        conditions = [UserFollow.follower_id == user_id]
+        if before is not None:
+            conditions.append(UserFollow.created_at < before)
+        stmt = (
+            select(User, UserFollow.created_at)
+            .join(User, User.id == UserFollow.following_id)
+            .where(*conditions, User.status.in_(self.VISIBLE_STATUS))
+            .order_by(UserFollow.created_at.desc())
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt).all()]
+
+    def fetch_followers_page_from_db(
+        self, db: Session, user_id: int, before: datetime | None, limit: int
+    ) -> list[tuple[User, datetime]]:
+        """DB降级查询粉丝列表页（ZSET部分重建尽头后的补页，JOIN过滤注销用户）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 列表属主用户ID。
+            before: 游标时间（查询created_at严格早于该值的记录），首页为None。
+            limit: 最多返回条数。
+
+        Returns:
+            [(User, 关注时间), ...]按关注时间倒序，已过滤注销用户。
+        """
+        conditions = [UserFollow.following_id == user_id]
+        if before is not None:
+            conditions.append(UserFollow.created_at < before)
+        stmt = (
+            select(User, UserFollow.created_at)
+            .join(User, User.id == UserFollow.follower_id)
+            .where(*conditions, User.status.in_(self.VISIBLE_STATUS))
+            .order_by(UserFollow.created_at.desc())
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt).all()]
+
+
+sync_user_repository = SyncUserRepository()
 user_repository = UserRepository()
