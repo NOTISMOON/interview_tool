@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar, App, Divider, Modal, Input, Upload, DatePicker, Radio, Empty, Popconfirm, Switch } from 'antd';
-import type { UploadFile } from 'antd';
 import dayjs from 'dayjs';
 import {
   RightOutlined,
@@ -19,7 +18,6 @@ import {
   LogoutOutlined,
   EditOutlined,
   CameraOutlined,
-  UploadOutlined,
   DeleteOutlined,
   ThunderboltOutlined,
   EnvironmentOutlined,
@@ -31,12 +29,17 @@ import {
   PlusOutlined,
 } from '@ant-design/icons';
 import type { ProfileVisibility } from '@/types';
+import type { UploadRecord } from '@/types/upload';
 import { useAppStore } from '@/store';
+import { FileUpload } from '@/components/upload/FileUpload';
+import { deleteUploadRecord, getUploadRecords } from '@/lib/api/upload';
+import { useUpload } from '@/hooks/useUpload';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-  const { user, logout, updateUser, resumes, addResume, removeResume, reports } = useAppStore();
+  const { user, logout, updateUser, resumes, removeResume, reports } = useAppStore();
+  const { upload: uploadAvatar, uploading: avatarUploading } = useUpload('avatar');
 
   const reportList = Object.values(reports);
   const totalScore = reportList.length > 0
@@ -61,8 +64,23 @@ const ProfilePage = () => {
       phone: false,
     } as ProfileVisibility,
   });
-  const [resumeFileList, setResumeFileList] = useState<UploadFile[]>([]);
-  const [uploading, setUploading] = useState(false);
+  /** 服务端真实上传记录（COS直传落库，id为纯数字） */
+  const [remoteResumes, setRemoteResumes] = useState<UploadRecord[]>([]);
+
+  /** 拉取服务端简历上传记录（失败静默，保留本地列表） */
+  const loadRemoteResumes = async () => {
+    try {
+      const res = await getUploadRecords('resume');
+      setRemoteResumes(res.items);
+    } catch {
+      // 接口失败不影响本地简历展示
+    }
+  };
+
+  // 进入页面时拉取一次真实上传记录
+  useEffect(() => {
+    loadRemoteResumes();
+  }, []);
 
   const handleLogout = () => {
     modal.confirm({
@@ -118,27 +136,29 @@ const ProfilePage = () => {
     }
   };
 
-  const handleResumeUpload = () => {
-    if (resumeFileList.length === 0) {
-      message.warning('请先选择简历文件');
-      return;
-    }
-    setUploading(true);
-    const file = resumeFileList[0];
-    addResume({
-      id: `resume_${Date.now()}`,
-      fileName: file.name,
-      uploadTime: new Date().toISOString(),
-      status: 'ready',
-    });
-    setTimeout(() => {
-      setUploading(false);
-      setResumeFileList([]);
-      message.success('简历上传成功');
-    }, 800);
+  /** 上传成功回调：刷新服务端记录列表并提示 */
+  const handleResumeUploaded = async () => {
+    message.success('简历上传成功');
+    await loadRemoteResumes();
   };
 
-  const handleDeleteResume = (resumeId: string) => {
+  /** 上传失败回调：展示用户可读错误 */
+  const handleResumeUploadError = (errMsg: string) => {
+    message.error(errMsg);
+  };
+
+  /** 删除简历：服务端记录（纯数字id）走COS删除接口，本地mock直接移除 */
+  const handleDeleteResume = async (resumeId: string) => {
+    if (/^\d+$/.test(resumeId)) {
+      try {
+        await deleteUploadRecord(Number(resumeId));
+        await loadRemoteResumes();
+        message.success('简历已删除');
+      } catch {
+        message.error('删除简历失败，请重试');
+      }
+      return;
+    }
     removeResume(resumeId);
     message.success('简历已删除');
   };
@@ -147,6 +167,12 @@ const ProfilePage = () => {
     setResumeModalOpen(false);
     navigate('/dashboard/interview');
   };
+
+  /** 合并展示列表：服务端真实记录在前，本地mock简历在后 */
+  const resumeItems: { id: string; fileName: string; uploadTime: string }[] = [
+    ...remoteResumes.map((r) => ({ id: String(r.upload_id), fileName: r.file_name, uploadTime: r.created_at })),
+    ...resumes,
+  ];
 
   interface MenuItem {
     icon: React.ReactNode;
@@ -161,7 +187,7 @@ const ProfilePage = () => {
     {
       title: '数据',
       items: [
-        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => setResumeModalOpen(true) },
+        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length + remoteResumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => setResumeModalOpen(true) },
         { icon: <HistoryOutlined />, label: '面试记录', count: reportList.length, color: '#2DA44E', bg: '#ECFDF3', onClick: () => navigate('/dashboard/history') },
         { icon: <TrophyOutlined />, label: '平均得分', count: totalScore ? `${totalScore} 分` : '--', color: '#BF8700', bg: '#FFF8E6', onClick: () => navigate('/dashboard/history') },
       ],
@@ -230,7 +256,7 @@ const ProfilePage = () => {
             className="bg-white/10 rounded-xl p-3 text-center cursor-pointer hover:bg-white/15 transition-colors"
             onClick={() => setResumeModalOpen(true)}
           >
-            <div className="text-white font-bold text-lg">{resumes.length}</div>
+            <div className="text-white font-bold text-lg">{resumes.length + remoteResumes.length}</div>
             <div className="text-white/50 text-xs">简历</div>
           </div>
           <div
@@ -298,12 +324,13 @@ const ProfilePage = () => {
             <Upload
               accept="image/*"
               showUploadList={false}
-              beforeUpload={(file) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                  setEditForm((prev) => ({ ...prev, avatar: e.target?.result as string }));
-                };
-                reader.readAsDataURL(file);
+              beforeUpload={async (file) => {
+                try {
+                  const record = await uploadAvatar(file);
+                  setEditForm((prev) => ({ ...prev, avatar: record.file_url }));
+                } catch {
+                  message.error('头像上传失败，请重试');
+                }
                 return false;
               }}
             >
@@ -313,10 +340,14 @@ const ProfilePage = () => {
                   src={editForm.avatar}
                   className="!bg-[#0D1117] !text-white !font-bold !text-2xl ring-4 ring-[#F6F8FA]"
                 >
-                  {editForm.nickname[0] || 'U'}
+                  {avatarUploading ? '...' : (editForm.nickname[0] || 'U')}
                 </Avatar>
                 <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <CameraOutlined className="text-white text-xl" />
+                  {avatarUploading ? (
+                    <span className="text-white text-xs">上传中</span>
+                  ) : (
+                    <CameraOutlined className="text-white text-xl" />
+                  )}
                 </div>
               </div>
             </Upload>
@@ -489,7 +520,7 @@ const ProfilePage = () => {
         destroyOnClose
       >
         <div className="py-2">
-          {resumes.length === 0 ? (
+          {resumeItems.length === 0 ? (
             <Empty
               description="还没有上传简历"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -497,7 +528,7 @@ const ProfilePage = () => {
             />
           ) : (
             <div className="space-y-2 mb-6 max-h-[300px] overflow-y-auto">
-              {resumes.map((resume) => (
+              {resumeItems.map((resume) => (
                 <div
                   key={resume.id}
                   className="flex items-center gap-3 bg-[#F6F8FA] rounded-xl p-3 hover:bg-[#EDF0F4] transition-colors group"
@@ -549,35 +580,11 @@ const ProfilePage = () => {
             <p className="text-sm font-medium text-[#0D1117] mb-3 flex items-center gap-1.5">
               <PlusOutlined className="text-[#FF6B35]" />上传新简历
             </p>
-            <Upload
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-              multiple={false}
-              fileList={resumeFileList}
-              beforeUpload={(file) => {
-                if (file.size / 1024 / 1024 > 10) {
-                  message.error('文件大小不能超过 10MB');
-                  return Upload.LIST_IGNORE;
-                }
-                setResumeFileList([file]);
-                return false;
-              }}
-              onRemove={() => setResumeFileList([])}
-            >
-              <div className="border-2 border-dashed border-[#E1E4E8] rounded-xl p-6 text-center cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF3ED]/50 transition-all">
-                <UploadOutlined className="text-2xl text-[#8B949E] mb-2" />
-                <p className="text-sm text-[#5F6B7A]">点击选择文件</p>
-                <p className="text-xs text-[#8B949E] mt-1">支持 PDF、Word、图片格式，不超过 10MB</p>
-              </div>
-            </Upload>
-            {resumeFileList.length > 0 && (
-              <button
-                onClick={handleResumeUpload}
-                disabled={uploading}
-                className="btn-flame w-full mt-3"
-              >
-                {uploading ? '上传中...' : '确认上传'}
-              </button>
-            )}
+            <FileUpload
+              fileType="resume"
+              onUploaded={handleResumeUploaded}
+              onError={handleResumeUploadError}
+            />
           </div>
         </div>
       </Modal>

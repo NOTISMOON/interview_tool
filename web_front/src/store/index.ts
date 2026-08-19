@@ -76,14 +76,14 @@ function mapGender(gender: number): 'male' | 'female' | 'other' {
   return 'other';
 }
 
-/** 将后端profile_visibility整数映射为前端可见性对象 */
-function mapProfileVisibility(visibility: number): User['profileVisibility'] {
+/** 将后端user_settings可见性字段映射为前端可见性对象 */
+function mapProfileVisibility(profile: UserProfileResponse): User['profileVisibility'] {
   return {
-    gender: visibility === 0,
-    birthday: visibility === 0,
-    bio: visibility === 0,
-    location: visibility === 0,
-    phone: false,
+    gender: profile.visibility_gender === 1,
+    birthday: profile.visibility_birthday === 1,
+    bio: profile.visibility_bio === 1,
+    location: profile.visibility_location === 1,
+    phone: profile.visibility_phone === 1,
   };
 }
 
@@ -102,7 +102,7 @@ function mapUserProfile(profile: UserProfileResponse): User {
     followingCount: profile.following_count,
     followersCount: profile.followers_count,
     followingIds: [],
-    profileVisibility: mapProfileVisibility(profile.profile_visibility),
+    profileVisibility: mapProfileVisibility(profile),
   };
 }
 
@@ -256,20 +256,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 构建后端请求体
     const body: UserUpdateRequest = {};
     if (updates.nickname !== undefined) body.nickname = updates.nickname;
-    if (updates.avatar !== undefined) body.avatar = updates.avatar;
+    if (updates.avatar !== undefined) body.avatar = updates.avatar || undefined;
     if (updates.gender !== undefined) {
       body.gender = updates.gender === 'male' ? 1 : updates.gender === 'female' ? 2 : 0;
     }
     if (updates.birthday !== undefined) body.birthday = updates.birthday || undefined;
-    if (updates.bio !== undefined) body.bio = updates.bio;
-    if (updates.phone !== undefined) body.phone = updates.phone;
-    if (updates.location !== undefined) body.location = updates.location;
+    if (updates.bio !== undefined) body.bio = updates.bio || undefined;
+    if (updates.phone !== undefined) body.phone = updates.phone || undefined;
+    if (updates.location !== undefined) body.location = updates.location || undefined;
 
-    // 如果更新了可见性，单独调用可见性接口
+    // 如果更新了可见性，单独调用可见性接口（按字段发送）
     if (updates.profileVisibility !== undefined) {
       const newVisibility = updates.profileVisibility;
-      const visibilityValue = newVisibility.gender ? 0 : 2; // 简化：公开→0，仅自己→2
-      await updateProfileVisibilityApi({ profile_visibility: visibilityValue });
+      await updateProfileVisibilityApi({
+        visibility_gender: newVisibility.gender ? 1 : 0,
+        visibility_birthday: newVisibility.birthday ? 1 : 0,
+        visibility_bio: newVisibility.bio ? 1 : 0,
+        visibility_location: newVisibility.location ? 1 : 0,
+        visibility_phone: newVisibility.phone ? 1 : 0,
+      });
     }
 
     // 调用更新资料接口

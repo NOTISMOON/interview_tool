@@ -18,6 +18,11 @@ export interface UserProfileResponse {
   phone: string | null;
   location: string | null;
   profile_visibility: number; // 0-公开 1-仅关注者 2-仅自己
+  visibility_gender: number; // 0-不可见 1-可见
+  visibility_birthday: number;
+  visibility_bio: number;
+  visibility_location: number;
+  visibility_phone: number;
   following_count: number;
   followers_count: number;
   posts_count: number;
@@ -38,7 +43,11 @@ export interface UserUpdateRequest {
 
 /** 更新资料可见性请求 */
 export interface ProfileVisibilityUpdateRequest {
-  profile_visibility: number;
+  visibility_gender?: number;
+  visibility_birthday?: number;
+  visibility_bio?: number;
+  visibility_location?: number;
+  visibility_phone?: number;
 }
 
 /** 他人公开资料响应 */

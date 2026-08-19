@@ -1,4 +1,4 @@
-/** 个人资料字段可见性设置 */
+/** 个人资料字段可见性设置（0-不可见 1-可见） */
 export interface ProfileVisibility {
   gender: boolean;
   birthday: boolean;
