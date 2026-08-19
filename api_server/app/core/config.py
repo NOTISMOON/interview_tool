@@ -57,6 +57,18 @@ class Settings(BaseSettings):
     COOKIE_REFRESH_PATH: str = "/api/v1/auth"  # refresh_token Cookie路径（仅认证端点发送，缩小暴露面）
     CORS_ORIGINS: list[str] = ["http://localhost:5645"]  # 前端跨域白名单，credentials=True时禁止通配符
 
+    # ---- SSE 配置 ----
+    SSE_KEEPALIVE_INTERVAL: int = 15  # 心跳注释帧间隔（秒），防Nginx/CDN超时断
+    SSE_RETRY_INTERVAL_MS: int = 3000  # 服务端建议浏览器断线重连间隔（毫秒）
+    SSE_CATCHUP_LIMIT: int = 10  # 建立/重连SSE时的增量补偿上限（固定最多10条）
+
+    # ---- Redis Pub/Sub 通道 ----
+    NOTIFY_PUSH_CHANNEL_PREFIX: str = "notify:push"  # notify:push:{user_id}
+    NOTIFY_BROADCAST_CHANNEL: str = "notify:broadcast"  # 系统公告通道
+
+    # ---- 通知业务 ----
+    NOTIFICATION_LIKE_COMBINE_WINDOW_SECONDS: int = 86400  # 点赞合并窗口：24h同一人多次点赞只1条通知
+
     # 前端路由配置（认证中间件长期Token失效时，后端302重定向到该登录页）
     FRONTEND_LOGIN_URL: str = "http://localhost:5645/login"
 
