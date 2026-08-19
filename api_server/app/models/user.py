@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, Integer, String, text
+from sqlalchemy import BigInteger, Date, DateTime, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,7 +18,7 @@ class User(Base):
         String(255), unique=True, nullable=True, comment="邮箱（OAuth用户可能为空）"
     )
     nickname: Mapped[str] = mapped_column(String(64), nullable=False, comment="用户昵称")
-    avatar: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="头像URL")
+    avatar: Mapped[str | None] = mapped_column(Text, nullable=True, comment="头像URL")
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="仅邮箱注册用户有值")
     gender: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"), comment="0-未设置 1-男 2-女")
     birthday: Mapped[date | None] = mapped_column(Date, nullable=True, comment="生日")

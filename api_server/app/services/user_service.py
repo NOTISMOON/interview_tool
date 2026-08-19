@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.user_repository import sync_user_repository
+from app.repositories.user_settings_repository import user_settings_repository
 from app.schemas.user import (
     ProfileVisibilityUpdateRequest,
     UserCardResponse,
@@ -111,6 +112,13 @@ class UserService:
 
         # 3. 回填缓存后返回
         profile = UserProfileResponse.model_validate(user)
+        # 补充user_settings表中的可见性字段
+        settings = user_settings_repository.get_or_create(db, user_id)
+        profile.visibility_gender = settings.visibility_gender
+        profile.visibility_birthday = settings.visibility_birthday
+        profile.visibility_bio = settings.visibility_bio
+        profile.visibility_location = settings.visibility_location
+        profile.visibility_phone = settings.visibility_phone
         self._fill_profile_cache(cache_client, profile)
         return profile
 
@@ -164,7 +172,9 @@ class UserService:
         """
         try:
             with db.begin():
-                sync_user_repository.update_profile(db, user_id, {"profile_visibility": payload.profile_visibility})
+                update_data = payload.model_dump(exclude_unset=True)
+                user_settings_repository.get_or_create(db, user_id)
+                user_settings_repository.update(db, user_id, update_data)
         except Exception:
             logger.exception("更新用户资料可见性失败: user_id=%s", user_id)
             raise

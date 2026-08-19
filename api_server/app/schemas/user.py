@@ -9,7 +9,7 @@ class UserUpdateRequest(BaseModel):
     """更新个人资料请求模型（所有字段可选，仅更新提交的字段）。"""
 
     nickname: str | None = Field(None, min_length=1, max_length=64, description="用户昵称")
-    avatar: str | None = Field(None, max_length=512, description="头像URL")
+    avatar: str | None = Field(None, description="头像URL")
     gender: int | None = Field(None, ge=0, le=2, description="性别 0-未设置 1-男 2-女")
     birthday: date | None = Field(None, description="生日")
     bio: str | None = Field(None, max_length=512, description="个人简介")
@@ -28,9 +28,29 @@ class UserUpdateRequest(BaseModel):
 
 
 class ProfileVisibilityUpdateRequest(BaseModel):
-    """更新资料可见性请求模型。"""
+    """更新资料可见性请求模型（按字段分别设置可见性，对应user_settings表）。"""
 
-    profile_visibility: int = Field(..., ge=0, le=2, description="0-公开 1-仅关注者 2-仅自己")
+    visibility_gender: int | None = Field(None, ge=0, le=1, description="性别可见 0-不可见 1-可见")
+    visibility_birthday: int | None = Field(None, ge=0, le=1, description="生日可见")
+    visibility_bio: int | None = Field(None, ge=0, le=1, description="简介可见")
+    visibility_location: int | None = Field(None, ge=0, le=1, description="所在地可见")
+    visibility_phone: int | None = Field(None, ge=0, le=1, description="手机号可见")
+
+
+class UserSettingsResponse(BaseModel):
+    """用户设置响应模型。"""
+
+    model_config = {"from_attributes": True}
+
+    email_notify: int
+    push_notify: int
+    sound_enabled: int
+    public_profile: int
+    visibility_gender: int
+    visibility_birthday: int
+    visibility_bio: int
+    visibility_location: int
+    visibility_phone: int
 
 
 class UserProfileResponse(BaseModel):
@@ -48,6 +68,11 @@ class UserProfileResponse(BaseModel):
     phone: str | None
     location: str | None
     profile_visibility: int
+    visibility_gender: int = Field(1, description="性别可见 0-不可见 1-可见（来自user_settings表）")
+    visibility_birthday: int = Field(1, description="生日可见")
+    visibility_bio: int = Field(1, description="简介可见")
+    visibility_location: int = Field(1, description="所在地可见")
+    visibility_phone: int = Field(0, description="手机号可见")
     following_count: int
     followers_count: int
     posts_count: int
