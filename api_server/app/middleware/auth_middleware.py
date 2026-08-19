@@ -5,14 +5,16 @@
     2. access_token有效（JWT未过期且签名正确）→ 放行。
     3. access_token失效但refresh_token有效（Redis中存在）→ 自动续签双Token，
        将新Token写回下游响应Cookie后放行。
-    4. 长期Token（refresh_token）失效或缺失 → 直接302重定向到前端登录页，
-       前端无需做任何处理（浏览器自动跳转）。
+    4. 长期Token（refresh_token）失效或缺失 → 返回401 JSON响应，
+       由前端axios响应拦截器识别401后调用 /auth/refresh 续签，
+       续签失败再由前端跳转到登录页（SPA路由跳转，避免跨域302被浏览器
+       自动跟随到无CORS头的HTML页面导致请求失败）。
 """
 
 import logging
 
 from fastapi import Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -56,14 +58,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        """对每个请求执行鉴权：白名单放行，否则校验双Token，长期失效重定向登录页。
+        """对每个请求执行鉴权：白名单放行，否则校验双Token，长期失效返回401。
 
         Args:
             request: FastAPI请求对象，用于读取Cookie与路径。
             call_next: 下一个中间件或路由处理函数。
 
         Returns:
-            Response对象：鉴权通过则放行；长期Token失效时返回302重定向到登录页。
+            Response对象：鉴权通过则放行；长期Token失效时返回401 JSON响应，
+            由前端axios拦截器统一处理续签与登录跳转。
         """
         # OPTIONS预检请求直接放行，交由CORS中间件处理
         if request.method == "OPTIONS":
@@ -91,33 +94,37 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 redis = await AsyncRedisClient.get_client()
                 tokens = await auth_service.refresh_tokens(redis, refresh_token)
             except Exception:
-                # refresh_token无效或已过期（长期Token失效）→ 重定向到登录页
+                # refresh_token无效或已过期（长期Token失效）→ 返回401，
+                # 前端拦截器会调 /auth/refresh（白名单），失败再由前端跳转 /login
                 logger.info(
-                    "refresh_token无效或已过期，重定向到登录页: path=%s",
+                    "refresh_token无效或已过期，返回401: path=%s",
                     request.url.path,
                 )
-                return self._build_login_redirect()
+                return self._build_unauthorized_response()
 
             # 续签成功，放行下游并将新双Token写回响应Cookie
             response = await call_next(request)
             self._set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
             return response
 
-        # 3. 无任何有效Token → 重定向到前端登录页
+        # 3. 无任何有效Token → 返回401 JSON响应，前端axios拦截器按既有逻辑跳转
         logger.info(
-            "未携带有效Token，重定向到登录页: path=%s",
+            "未携带有效Token，返回401: path=%s",
             request.url.path,
         )
-        return self._build_login_redirect()
+        return self._build_unauthorized_response()
 
     @staticmethod
-    def _build_login_redirect() -> RedirectResponse:
-        """构建302重定向响应，指向前端登录页URL。
+    def _build_unauthorized_response() -> JSONResponse:
+        """构建401未授权JSON响应，供前端axios响应拦截器统一处理。
 
         Returns:
-            RedirectResponse对象，状态码302，Location指向settings.FRONTEND_LOGIN_URL。
+            JSONResponse对象，状态码401，body包含错误detail。
         """
-        return RedirectResponse(url=settings.FRONTEND_LOGIN_URL, status_code=302)
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "未登录或会话已过期，请重新登录"},
+        )
 
     @staticmethod
     def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:

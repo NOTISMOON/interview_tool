@@ -68,10 +68,6 @@ class Settings(BaseSettings):
 
     # ---- 通知业务 ----
     NOTIFICATION_LIKE_COMBINE_WINDOW_SECONDS: int = 86400  # 点赞合并窗口：24h同一人多次点赞只1条通知
-
-    # 前端路由配置（认证中间件长期Token失效时，后端302重定向到该登录页）
-    FRONTEND_LOGIN_URL: str = "http://localhost:5645/login"
-
     # GitHub OAuth配置
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
