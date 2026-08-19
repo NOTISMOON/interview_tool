@@ -148,6 +148,13 @@ class OutboxRepository:
     async def delete_published_before(self, db: AsyncSession, before: datetime, batch_size: int) -> int:
         """分批删除已发布超期事件（清理任务，避免大事务长锁）。
 
+        实现说明:
+            - SQLAlchemy 的 Delete 构造不支持 .limit()（MySQL 的 DELETE ... LIMIT
+              语法无法经 Core API 表达），直接链式调用抛 AttributeError。
+            - MySQL 亦不允许 DELETE 直接引用同表子查询（ER 1093），
+              故采用「内层 SELECT id + LIMIT 分批 + 派生表物化」的通用绕法：
+              含 LIMIT 的派生表不会被优化器合并，物化后即可安全自删。
+
         Args:
             db: 数据库异步会话。
             before: 删除published_at早于该时间的事件。
@@ -156,10 +163,15 @@ class OutboxRepository:
         Returns:
             本批删除的行数（0表示无可删数据）。
         """
-        result = await db.execute(
-            delete(OutboxEvent)
+        inner = (
+            select(OutboxEvent.id)
             .where(OutboxEvent.status == 1, OutboxEvent.published_at < before)
+            .order_by(OutboxEvent.id.asc())
             .limit(batch_size)
+            .subquery()
+        )
+        result = await db.execute(
+            delete(OutboxEvent).where(OutboxEvent.id.in_(select(inner.c.id)))
         )
         await db.commit()
         return int(result.rowcount or 0)
