@@ -10,3 +10,5 @@ PyJWT>=2.0.0
 redis>=4.2.0
 aio-pika>=9.4.0
 setuptools>=69.0.0
+langchain>=1.2.12
+tencentcloud-sdk-python>=3.1.1033
