@@ -9,6 +9,7 @@ from app.mq.consumers.interview_consumer import (
     InterviewReportConsumer,
     InterviewResumeParseConsumer,
 )
+from app.mq.consumers.notification_consumer import NotificationConsumer
 
 # 消费者注册表：类名 -> 类对象，runner 通过此表批量启动。
 # 新增消费者时，在对应文件定义后，在此处导入并添加即可。
@@ -16,6 +17,7 @@ CONSUMER_REGISTRY: dict[str, type] = {
     "InterviewResumeParseConsumer": InterviewResumeParseConsumer,
     "InterviewReportConsumer": InterviewReportConsumer,
     "FollowCacheSyncConsumer": FollowCacheSyncConsumer,
+    "NotificationConsumer": NotificationConsumer,
 }
 
 __all__ = [
@@ -23,4 +25,5 @@ __all__ = [
     "FollowCacheSyncConsumer",
     "InterviewReportConsumer",
     "InterviewResumeParseConsumer",
+    "NotificationConsumer",
 ]

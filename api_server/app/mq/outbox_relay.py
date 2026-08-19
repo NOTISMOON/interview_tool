@@ -31,11 +31,12 @@ from app.repositories.outbox_repository import outbox_repository
 
 logger = logging.getLogger(__name__)
 
-# 事件类型 -> routing_key 映射（与event_type一一对应，消费端无需判断来源）
-EVENT_ROUTING_KEY_MAP: dict[str, str] = {
-    "follow_created": "social.follow.created",
-    "follow_deleted": "social.follow.deleted",
-    "user_deactivated": "social.user.deactivated",
+# 事件类型 -> (exchange, routing_key) 映射
+EVENT_EXCHANGE_MAP: dict[str, tuple[ExchangeName, str]] = {
+    "follow_created": (ExchangeName.SOCIAL, "social.follow.created"),
+    "follow_deleted": (ExchangeName.SOCIAL, "social.follow.deleted"),
+    "user_deactivated": (ExchangeName.SOCIAL, "social.user.deactivated"),
+    "notification.created": (ExchangeName.NOTIFICATION, "notification.deliver"),
 }
 
 # 清理任务执行间隔（秒）
@@ -50,7 +51,6 @@ class OutboxRelay:
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._channel: aio_pika.RobustChannel | None = None
-        self._exchange: aio_pika.RobustExchange | None = None
         self._last_cleanup_at: float = 0.0
 
     async def start(self) -> None:
@@ -103,6 +103,7 @@ class OutboxRelay:
         if not events:
             return
 
+        logger.debug("Outbox扫描到待发布事件 count=%s", len(events))
         for event in events:
             # stop_event触发时尽快退出，剩余事件下轮继续
             if self._stop_event.is_set():
@@ -115,16 +116,18 @@ class OutboxRelay:
         Args:
             event: 待发布的Outbox事件ORM对象。
         """
-        routing_key = EVENT_ROUTING_KEY_MAP.get(event.event_type)
-        if routing_key is None:
+        exchange_and_routing = EVENT_EXCHANGE_MAP.get(event.event_type)
+        if exchange_and_routing is None:
             # 未知事件类型：不可重试，直接置死信并告警，避免毒数据阻塞投递循环
             logger.error("未知事件类型，置死信 event_id=%s event_type=%s", event.id, event.event_type)
             async with AsyncSessionLocal() as session:
                 await outbox_repository.mark_dead(session, event_id=event.id, retry_count=event.retry_count)
             return
 
+        target_exchange, routing_key = exchange_and_routing
+
         try:
-            exchange = await self._ensure_channel()
+            exchange = await self._ensure_exchange(target_exchange)
             # message_id=outbox行id：DB行 → MQ message_id → Consumer日志 三段统一
             body = MQProducer._build_body(str(event.id), event.payload)
             message = aio_pika.Message(
@@ -134,6 +137,7 @@ class OutboxRelay:
                 message_id=str(event.id),
                 timestamp=datetime.now(timezone.utc),
             )
+            publish_started_at = time.monotonic()
             await exchange.publish(message, routing_key=routing_key)
         except Exception:
             logger.exception("Outbox事件投递失败 event_id=%s event_type=%s", event.id, event.event_type)
@@ -143,10 +147,11 @@ class OutboxRelay:
         async with AsyncSessionLocal() as session:
             await outbox_repository.mark_published(session, event.id)
         logger.info(
-            "Outbox事件已投递 event_id=%s event_type=%s routing_key=%s",
+            "Outbox事件已投递 event_id=%s event_type=%s routing_key=%s publish_elapsed_ms=%d",
             event.id,
             event.event_type,
             routing_key,
+            (time.monotonic() - publish_started_at) * 1000,
         )
 
     async def _mark_failed(self, event: OutboxEvent) -> None:
@@ -171,20 +176,21 @@ class OutboxRelay:
                 event.aggregate_id,
             )
 
-    async def _ensure_channel(self) -> aio_pika.RobustExchange:
+    async def _ensure_exchange(self, exchange_name: ExchangeName) -> aio_pika.RobustExchange:
         """获取confirm发布通道与目标交换机（懒创建，断线由Robust机制自动恢复）。
 
+        Args:
+            exchange_name: 目标交换机名称枚举。
+
         Returns:
-            已声明的social.exchange交换机实例。
+            已声明的交换机实例。
         """
         if self._channel is None or self._channel.is_closed:
             connection = await MQConnection.get_connection()
             # 独立通道显式开启publisher confirm：收到confirm才标记status=1，
             # 保证at-least-once（Broker落盘前宕机时事件保持待发布态，重启重投）
             self._channel = await connection.channel(publisher_confirms=True)
-            self._exchange = await declare_exchange(self._channel, ExchangeName.SOCIAL)
-        assert self._exchange is not None
-        return self._exchange
+        return await declare_exchange(self._channel, exchange_name)
 
     # ------------------------------------------------------------------
     # 清理任务（低频）

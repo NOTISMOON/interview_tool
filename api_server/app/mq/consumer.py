@@ -14,6 +14,7 @@ ACK/Reject 策略：
 import abc
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -105,6 +106,15 @@ class BaseConsumer(abc.ABC):
             message: aio_pika IncomingMessage 对象。
         """
         message_id = message.message_id or "(unknown)"
+        routing_key = message.routing_key or ""
+        logger.debug(
+            "MQ消息到达 queue=%s message_id=%s routing_key=%s body_size=%s",
+            self.queue_name.value,
+            message_id,
+            routing_key,
+            len(message.body),
+        )
+        started_at = time.monotonic()
         async with message.process(requeue=False, ignore_processed=True):
             try:
                 mq_msg = self._parse(message)
@@ -122,16 +132,20 @@ class BaseConsumer(abc.ABC):
             except Exception:
                 # 业务处理失败：reject不重投避免循环；配置DLX的队列由死信队列存档
                 logger.exception(
-                    "消息处理失败，将reject queue=%s message_id=%s",
+                    "消息处理失败，将reject queue=%s message_id=%s routing_key=%s elapsed_ms=%d",
                     self.queue_name.value,
                     message_id,
+                    routing_key,
+                    (time.monotonic() - started_at) * 1000,
                 )
                 raise
 
             logger.info(
-                "消息处理成功 queue=%s message_id=%s",
+                "消息处理成功 queue=%s message_id=%s routing_key=%s elapsed_ms=%d",
                 self.queue_name.value,
                 message_id,
+                routing_key,
+                (time.monotonic() - started_at) * 1000,
             )
 
     @staticmethod
