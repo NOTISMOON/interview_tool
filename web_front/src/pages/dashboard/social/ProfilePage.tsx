@@ -71,7 +71,7 @@ const ProfilePage = () => {
       okText: '退出',
       cancelText: '取消',
       okButtonProps: { danger: true },
-      onOk: () => { logout(); navigate('/login', { replace: true }); },
+      onOk: async () => { await logout(); navigate('/login', { replace: true }); },
     });
   };
 
@@ -95,23 +95,27 @@ const ProfilePage = () => {
     setEditModalOpen(true);
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!editForm.nickname.trim()) {
       message.warning('昵称不能为空');
       return;
     }
-    updateUser({
-      nickname: editForm.nickname.trim(),
-      avatar: editForm.avatar || undefined,
-      gender: editForm.gender,
-      birthday: editForm.birthday,
-      bio: editForm.bio,
-      phone: editForm.phone,
-      location: editForm.location,
-      profileVisibility: editForm.profileVisibility,
-    });
-    message.success('资料已更新');
-    setEditModalOpen(false);
+    try {
+      await updateUser({
+        nickname: editForm.nickname.trim(),
+        avatar: editForm.avatar || undefined,
+        gender: editForm.gender,
+        birthday: editForm.birthday,
+        bio: editForm.bio,
+        phone: editForm.phone,
+        location: editForm.location,
+        profileVisibility: editForm.profileVisibility,
+      });
+      message.success('资料已更新');
+      setEditModalOpen(false);
+    } catch {
+      message.error('更新资料失败，请重试');
+    }
   };
 
   const handleResumeUpload = () => {

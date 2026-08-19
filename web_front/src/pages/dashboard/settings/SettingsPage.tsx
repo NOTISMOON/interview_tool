@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Switch, Divider, Modal } from 'antd';
+import { App, Switch, Divider } from 'antd';
 import {
   ArrowLeftOutlined,
   BellOutlined,
@@ -10,14 +10,34 @@ import {
   GlobalOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';
+import { updateProfileVisibility } from '@/lib/api/user';
+import { useAppStore } from '@/store';
 
 const SettingsPage = () => {
   const navigate = useNavigate();
   const { message: msg, modal } = App.useApp();
+  const { user, deleteAccount, logout } = useAppStore();
   const [emailNotify, setEmailNotify] = useState(true);
   const [pushNotify, setPushNotify] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [publicProfile, setPublicProfile] = useState(false);
+  const [publicProfile, setPublicProfile] = useState(user?.profileVisibility?.gender ?? false);
+  const [visibilityLoading, setVisibilityLoading] = useState(false);
+
+  /** 切换公开个人主页可见性 */
+  const handleTogglePublicProfile = async (checked: boolean) => {
+    setVisibilityLoading(true);
+    setPublicProfile(checked);
+    try {
+      const visibilityValue = checked ? 0 : 2;
+      await updateProfileVisibility({ profile_visibility: visibilityValue });
+      msg.success(checked ? '已设为公开' : '已设为私密');
+    } catch {
+      setPublicProfile(!checked);
+      msg.error('设置失败，请重试');
+    } finally {
+      setVisibilityLoading(false);
+    }
+  };
 
   const handleClearCache = () => {
     modal.confirm({
@@ -39,8 +59,14 @@ const SettingsPage = () => {
       okText: '确认注销',
       cancelText: '取消',
       okButtonProps: { danger: true },
-      onOk: () => {
-        msg.success('账号注销申请已提交');
+      onOk: async () => {
+        try {
+          await deleteAccount();
+          msg.success('账号已注销');
+          navigate('/login', { replace: true });
+        } catch {
+          msg.error('注销失败，请重试');
+        }
       },
     });
   };
@@ -76,7 +102,7 @@ const SettingsPage = () => {
           icon: <EyeOutlined />,
           label: '公开个人主页',
           desc: '允许其他用户查看你的个人主页',
-          action: <Switch checked={publicProfile} onChange={setPublicProfile} size="small" />,
+          action: <Switch checked={publicProfile} onChange={handleTogglePublicProfile} loading={visibilityLoading} size="small" />,
         },
         {
           icon: <LockOutlined />,

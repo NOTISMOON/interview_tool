@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Avatar, App, Tabs } from 'antd';
+import { Avatar, App, Tabs, Spin } from 'antd';
 import {
   ArrowLeftOutlined,
   MessageOutlined,
@@ -8,7 +8,6 @@ import {
   UserOutlined,
   LikeOutlined,
   CommentOutlined,
-  FireOutlined,
   TeamOutlined,
   FileTextOutlined,
   ManOutlined,
@@ -17,9 +16,24 @@ import {
   CalendarOutlined,
   SmileOutlined,
 } from '@ant-design/icons';
-import { mockUserProfiles } from '@/lib/mocks/data';
+import { getUserPublicProfile, followUser, unfollowUser } from '@/lib/api/user';
+import type { UserPublicProfileResponse, UserCardResponse } from '@/lib/api/user';
 import { useAppStore } from '@/store';
-import type { UserProfile, CommunityPost, ActivityItem } from '@/types';
+import type { CommunityPost, ActivityItem } from '@/types';
+
+/** 前端用户资料展示类型 */
+interface UserProfileView {
+  id: string;
+  nickname: string;
+  avatar?: string;
+  bio: string;
+  location?: string;
+  followingCount: number;
+  followersCount: number;
+  postsCount: number;
+  isFollowing: boolean;
+  isCard: boolean; // 是否为受限卡片
+}
 
 const UserPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,10 +41,84 @@ const UserPage = () => {
   const { message: msgFn } = App.useApp();
   const { user: currentUser } = useAppStore();
   const [activeTab, setActiveTab] = useState('posts');
+  const [profile, setProfile] = useState<UserProfileView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  const profile: UserProfile | undefined = id ? mockUserProfiles[id] : undefined;
+  const isSelf = currentUser?.id === id;
 
-  if (!profile) {
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    setNotFound(false);
+    getUserPublicProfile(Number(id))
+      .then((res) => {
+        // 判断是完整公开资料还是受限卡片
+        if ('bio' in res && 'following_count' in res) {
+          const full = res as UserPublicProfileResponse;
+          setProfile({
+            id: String(full.id),
+            nickname: full.nickname,
+            avatar: full.avatar || undefined,
+            bio: full.bio || '',
+            location: full.location || undefined,
+            followingCount: full.following_count,
+            followersCount: full.followers_count,
+            postsCount: full.posts_count,
+            isFollowing: false,
+            isCard: false,
+          });
+        } else {
+          const card = res as UserCardResponse;
+          setProfile({
+            id: String(card.id),
+            nickname: card.nickname,
+            avatar: card.avatar || undefined,
+            bio: '',
+            followingCount: 0,
+            followersCount: 0,
+            postsCount: 0,
+            isFollowing: false,
+            isCard: true,
+          });
+        }
+      })
+      .catch(() => {
+        setNotFound(true);
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const handleFollow = async () => {
+    if (!profile) return;
+    try {
+      if (profile.isFollowing) {
+        await unfollowUser(Number(profile.id));
+        setProfile((prev) => prev ? { ...prev, isFollowing: false, followersCount: prev.followersCount - 1 } : null);
+        msgFn.success('已取消关注');
+      } else {
+        await followUser(Number(profile.id));
+        setProfile((prev) => prev ? { ...prev, isFollowing: true, followersCount: prev.followersCount + 1 } : null);
+        msgFn.success('已关注');
+      }
+    } catch {
+      msgFn.error('操作失败，请重试');
+    }
+  };
+
+  const handleMessage = () => {
+    navigate(`/dashboard/messages/chat/${profile?.id}`);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (notFound || !profile) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mb-4">
@@ -44,75 +132,6 @@ const UserPage = () => {
       </div>
     );
   }
-
-  const isSelf = currentUser?.id === profile.id;
-
-  /** 根据生日计算年龄 */
-  const calcAge = (birthday?: string): number | null => {
-    if (!birthday) return null;
-    const birth = new Date(birthday);
-    const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    return age;
-  };
-
-  /** 获取性别显示文本 */
-  const getGenderLabel = (gender?: string): string => {
-    switch (gender) {
-      case 'male': return '男';
-      case 'female': return '女';
-      default: return '未设置';
-    }
-  };
-
-  /** 判断字段是否可见 */
-  const isFieldVisible = (field: keyof NonNullable<UserProfile['profileVisibility']>): boolean => {
-    if (!profile.profileVisibility) return true; // 没有设置时默认可见
-    if (field === 'phone') return false; // 手机号始终不对外展示
-    return profile.profileVisibility[field];
-  };
-
-  const handleFollow = () => {
-    msgFn.success(profile.isFollowing ? '已取消关注' : '已关注');
-  };
-
-  const handleMessage = () => {
-    navigate(`/dashboard/messages/chat/${profile.id}`);
-  };
-
-  const handlePostClick = (post: CommunityPost) => {
-    navigate(`/dashboard/community/post/${post.id}`);
-  };
-
-  const handleActivityClick = (activity: ActivityItem) => {
-    if (activity.type === 'post' && activity.relatedId) {
-      navigate(`/dashboard/community/post/${activity.relatedId}`);
-    } else if (activity.type === 'comment' && activity.relatedId) {
-      navigate(`/dashboard/community/post/${activity.relatedId}`);
-    }
-  };
-
-  const getActivityIcon = (type: ActivityItem['type']) => {
-    switch (type) {
-      case 'like': return <LikeOutlined className="text-[#CF222E]" />;
-      case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
-      case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
-      case 'post': return <FileTextOutlined className="text-[#FF6B35]" />;
-    }
-  };
-
-  const getActivityBg = (type: ActivityItem['type']) => {
-    switch (type) {
-      case 'like': return 'bg-[#FFF0F1]';
-      case 'comment': return 'bg-[#ECFDF3]';
-      case 'follow': return 'bg-[#F6F8FA]';
-      case 'post': return 'bg-[#FFF3ED]';
-    }
-  };
 
   return (
     <div className="max-w-[700px] animate-fade-in">
@@ -128,49 +147,32 @@ const UserPage = () => {
 
       <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
         <div className="flex flex-col items-center text-center">
-          <Avatar size={80} className="!bg-[#0D1117] !text-2xl !font-bold mb-4">
-            {profile.avatar ? (
-              <img src={profile.avatar} alt="" className="w-full h-full rounded-full object-cover" />
-            ) : (
-              profile.nickname[0]
-            )}
+          <Avatar size={80} src={profile.avatar} className="!bg-[#0D1117] !text-2xl !font-bold mb-4">
+            {profile.nickname[0]}
           </Avatar>
 
           <h2 className="text-xl font-extrabold text-[#0D1117] mb-4">{profile.nickname}</h2>
 
-          {/* 个人资料信息展示 */}
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mb-5 px-2">
-            {isFieldVisible('gender') && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
-                {profile.gender === 'male' ? (
-                  <ManOutlined className="text-[#2DA44E]" />
-                ) : profile.gender === 'female' ? (
-                  <WomanOutlined className="text-[#CF222E]" />
-                ) : (
-                  <UserOutlined className="text-[#8B949E]" />
+          {profile.isCard ? (
+            <p className="text-sm text-[#8B949E] mb-5">该用户设置了隐私保护</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mb-5 px-2">
+                {profile.location && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
+                    <EnvironmentOutlined className="text-[#2DA44E]" />
+                    {profile.location}
+                  </span>
                 )}
-                {getGenderLabel(profile.gender)}
-              </span>
-            )}
-            {isFieldVisible('birthday') && profile.birthday && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
-                <CalendarOutlined className="text-[#FF6B35]" />
-                {calcAge(profile.birthday) !== null ? `${calcAge(profile.birthday)} 岁` : ''}
-              </span>
-            )}
-            {isFieldVisible('location') && profile.location && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
-                <EnvironmentOutlined className="text-[#2DA44E]" />
-                {profile.location}
-              </span>
-            )}
-            {isFieldVisible('bio') && profile.bio && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
-                <SmileOutlined className="text-[#BF8700]" />
-                {profile.bio}
-              </span>
-            )}
-          </div>
+                {profile.bio && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
+                    <SmileOutlined className="text-[#BF8700]" />
+                    {profile.bio}
+                  </span>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="flex items-center gap-8 mb-5">
             <div className="text-center">
@@ -189,138 +191,21 @@ const UserPage = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {isSelf ? (
+          {!isSelf && (
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => navigate('/dashboard/profile')}
-                className="btn-ghost"
+                onClick={handleFollow}
+                className={profile.isFollowing ? 'btn-ghost' : 'btn-flame'}
               >
-                编辑资料
+                <UserAddOutlined /> {profile.isFollowing ? '已关注' : '关注'}
               </button>
-            ) : (
-              <>
-                <button
-                  onClick={handleFollow}
-                  className={profile.isFollowing ? 'btn-ghost' : 'btn-flame'}
-                >
-                  {profile.isFollowing ? (
-                    <>
-                      <UserAddOutlined /> 已关注
-                    </>
-                  ) : (
-                    <>
-                      <UserAddOutlined /> 关注
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleMessage}
-                  className="btn-flame"
-                >
-                  <MessageOutlined /> 私信
-                </button>
-              </>
-            )}
-          </div>
+              <button onClick={handleMessage} className="btn-flame">
+                <MessageOutlined /> 私信
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        className="mb-4"
-        items={[
-          { key: 'posts', label: <span className="text-sm">他的帖子</span> },
-          { key: 'activities', label: <span className="text-sm">他的动态</span> },
-        ]}
-      />
-
-      {activeTab === 'posts' && (
-        <>
-          {profile.posts.length === 0 ? (
-            <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-4">
-                <FileTextOutlined className="text-2xl text-[#8B949E]" />
-              </div>
-              <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无帖子</h3>
-              <p className="text-sm text-[#5F6B7A]">该用户还没有发布任何帖子</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {profile.posts.map((post) => (
-                <div
-                  key={post.id}
-                  className="bg-white border border-[#E1E4E8] rounded-xl p-5 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
-                  onClick={() => handlePostClick(post)}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    {post.isHot && (
-                      <span className="tag tag-flame">
-                        <FireOutlined className="text-[10px]" /> 热门
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-semibold text-[#0D1117] mb-2">{post.title}</h3>
-                  <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content}</p>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {post.tags.map((tag) => (
-                      <span key={tag} className="tag tag-flame">{tag}</span>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-[#8B949E]">
-                    <span className="inline-flex items-center gap-1">
-                      <LikeOutlined /> {post.likes}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <CommentOutlined /> {post.comments}
-                    </span>
-                    <span>{post.views} 次浏览</span>
-                    <span className="ml-auto">{post.createdAt}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {activeTab === 'activities' && (
-        <>
-          {profile.activities.length === 0 ? (
-            <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-4">
-                <TeamOutlined className="text-2xl text-[#8B949E]" />
-              </div>
-              <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无动态</h3>
-              <p className="text-sm text-[#5F6B7A]">该用户还没有公开动态</p>
-            </div>
-          ) : (
-            <div className="bg-white border border-[#E1E4E8] rounded-2xl overflow-hidden">
-              {profile.activities.map((activity, idx) => (
-                <div key={activity.id}>
-                  {idx > 0 && <div className="border-t border-[#F0F2F5]" />}
-                  <div
-                    className={`flex items-center gap-3 px-5 py-3.5 hover:bg-[#F6F8FA] transition-colors ${
-                      (activity.type === 'post' || activity.type === 'comment') && activity.relatedId
-                        ? 'cursor-pointer'
-                        : ''
-                    }`}
-                    onClick={() => handleActivityClick(activity)}
-                  >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getActivityBg(activity.type)}`}>
-                      {getActivityIcon(activity.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[#0D1117] truncate">{activity.content}</p>
-                    </div>
-                    <span className="text-xs text-[#8B949E] flex-shrink-0">{activity.createdAt}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 };

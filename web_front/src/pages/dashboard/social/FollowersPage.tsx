@@ -1,30 +1,81 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App } from 'antd';
+import { Avatar, App, Spin } from 'antd';
 import { ArrowLeftOutlined, TeamOutlined } from '@ant-design/icons';
-import { mockFollowersList } from '@/lib/mocks/data';
+import { getMyFollowers, followUser, unfollowUser } from '@/lib/api/user';
+import type { FollowItemResponse } from '@/lib/api/user';
 import type { UserBrief } from '@/types';
+
+/** 将后端FollowItemResponse映射为前端UserBrief */
+function mapFollowItem(item: FollowItemResponse): UserBrief {
+  return {
+    id: String(item.id),
+    nickname: item.nickname,
+    avatar: item.avatar || undefined,
+    bio: item.bio || '',
+    isFollowing: item.is_following,
+    isFollowedBy: true,
+  };
+}
 
 const FollowersPage = () => {
   const navigate = useNavigate();
   const { message: msg } = App.useApp();
-  const [followersList, setFollowersList] = useState<UserBrief[]>(mockFollowersList);
+  const [followersList, setFollowersList] = useState<UserBrief[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const handleToggleFollow = (userId: string) => {
-    setFollowersList((prev) =>
-      prev.map((user) =>
-        user.id === userId
-          ? { ...user, isFollowing: !user.isFollowing }
-          : user
-      )
-    );
+  /** 加载粉丝列表 */
+  const loadFollowers = useCallback(async (cursor?: number) => {
+    try {
+      const res = await getMyFollowers(cursor, 20);
+      const items = res.items.map(mapFollowItem);
+      if (cursor) {
+        setFollowersList((prev) => [...prev, ...items]);
+      } else {
+        setFollowersList(items);
+      }
+      setNextCursor(res.next_cursor);
+      setTotalCount(res.followers_count);
+    } catch {
+      msg.error('加载粉丝列表失败');
+    }
+  }, [msg]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadFollowers().finally(() => setLoading(false));
+  }, [loadFollowers]);
+
+  /** 加载更多 */
+  const handleLoadMore = async () => {
+    if (loadingMore || nextCursor === null) return;
+    setLoadingMore(true);
+    await loadFollowers(nextCursor);
+    setLoadingMore(false);
+  };
+
+  const handleToggleFollow = async (userId: string) => {
     const user = followersList.find((u) => u.id === userId);
-    if (user) {
+    if (!user) return;
+    try {
       if (user.isFollowing) {
+        await unfollowUser(Number(userId));
+        setFollowersList((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, isFollowing: false } : u)),
+        );
         msg.success('已取消关注');
       } else {
-        msg.success(user.isFollowedBy ? '已回关' : '已关注');
+        await followUser(Number(userId));
+        setFollowersList((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, isFollowing: true } : u)),
+        );
+        msg.success('已关注');
       }
+    } catch {
+      msg.error('操作失败，请重试');
     }
   };
 
@@ -45,6 +96,14 @@ const FollowersPage = () => {
     return { text: '关注', className: 'btn-flame !py-1.5 !px-4 !text-sm' };
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[700px]">
       <div className="flex items-center gap-4 mb-6">
@@ -54,7 +113,7 @@ const FollowersPage = () => {
         >
           <ArrowLeftOutlined />
         </button>
-        <h1 className="text-xl font-bold text-[#0D1117]">我的粉丝</h1>
+        <h1 className="text-xl font-bold text-[#0D1117]">我的粉丝 ({totalCount})</h1>
       </div>
 
       {followersList.length === 0 ? (
@@ -77,16 +136,17 @@ const FollowersPage = () => {
                 {idx > 0 && <div className="border-t border-[#F0F2F5]" />}
                 <div className="flex items-center gap-4 px-5 py-4 hover:bg-[#F6F8FA] transition-colors">
                   <Avatar
-                  size={44}
-                  className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
-                  onClick={() => handleUserClick(user.id)}
-                >
-                  {user.nickname[0]}
-                </Avatar>
-                <div
-                  className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => handleUserClick(user.id)}
-                >
+                    size={44}
+                    src={user.avatar}
+                    className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
+                    onClick={() => handleUserClick(user.id)}
+                  >
+                    {user.nickname[0]}
+                  </Avatar>
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => handleUserClick(user.id)}
+                  >
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-semibold text-[#0D1117] truncate">{user.nickname}</h4>
                       {user.isFollowedBy && (
@@ -105,6 +165,17 @@ const FollowersPage = () => {
               </div>
             );
           })}
+          {nextCursor !== null && (
+            <div className="border-t border-[#F0F2F5] p-4 text-center">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="text-sm text-[#FF6B35] font-medium hover:text-[#E85D26] transition-colors"
+              >
+                {loadingMore ? '加载中...' : '加载更多'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
