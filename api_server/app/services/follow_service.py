@@ -103,10 +103,28 @@ class FollowService:
                         "created_at_ms": int(now.timestamp() * 1000),
                     },
                 )
-                # ③④ 双方冗余计数各+1
+                # ③ notification.created Outbox事件（同一事务，用于产生通知消息）
+                follower = sync_user_repository.get_by_id(db, follower_id)
+                follower_nickname = follower.nickname if follower else f"用户{follower_id}"
+                sync_outbox_repository.insert_event(
+                    db,
+                    event_type="notification.created",
+                    aggregate_type="message",
+                    aggregate_id=f"{following_id}",
+                    payload={
+                        "recipient_id": following_id,
+                        "type": 4,  # MESSAGE_TYPE_FOLLOW
+                        "title": "新关注",
+                        "content": f"{follower_nickname} 关注了你",
+                        "from_user_id": follower_id,
+                        "related_id": follower_id,
+                        "related_type": 3,  # RELATED_TYPE_USER
+                    },
+                )
+                # ④⑤ 双方冗余计数各+1
                 sync_user_repository.increment_following_count(db, follower_id)
                 sync_user_repository.increment_followers_count(db, following_id)
-                # ⑤ 关注动态
+                # ⑥ 关注动态
                 sync_user_repository.create_activity(
                     db, follower_id, ACTIVITY_TYPE_FOLLOW, f"关注了 {target.nickname}", following_id
                 )

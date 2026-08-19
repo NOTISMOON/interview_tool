@@ -55,6 +55,22 @@ class UserRepository:
         """
         return await db.get(User, user_id)
 
+    async def get_users_by_ids(self, db: AsyncSession, user_ids: list[int]) -> list[User]:
+        """批量查询用户（IN 单次查询，避免 N+1）。
+
+        Args:
+            db: 数据库异步会话。
+            user_ids: 用户ID列表（空列表直接返回空结果）。
+
+        Returns:
+            User对象列表，仅包含实际存在的用户。
+        """
+        if not user_ids:
+            return []
+        stmt = select(User).where(User.id.in_(user_ids))
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_or_create_github_user(self, db: AsyncSession, user_info: GitHubUserInfo) -> User:
         """根据GitHub用户信息查找本地用户，不存在则创建（含user_auth绑定记录）。
 
