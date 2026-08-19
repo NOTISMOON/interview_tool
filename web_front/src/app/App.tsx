@@ -58,7 +58,7 @@ const App = () => {
   const initAuth = useAppStore((s) => s.initAuth);
 
   useEffect(() => {
-    initAuth();
+    void initAuth();
   }, []);
 
   return (

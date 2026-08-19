@@ -3,6 +3,15 @@ import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState, 
 import { mockQuestions, mockReport } from '@/lib/mocks/data';
 import { githubCallback, logout as logoutApi } from '@/lib/api/auth';
 import type { GithubUser } from '@/lib/api/auth';
+import {
+  getMyProfile,
+  updateMyProfile as updateMyProfileApi,
+  updateProfileVisibility as updateProfileVisibilityApi,
+  deleteAccount as deleteAccountApi,
+  followUser as followUserApi,
+  unfollowUser as unfollowUserApi,
+} from '@/lib/api/user';
+import type { UserProfileResponse, UserUpdateRequest } from '@/lib/api/user';
 
 const MOCK_FOLLOWED_POSTS: CommunityPost[] = [
   {
@@ -47,15 +56,54 @@ interface AppState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
   handleGithubCallback: (code: string) => Promise<void>;
-  initAuth: () => void;
+  initAuth: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
-  updateUser: (updates: Partial<Pick<User, 'nickname' | 'avatar' | 'gender' | 'birthday' | 'bio' | 'phone' | 'location' | 'profileVisibility'>>) => void;
+  updateUser: (updates: Partial<Pick<User, 'nickname' | 'avatar' | 'gender' | 'birthday' | 'bio' | 'phone' | 'location' | 'profileVisibility'>>) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   removeResume: (resumeId: string) => void;
   addResume: (resume: Resume) => void;
   startInterview: (resumeId: string, questions: InterviewQuestion[]) => void;
   submitAnswer: (questionId: string, answer: string) => void;
   completeInterview: (report: InterviewReport) => void;
   nextQuestion: () => void;
+}
+
+/** 将后端性别整数映射为前端性别字符串 */
+function mapGender(gender: number): 'male' | 'female' | 'other' {
+  if (gender === 1) return 'male';
+  if (gender === 2) return 'female';
+  return 'other';
+}
+
+/** 将后端profile_visibility整数映射为前端可见性对象 */
+function mapProfileVisibility(visibility: number): User['profileVisibility'] {
+  return {
+    gender: visibility === 0,
+    birthday: visibility === 0,
+    bio: visibility === 0,
+    location: visibility === 0,
+    phone: false,
+  };
+}
+
+/** 将后端UserProfileResponse映射为前端User类型 */
+function mapUserProfile(profile: UserProfileResponse): User {
+  return {
+    id: String(profile.id),
+    email: profile.email || '',
+    nickname: profile.nickname,
+    avatar: profile.avatar || undefined,
+    gender: mapGender(profile.gender),
+    birthday: profile.birthday || '',
+    bio: profile.bio,
+    phone: profile.phone || '',
+    location: profile.location || '',
+    followingCount: profile.following_count,
+    followersCount: profile.followers_count,
+    followingIds: [],
+    profileVisibility: mapProfileVisibility(profile.profile_visibility),
+  };
 }
 
 function mapGithubUser(githubUser: GithubUser): User {
@@ -147,13 +195,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   handleGithubCallback: async (code: string) => {
     const res = await githubCallback({ code });
-    // token已通过HttpOnly Cookie下发（JS不可读），本地只缓存非敏感的用户展示信息
     const user = mapGithubUser(res.user);
     localStorage.setItem('auth_user', JSON.stringify(user));
     set({ user, isLoggedIn: true });
   },
 
-  initAuth: () => {
+  initAuth: async () => {
     const userStr = localStorage.getItem('auth_user');
     if (userStr) {
       try {
@@ -163,13 +210,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         localStorage.removeItem('auth_user');
         set({ authLoading: false });
       }
-    } else {
+      return;
+    }
+
+    // 本地无缓存时，尝试从后端 /users/me 拉取资料（Cookie 由浏览器自动携带）
+    try {
+      const profile = await getMyProfile();
+      const user = mapUserProfile(profile);
+      localStorage.setItem('auth_user', JSON.stringify(user));
+      set({ user, isLoggedIn: true, authLoading: false });
+    } catch {
       set({ authLoading: false });
     }
   },
 
+  refreshUser: async () => {
+    try {
+      const profile = await getMyProfile();
+      const user = mapUserProfile(profile);
+      localStorage.setItem('auth_user', JSON.stringify(user));
+      set({ user });
+    } catch {
+      // 刷新失败不改变当前状态
+    }
+  },
+
   logout: async () => {
-    // 先吊销服务端会话并清除HttpOnly Cookie，再清理本地状态
     try {
       await logoutApi();
     } catch {
@@ -183,15 +249,43 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  updateUser: (updates) => {
-    set((state) => {
-      if (!state.user) return state;
-      return {
-        user: {
-          ...state.user,
-          ...updates,
-        },
-      };
+  updateUser: async (updates) => {
+    const currentUser = get().user;
+    if (!currentUser) return;
+
+    // 构建后端请求体
+    const body: UserUpdateRequest = {};
+    if (updates.nickname !== undefined) body.nickname = updates.nickname;
+    if (updates.avatar !== undefined) body.avatar = updates.avatar;
+    if (updates.gender !== undefined) {
+      body.gender = updates.gender === 'male' ? 1 : updates.gender === 'female' ? 2 : 0;
+    }
+    if (updates.birthday !== undefined) body.birthday = updates.birthday || undefined;
+    if (updates.bio !== undefined) body.bio = updates.bio;
+    if (updates.phone !== undefined) body.phone = updates.phone;
+    if (updates.location !== undefined) body.location = updates.location;
+
+    // 如果更新了可见性，单独调用可见性接口
+    if (updates.profileVisibility !== undefined) {
+      const newVisibility = updates.profileVisibility;
+      const visibilityValue = newVisibility.gender ? 0 : 2; // 简化：公开→0，仅自己→2
+      await updateProfileVisibilityApi({ profile_visibility: visibilityValue });
+    }
+
+    // 调用更新资料接口
+    const profile = await updateMyProfileApi(body);
+    const user = mapUserProfile(profile);
+    localStorage.setItem('auth_user', JSON.stringify(user));
+    set({ user });
+  },
+
+  deleteAccount: async () => {
+    await deleteAccountApi();
+    localStorage.removeItem('auth_user');
+    set({
+      user: null,
+      isLoggedIn: false,
+      currentInterview: null,
     });
   },
 
