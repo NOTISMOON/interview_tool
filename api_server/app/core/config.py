@@ -72,6 +72,16 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
     GITHUB_REDIRECT_URI: str = "http://localhost:5645/callback"
+
+    # ---- 腾讯云 COS 配置（前端直传 + 后端校验） ----
+    COS_SECRET_ID: str = ""  # 腾讯云永久SecretId（仅后端使用）
+    COS_SECRET_KEY: str = ""  # 腾讯云永久SecretKey（仅后端使用，切勿暴露给前端）
+    COS_BUCKET: str = "test-1381433578"  # COS Bucket名称（含APPID）
+    COS_REGION: str = "ap-chengdu"  # COS地域
+    COS_STS_DURATION: int = 1800  # STS临时密钥有效期（秒，默认30分钟）
+    COS_MAX_FILE_SIZE: int = 10485760  # 上传文件大小上限（字节，默认10MB）
+    COS_ALLOWED_EXTENSIONS: str = ".pdf,.doc,.docx,.png,.jpg,.jpeg"  # 允许的扩展名白名单
+    COS_DAILY_UPLOAD_LIMIT: int = 20  # 单用户每日上传次数上限
     model_config = {
         "env_file": str(Path(__file__).resolve().parent.parent.parent / ".env"),
         "env_file_encoding": "utf-8",

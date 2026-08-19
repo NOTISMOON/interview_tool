@@ -3,8 +3,10 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_v1_router
 from app.core.config import settings
@@ -62,3 +64,34 @@ def health_check() -> dict:
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
     }
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """全局请求校验异常处理器，记录422错误的详细校验信息以便排查。
+
+    Args:
+        request: FastAPI请求对象。
+        exc: Pydantic校验异常。
+
+    Returns:
+        JSONResponse: 包含校验错误详情的422响应。
+    """
+    logger = logging.getLogger("app.validation")
+    body = None
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8")[:2000]  # 截断长请求体（如base64头像）
+    except Exception:
+        body_str = "<无法读取请求体>"
+    logger.error(
+        "请求校验失败 422: path=%s method=%s body=%s errors=%s",
+        request.url.path,
+        request.method,
+        body_str,
+        exc.errors(),
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
