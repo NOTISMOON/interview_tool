@@ -1,43 +1,58 @@
+"""Alembic环境配置，用于数据库迁移。"""
+
+import os
+import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# 将项目根目录加入 sys.path，确保可以导入 app 模块
+# env.py 位于 alembic/ 目录下，其父目录即 api_server 项目根目录
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# Alembic Config 对象
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# 从应用配置中读取数据库URL，覆盖 alembic.ini 中的占位值
+from app.core.config import settings
+
+config.set_main_option("sqlalchemy.url", settings.MYSQL_URL)
+
+# 配置日志
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# 导入所有模型的 metadata，用于 autogenerate 自动检测表结构变更
+from app.db.base import Base
+from app.models import (  # noqa: F401  # 确保所有模型被导入，Base.metadata 才能感知到
+    Comment,
+    DmConversation,
+    DmMessage,
+    Interview,
+    InterviewQuestion,
+    InterviewReport,
+    Message,
+    OutboxEvent,
+    Post,
+    PostFavorite,
+    PostLike,
+    PostTag,
+    Resume,
+    ResumeWorkExperience,
+    UploadRecord,
+    User,
+    UserActivity,
+    UserAuth,
+    UserFollow,
+    UserSettings,
+)
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
+    """离线模式运行迁移（不连接数据库，生成SQL脚本）。"""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -51,12 +66,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
+    """在线模式运行迁移（连接数据库，直接执行DDL）。"""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -65,7 +75,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
         )
 
         with context.begin_transaction():
