@@ -25,6 +25,12 @@ class QueueName(str, Enum):
     # 社交业务队列（关注/取关缓存同步，消费失败经DLX进死信队列存档）
     SOCIAL_FOLLOW_CACHE = "social.follow.cache.queue"  # 关注缓存同步队列
     SOCIAL_FOLLOW_CACHE_DLQ = "social.follow.cache.dlq"  # 关注缓存同步死信队列（仅存档不消费）
+    SOCIAL_COMMENT_CACHE = "social.comment.cache.queue"  # 评论缓存同步队列
+    SOCIAL_COMMENT_CACHE_DLQ = "social.comment.cache.dlq"  # 评论缓存同步死信队列（仅存档不消费）
+    SOCIAL_INTERACTION_CACHE = "social.interaction.cache.queue"  # 互动缓存同步队列
+    SOCIAL_INTERACTION_CACHE_DLQ = "social.interaction.cache.dlq"  # 互动缓存同步死信队列（仅存档不消费）
+    SOCIAL_FEED_PUSH = "social.feed.push.queue"  # Feed Push队列
+    SOCIAL_FEED_PUSH_DLQ = "social.feed.push.dlq"  # Feed Push死信队列（仅存档不消费）
 
 
 # 队列声明参数（仅含DLX配置的队列需要，声明时携带才能生效）。
@@ -34,6 +40,18 @@ QUEUE_DECLARE_ARGUMENTS: dict[QueueName, dict[str, str]] = {
     QueueName.SOCIAL_FOLLOW_CACHE: {
         "x-dead-letter-exchange": ExchangeName.SOCIAL_DLX.value,
         "x-dead-letter-routing-key": "social.follow.cache.dead",
+    },
+    QueueName.SOCIAL_COMMENT_CACHE: {
+        "x-dead-letter-exchange": ExchangeName.SOCIAL_DLX.value,
+        "x-dead-letter-routing-key": "social.comment.cache.dead",
+    },
+    QueueName.SOCIAL_INTERACTION_CACHE: {
+        "x-dead-letter-exchange": ExchangeName.SOCIAL_DLX.value,
+        "x-dead-letter-routing-key": "social.interaction.cache.dead",
+    },
+    QueueName.SOCIAL_FEED_PUSH: {
+        "x-dead-letter-exchange": ExchangeName.SOCIAL_DLX.value,
+        "x-dead-letter-routing-key": "social.feed.push.dead",
     },
 }
 
@@ -92,6 +110,62 @@ QUEUE_BINDINGS: list[QueueBinding] = [
         queue=QueueName.SOCIAL_FOLLOW_CACHE_DLQ,
         exchange=ExchangeName.SOCIAL_DLX,
         routing_key="social.follow.cache.dead",
+    ),
+    # 评论缓存同步：两类事件路由到同一队列，顺序消费保证同一帖子评论事件有序
+    QueueBinding(
+        queue=QueueName.SOCIAL_COMMENT_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.comment.created",
+    ),
+    QueueBinding(
+        queue=QueueName.SOCIAL_COMMENT_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.comment.deleted",
+    ),
+    # 评论缓存同步死信队列：消费失败消息存档，仅人工重放，不消费
+    QueueBinding(
+        queue=QueueName.SOCIAL_COMMENT_CACHE_DLQ,
+        exchange=ExchangeName.SOCIAL_DLX,
+        routing_key="social.comment.cache.dead",
+    ),
+    # 互动缓存同步：点赞/收藏/取消点赞/取消收藏四类事件路由到同一队列
+    QueueBinding(
+        queue=QueueName.SOCIAL_INTERACTION_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.post.liked",
+    ),
+    QueueBinding(
+        queue=QueueName.SOCIAL_INTERACTION_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.post.unliked",
+    ),
+    QueueBinding(
+        queue=QueueName.SOCIAL_INTERACTION_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.post.favorited",
+    ),
+    QueueBinding(
+        queue=QueueName.SOCIAL_INTERACTION_CACHE,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.post.unfavorited",
+    ),
+    # 互动缓存同步死信队列：消费失败消息存档，仅人工重放，不消费
+    QueueBinding(
+        queue=QueueName.SOCIAL_INTERACTION_CACHE_DLQ,
+        exchange=ExchangeName.SOCIAL_DLX,
+        routing_key="social.interaction.cache.dead",
+    ),
+    # Feed Push：帖子创建事件路由到Feed Push队列
+    QueueBinding(
+        queue=QueueName.SOCIAL_FEED_PUSH,
+        exchange=ExchangeName.SOCIAL,
+        routing_key="social.post.created",
+    ),
+    # Feed Push死信队列：消费失败消息存档，仅人工重放，不消费
+    QueueBinding(
+        queue=QueueName.SOCIAL_FEED_PUSH_DLQ,
+        exchange=ExchangeName.SOCIAL_DLX,
+        routing_key="social.feed.push.dead",
     ),
 ]
 

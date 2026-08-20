@@ -36,6 +36,15 @@ EVENT_EXCHANGE_MAP: dict[str, tuple[ExchangeName, str]] = {
     "follow_created": (ExchangeName.SOCIAL, "social.follow.created"),
     "follow_deleted": (ExchangeName.SOCIAL, "social.follow.deleted"),
     "user_deactivated": (ExchangeName.SOCIAL, "social.user.deactivated"),
+    "post.created": (ExchangeName.SOCIAL, "social.post.created"),
+    "post.deleted": (ExchangeName.SOCIAL, "social.post.deleted"),
+    "post.event": (ExchangeName.SOCIAL, "social.post.event"),
+    "post.liked": (ExchangeName.SOCIAL, "social.post.liked"),
+    "post.unliked": (ExchangeName.SOCIAL, "social.post.unliked"),
+    "post.favorited": (ExchangeName.SOCIAL, "social.post.favorited"),
+    "post.unfavorited": (ExchangeName.SOCIAL, "social.post.unfavorited"),
+    "comment.created": (ExchangeName.SOCIAL, "social.comment.created"),
+    "comment.deleted": (ExchangeName.SOCIAL, "social.comment.deleted"),
     "notification.created": (ExchangeName.NOTIFICATION, "notification.deliver"),
 }
 
