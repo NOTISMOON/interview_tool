@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
-import { Spin } from 'antd';
+import Spin from 'antd/es/spin';
 import { useAppStore } from '@/store';
 
 import Navbar from '@/components/layout/Navbar';

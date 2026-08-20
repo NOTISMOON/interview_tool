@@ -43,6 +43,7 @@ export interface UserUpdateRequest {
 
 /** 更新资料可见性请求 */
 export interface ProfileVisibilityUpdateRequest {
+  profile_visibility?: number;
   visibility_gender?: number;
   visibility_birthday?: number;
   visibility_bio?: number;

@@ -214,12 +214,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     // 本地无缓存时，尝试从后端 /users/me 拉取资料（Cookie 由浏览器自动携带）
+    // 若后端不可达（如单独打开前端），快速失败，不阻塞页面渲染
     try {
       const profile = await getMyProfile();
       const user = mapUserProfile(profile);
       localStorage.setItem('auth_user', JSON.stringify(user));
       set({ user, isLoggedIn: true, authLoading: false });
     } catch {
+      // 后端不可达或未登录，直接结束加载状态，允许页面正常渲染
       set({ authLoading: false });
     }
   },

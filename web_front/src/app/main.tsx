@@ -1,8 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { ConfigProvider, App as AntApp } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
+import ConfigProvider from 'antd/es/config-provider';
+import AntApp from 'antd/es/app';
+import zhCN from 'antd/es/locale/zh_CN';
 import App from './App';
 import './styles/index.css';
 
