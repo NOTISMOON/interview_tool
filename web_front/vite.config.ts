@@ -10,21 +10,21 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // 仅扫描主入口，避免 prototype 等无关 HTML 进入依赖扫描（减少 IO 开销）
-    entries: ['index.html'],
+    // 开启自动扫描，确保 antd 等依赖被正确预构建
     include: [
       'react',
       'react-dom',
       'react-dom/client',
+      'react/jsx-runtime',
       'react-router-dom',
-      'antd/es/config-provider',
-      'antd/es/app',
-      'antd/es/spin',
-      'antd/es/locale/zh_CN',
-      '@ant-design/icons',
       'axios',
       'zustand',
       'dayjs',
+      'cos-js-sdk-v5',
+      'antd',
+      '@ant-design/icons',
+      'react-is',
+      'classnames',
     ],
   },
   build: {

@@ -5,7 +5,7 @@ import ConfigProvider from 'antd/es/config-provider';
 import AntApp from 'antd/es/app';
 import zhCN from 'antd/es/locale/zh_CN';
 import App from './App';
-import './styles/index.css';
+import "./styles/index.css";
 
 const theme = {
   token: {

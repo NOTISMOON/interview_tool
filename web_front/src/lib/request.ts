@@ -21,6 +21,7 @@ function refreshSession(): Promise<void> {
       .post('/auth/refresh', null, {
         baseURL: request.defaults.baseURL,
         withCredentials: true,
+        timeout: 5000,
       })
       .then(() => undefined)
       .finally(() => {
