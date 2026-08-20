@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState, CommunityPost } from '@/types';
+import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState } from '@/types';
 import { mockQuestions, mockReport } from '@/lib/mocks/data';
 import { githubCallback, logout as logoutApi } from '@/lib/api/auth';
 import type { GithubUser } from '@/lib/api/auth';
@@ -13,37 +13,6 @@ import {
 } from '@/lib/api/user';
 import type { UserProfileResponse, UserUpdateRequest } from '@/lib/api/user';
 
-const MOCK_FOLLOWED_POSTS: CommunityPost[] = [
-  {
-    id: 'f1', title: '分享一套后端面试常见问题整理',
-    content: '整理了最近面试遇到的 50 道高频题，包括 JVM、并发、数据库、Redis 等核心知识点...',
-    author: { id: 'u3', nickname: 'Go 夜读', avatar: '' },
-    tags: ['资源分享', '后端'], likes: 89, comments: 23, views: 1800,
-    isPinned: false, isHot: false, createdAt: '5 小时前',
-  },
-  {
-    id: 'f2', title: 'AI 模拟面试真的有用！拿到 offer 了',
-    content: '用这个工具练习了两周，面试时明显感觉更自信了，推荐大家都试试...',
-    author: { id: 'u2', nickname: '上岸的鱼', avatar: '' },
-    tags: ['经验分享', 'Offer'], likes: 256, comments: 89, views: 5600,
-    isPinned: false, isHot: true, createdAt: '2 小时前',
-  },
-  {
-    id: 'f3', title: '35 岁程序员何去何从？大龄转管理经验分享',
-    content: '做了 10 年开发，最近成功转技术管理，分享一下我的转型心得...',
-    author: { id: 'u5', nickname: '老码农', avatar: '' },
-    tags: ['职业规划', '经验分享'], likes: 342, comments: 120, views: 8900,
-    isPinned: false, isHot: true, createdAt: '昨天',
-  },
-  {
-    id: 'f4', title: '面试时如何回答"你的缺点是什么"？',
-    content: '每次被问到这个问题都不知道怎么回答，求大佬指点...',
-    author: { id: 'u4', nickname: '求职小白', avatar: '' },
-    tags: ['面试技巧', '求助'], likes: 67, comments: 34, views: 1200,
-    isPinned: false, isHot: false, createdAt: '昨天',
-  },
-];
-
 interface AppState {
   user: User | null;
   isLoggedIn: boolean;
@@ -51,7 +20,6 @@ interface AppState {
   resumes: Resume[];
   currentInterview: InterviewState | null;
   reports: Record<string, InterviewReport>;
-  followedPosts: CommunityPost[];
 
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
@@ -137,7 +105,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   resumes: [],
   currentInterview: null,
   reports: {},
-  followedPosts: MOCK_FOLLOWED_POSTS,
 
   login: async (email: string, _password: string) => {
     await new Promise((resolve) => setTimeout(resolve, 800));

@@ -1,24 +1,68 @@
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Segmented } from 'antd';
+import { Avatar, App, Segmented, Spin, Empty } from 'antd';
 import {
   FireOutlined,
   LikeOutlined,
   MessageOutlined,
   UserAddOutlined,
   ReloadOutlined,
+  PushpinOutlined,
 } from '@ant-design/icons';
-import { useState } from 'react';
+import { getFeed } from '@/lib/api/feed';
+import type { PostListItem } from '@/types';
 import { useAppStore } from '@/store';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
+
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化时间为相对时间展示 */
+function formatTime(dateStr: string): string {
+  return dayjs(dateStr).fromNow();
+}
 
 const FeedPage = () => {
   const navigate = useNavigate();
   const { message: msg } = App.useApp();
-  const { followedPosts, user } = useAppStore();
+  const { user } = useAppStore();
   const [filter, setFilter] = useState<string>('all');
 
+  const [posts, setPosts] = useState<PostListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(true);
+
+  /** 获取Feed信息流 */
+  const fetchFeed = useCallback(async (resetCursor?: boolean) => {
+    setLoading(true);
+    try {
+      const cur = resetCursor ? undefined : cursor;
+      const res = await getFeed({ cursor: cur, limit: 20 });
+      if (resetCursor || cur === undefined) {
+        setPosts(res.items);
+      } else {
+        setPosts((prev) => [...prev, ...res.items]);
+      }
+      setCursor(res.next_cursor ?? undefined);
+      setHasMore(res.next_cursor !== null);
+    } catch {
+      msg.error('加载动态失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [cursor, msg]);
+
+  useEffect(() => {
+    fetchFeed(true);
+  }, []);
+
+  /** 根据筛选条件过滤 */
   const filteredPosts = filter === 'hot'
-    ? followedPosts.filter((p) => p.isHot)
-    : followedPosts;
+    ? posts.filter((p) => p.is_hot)
+    : posts;
 
   return (
     <div className="flex flex-col h-full">
@@ -51,7 +95,11 @@ const FeedPage = () => {
         </div>
       </div>
 
-      {filteredPosts.length === 0 ? (
+      {loading && posts.length === 0 ? (
+        <div className="flex justify-center py-16">
+          <Spin size="large" />
+        </div>
+      ) : filteredPosts.length === 0 ? (
         <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
           <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-4">
             <ReloadOutlined className="text-2xl text-[#8B949E]" />
@@ -78,35 +126,36 @@ const FeedPage = () => {
                 <Avatar
                   size={36}
                   className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
-                  onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
+                  onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
                 >
-                  {post.author.nickname[0]}
+                  {post.author?.nickname?.[0] || '?'}
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
+                    {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
                     <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
-                    {post.isHot && (
+                    {post.is_hot && (
                       <span className="tag tag-flame">
                         <FireOutlined className="text-[10px]" /> 热
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content}</p>
+                  <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-[#8B949E]">
                       <span
                         className="font-medium text-[#5F6B7A] cursor-pointer hover:text-[#FF6B35]"
-                        onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
-                      >{post.author.nickname}</span>
+                        onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
+                      >{post.author?.nickname || '未知用户'}</span>
                       <span className="w-1 h-1 rounded-full bg-[#E1E4E8]" />
-                      <span>{post.createdAt}</span>
+                      <span>{formatTime(post.created_at)}</span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-[#8B949E]">
                       <span className="inline-flex items-center gap-1">
-                        <LikeOutlined /> {post.likes}
+                        <LikeOutlined /> {post.likes_count}
                       </span>
                       <span className="inline-flex items-center gap-1">
-                        <MessageOutlined /> {post.comments}
+                        <MessageOutlined /> {post.comments_count}
                       </span>
                     </div>
                   </div>
@@ -114,6 +163,17 @@ const FeedPage = () => {
               </div>
             </div>
           ))}
+          {hasMore && (
+            <div className="flex justify-center py-4">
+              <button
+                onClick={() => fetchFeed()}
+                disabled={loading}
+                className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+              >
+                {loading ? '加载中...' : '加载更多'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

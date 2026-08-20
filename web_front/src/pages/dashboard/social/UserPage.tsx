@@ -1,25 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Avatar, App, Tabs, Spin } from 'antd';
+import { Avatar, App, Tabs, Spin, Empty } from 'antd';
 import {
   ArrowLeftOutlined,
   MessageOutlined,
   UserAddOutlined,
   UserOutlined,
   LikeOutlined,
-  CommentOutlined,
-  TeamOutlined,
-  FileTextOutlined,
-  ManOutlined,
-  WomanOutlined,
+  FireOutlined,
+  PushpinOutlined,
   EnvironmentOutlined,
-  CalendarOutlined,
   SmileOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { getUserPublicProfile, followUser, unfollowUser } from '@/lib/api/user';
 import type { UserPublicProfileResponse, UserCardResponse } from '@/lib/api/user';
+import { listPosts } from '@/lib/api/posts';
 import { useAppStore } from '@/store';
-import type { CommunityPost, ActivityItem } from '@/types';
+import type { PostListItem } from '@/types';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
+
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化时间为相对时间展示 */
+function formatTime(dateStr: string): string {
+  return dayjs(dateStr).fromNow();
+}
 
 /** 前端用户资料展示类型 */
 interface UserProfileView {
@@ -44,6 +53,10 @@ const UserPage = () => {
   const [profile, setProfile] = useState<UserProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [posts, setPosts] = useState<PostListItem[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsCursor, setPostsCursor] = useState<number | undefined>(undefined);
+  const [postsHasMore, setPostsHasMore] = useState(true);
 
   const isSelf = currentUser?.id === id;
 
@@ -109,6 +122,33 @@ const UserPage = () => {
   const handleMessage = () => {
     navigate(`/dashboard/messages/chat/${profile?.id}`);
   };
+
+  /** 获取用户帖子列表 */
+  const fetchPosts = useCallback(async (resetCursor?: boolean) => {
+    if (!id) return;
+    setPostsLoading(true);
+    try {
+      const cur = resetCursor ? undefined : postsCursor;
+      const res = await listPosts({ author_id: Number(id), cursor: cur, limit: 20, sort: 'latest' });
+      if (resetCursor || cur === undefined) {
+        setPosts(res.items);
+      } else {
+        setPosts((prev) => [...prev, ...res.items]);
+      }
+      setPostsCursor(res.next_cursor ?? undefined);
+      setPostsHasMore(res.next_cursor !== null);
+    } catch {
+      msgFn.error('加载帖子列表失败');
+    } finally {
+      setPostsLoading(false);
+    }
+  }, [id, postsCursor, msgFn]);
+
+  useEffect(() => {
+    if (profile && !profile.isCard) {
+      fetchPosts(true);
+    }
+  }, [profile?.id]);
 
   if (loading) {
     return (
@@ -206,6 +246,79 @@ const UserPage = () => {
           )}
         </div>
       </div>
+
+      {!profile.isCard && (
+        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
+          <Tabs
+            activeKey={activeTab}
+            onChange={(key) => setActiveTab(key)}
+            items={[
+              {
+                key: 'posts',
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileTextOutlined />
+                    帖子
+                  </span>
+                ),
+                children: (
+                  <div className="-mx-2">
+                    {postsLoading && posts.length === 0 ? (
+                      <div className="flex justify-center py-12">
+                        <Spin size="small" />
+                      </div>
+                    ) : posts.length === 0 ? (
+                      <Empty description="暂无帖子" className="py-8" />
+                    ) : (
+                      <div className="space-y-3">
+                        {posts.map((post) => (
+                          <div
+                            key={post.id}
+                            className="border border-[#E1E4E8] rounded-xl p-4 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                            onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
+                          >
+                            <div className="flex items-center gap-2 mb-1.5">
+                              {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
+                              <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
+                              {post.is_hot && (
+                                <span className="tag tag-flame">
+                                  <FireOutlined className="text-[10px]" /> 热
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
+                            <div className="flex items-center gap-4 text-xs text-[#8B949E]">
+                              <span className="inline-flex items-center gap-1">
+                                <LikeOutlined /> {post.likes_count}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <MessageOutlined /> {post.comments_count}
+                              </span>
+                              <span>{formatTime(post.created_at)}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {postsHasMore && (
+                          <div className="flex justify-center py-3">
+                            <button
+                              onClick={() => fetchPosts()}
+                              disabled={postsLoading}
+                              className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                            >
+                              {postsLoading ? '加载中...' : '加载更多'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            className="user-profile-tabs"
+          />
+        </div>
+      )}
     </div>
   );
 };

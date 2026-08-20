@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App } from 'antd';
+import { Avatar, App, Spin, Empty } from 'antd';
 import {
   ArrowLeftOutlined,
   StarFilled,
@@ -8,48 +8,77 @@ import {
   MessageOutlined,
   FireOutlined,
   DeleteOutlined,
+  PushpinOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import type { CommunityPost } from '@/types';
+import { listFavorites, toggleFavorite } from '@/lib/api/interactions';
+import type { PostListItem } from '@/types';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
 
-const MOCK_FAVORITES: CommunityPost[] = [
-  {
-    id: '2', title: 'AI 模拟面试真的有用！拿到 offer 了',
-    content: '用这个工具练习了两周，面试时明显感觉更自信了，推荐大家都试试...',
-    author: { id: 'u2', nickname: '上岸的鱼', avatar: '' },
-    tags: ['经验分享', 'Offer'], likes: 256, comments: 89, views: 5600,
-    isPinned: false, isHot: true, createdAt: '2 小时前',
-  },
-  {
-    id: '3', title: '分享一套后端面试常见问题整理',
-    content: '整理了最近面试遇到的 50 道高频题，包括 JVM、并发、数据库、Redis 等核心知识点...',
-    author: { id: 'u3', nickname: 'Go 夜读', avatar: '' },
-    tags: ['资源分享', '后端'], likes: 89, comments: 23, views: 1800,
-    isPinned: false, isHot: false, createdAt: '5 小时前',
-  },
-  {
-    id: '5', title: '35 岁程序员何去何从？大龄转管理经验分享',
-    content: '做了 10 年开发，最近成功转技术管理，分享一下我的转型心得...',
-    author: { id: 'u5', nickname: '老码农', avatar: '' },
-    tags: ['职业规划', '经验分享'], likes: 342, comments: 120, views: 8900,
-    isPinned: false, isHot: true, createdAt: '昨天',
-  },
-];
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化时间为相对时间展示 */
+function formatTime(dateStr: string): string {
+  return dayjs(dateStr).fromNow();
+}
 
 const FavoritesPage = () => {
   const navigate = useNavigate();
   const { message: msg, modal } = App.useApp();
-  const [favorites, setFavorites] = useState<CommunityPost[]>(MOCK_FAVORITES);
 
-  const handleRemove = (id: string) => {
+  const [favorites, setFavorites] = useState<PostListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(true);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  /** 获取收藏列表 */
+  const fetchFavorites = useCallback(async (resetCursor?: boolean) => {
+    setLoading(true);
+    try {
+      const cur = resetCursor ? undefined : cursor;
+      const res = await listFavorites({ cursor: cur, limit: 20 });
+      if (resetCursor || cur === undefined) {
+        setFavorites(res.items);
+      } else {
+        setFavorites((prev) => [...prev, ...res.items]);
+      }
+      setCursor(res.next_cursor ?? undefined);
+      setHasMore(res.next_cursor !== null);
+    } catch {
+      msg.error('加载收藏列表失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [cursor, msg]);
+
+  useEffect(() => {
+    fetchFavorites(true);
+  }, []);
+
+  /** 取消收藏 */
+  const handleRemove = (postId: number) => {
     modal.confirm({
       title: '取消收藏',
+      icon: <ExclamationCircleOutlined />,
       content: '确定要取消收藏这个帖子吗？',
       okText: '确定',
       cancelText: '取消',
       okButtonProps: { danger: true },
-      onOk: () => {
-        setFavorites((prev) => prev.filter((p) => p.id !== id));
-        msg.success('已取消收藏');
+      onOk: async () => {
+        setRemovingId(postId);
+        try {
+          await toggleFavorite(postId);
+          setFavorites((prev) => prev.filter((p) => p.id !== postId));
+          msg.success('已取消收藏');
+        } catch {
+          msg.error('操作失败，请稍后重试');
+        } finally {
+          setRemovingId(null);
+        }
       },
     });
   };
@@ -66,7 +95,11 @@ const FavoritesPage = () => {
         <h1 className="text-xl font-bold text-[#0D1117]">我的收藏</h1>
       </div>
 
-      {favorites.length === 0 ? (
+      {loading && favorites.length === 0 ? (
+        <div className="flex justify-center py-16">
+          <Spin size="large" />
+        </div>
+      ) : favorites.length === 0 ? (
         <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
           <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-4">
             <StarFilled className="text-2xl text-[#8B949E]" />
@@ -89,27 +122,28 @@ const FavoritesPage = () => {
                 onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
               >
                 <Avatar size={36} className="!bg-[#0D1117] flex-shrink-0">
-                  {post.author.nickname[0]}
+                  {post.author?.nickname?.[0] || '?'}
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
+                    {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
                     <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
-                    {post.isHot && (
+                    {post.is_hot && (
                       <span className="tag tag-flame">
                         <FireOutlined className="text-[10px]" /> 热
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content}</p>
+                  <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-[#8B949E]">
-                      <span className="font-medium text-[#5F6B7A]">{post.author.nickname}</span>
+                      <span className="font-medium text-[#5F6B7A]">{post.author?.nickname || '未知用户'}</span>
                       <span className="w-1 h-1 rounded-full bg-[#E1E4E8]" />
-                      <span>{post.createdAt}</span>
+                      <span>{formatTime(post.created_at)}</span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-[#8B949E]">
-                      <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes}</span>
-                      <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments}</span>
+                      <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes_count}</span>
+                      <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments_count}</span>
                     </div>
                   </div>
                 </div>
@@ -120,13 +154,25 @@ const FavoritesPage = () => {
                     e.stopPropagation();
                     handleRemove(post.id);
                   }}
-                  className="text-xs text-[#8B949E] hover:text-[#CF222E] transition-colors inline-flex items-center gap-1 opacity-0 group-hover:opacity-100"
+                  disabled={removingId === post.id}
+                  className="text-xs text-[#8B949E] hover:text-[#CF222E] transition-colors inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 disabled:opacity-50"
                 >
-                  <DeleteOutlined /> 取消收藏
+                  <DeleteOutlined /> {removingId === post.id ? '取消中...' : '取消收藏'}
                 </button>
               </div>
             </div>
           ))}
+          {hasMore && (
+            <div className="flex justify-center py-4">
+              <button
+                onClick={() => fetchFavorites()}
+                disabled={loading}
+                className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+              >
+                {loading ? '加载中...' : '加载更多'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

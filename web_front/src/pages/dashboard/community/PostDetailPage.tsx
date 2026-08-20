@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Avatar, App } from 'antd';
+import { Avatar, App, Spin, Empty, Modal } from 'antd';
 import {
   ArrowLeftOutlined,
   LikeOutlined,
@@ -11,63 +11,160 @@ import {
   ShareAltOutlined,
   FireOutlined,
   PushpinOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
-import { mockPostDetailComments } from '@/lib/mocks/data';
-import type { CommunityPost } from '@/types';
+import { getPostDetail, deletePost } from '@/lib/api/posts';
+import { toggleLike, toggleFavorite } from '@/lib/api/interactions';
+import { createComment, listComments } from '@/lib/api/comments';
+import type { PostDetail, PostComment } from '@/types';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
 
-const MOCK_POSTS: CommunityPost[] = [
-  {
-    id: '1', title: '前端三年经验，面试字节挂了三次，求大佬指点',
-    content: '三年 Vue 经验，最近在学 React，面试总挂在系统设计上。\n\n具体来说，我面的是字节的「高级前端工程师」岗位，一共面了三轮技术面加一轮 HR 面。\n\n**第一轮**：问了 Vue 和 React 的差异、虚拟 DOM、组件通信等基础问题，答得还可以。\n\n**第二轮**：开始问系统设计，让我设计一个实时协作编辑系统，我完全没准备过这类题目，答得很差。\n\n**第三轮**：问了性能优化和工程化相关，这部分我比较熟悉，答得不错。\n\n**总结**：\n1. 系统设计是我的薄弱环节，需要系统性地学习\n2. 面试前应该多看看面经，了解面试风格\n3. 心态要稳住，不要因为一题没答好就影响后面的发挥\n\n求各位大佬指点，系统设计应该怎么准备？有没有推荐的资料？',
-    author: { id: 'u1', nickname: '前端小张', avatar: '' },
-    tags: ['面试经验', '前端'], likes: 128, comments: 45, views: 2300,
-    isPinned: true, isHot: true, createdAt: '10 分钟前',
-  },
-  {
-    id: '2', title: 'AI 模拟面试真的有用！拿到 offer 了',
-    content: '用这个工具练习了两周，面试时明显感觉更自信了，推荐大家都试试...',
-    author: { id: 'u2', nickname: '上岸的鱼', avatar: '' },
-    tags: ['经验分享', 'Offer'], likes: 256, comments: 89, views: 5600,
-    isPinned: false, isHot: true, createdAt: '2 小时前',
-  },
-  {
-    id: '3', title: '分享一套后端面试常见问题整理',
-    content: '整理了最近面试遇到的 50 道高频题...',
-    author: { id: 'u3', nickname: 'Go 夜读', avatar: '' },
-    tags: ['资源分享', '后端'], likes: 89, comments: 23, views: 1800,
-    isPinned: false, isHot: false, createdAt: '5 小时前',
-  },
-  {
-    id: '4', title: '面试时如何回答"你的缺点是什么"？',
-    content: '每次被问到这个问题都不知道怎么回答...',
-    author: { id: 'u4', nickname: '求职小白', avatar: '' },
-    tags: ['面试技巧', '求助'], likes: 67, comments: 34, views: 1200,
-    isPinned: false, isHot: false, createdAt: '昨天',
-  },
-  {
-    id: '5', title: '35 岁程序员何去何从？大龄转管理经验分享',
-    content: '做了 10 年开发，最近成功转技术管理...',
-    author: { id: 'u5', nickname: '老码农', avatar: '' },
-    tags: ['职业规划', '经验分享'], likes: 342, comments: 120, views: 8900,
-    isPinned: false, isHot: true, createdAt: '昨天',
-  },
-];
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化时间为相对时间展示 */
+function formatTime(dateStr: string): string {
+  return dayjs(dateStr).fromNow();
+}
 
 const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { message: msg } = App.useApp();
+  const { message: msg, modal } = App.useApp();
   const { user } = useAppStore();
+
+  const [post, setPost] = useState<PostDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
   const [isLiked, setIsLiked] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
-  const [likes, setLikes] = useState(0);
+  const [likesCount, setLikesCount] = useState(0);
+
+  const [comments, setComments] = useState<PostComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const post = MOCK_POSTS.find((p) => p.id === id);
-  const comments = mockPostDetailComments;
+  /** 获取帖子详情 */
+  const fetchPost = async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const data = await getPostDetail(Number(id));
+      setPost(data);
+      setIsLiked(data.is_liked);
+      setIsFavorited(data.is_favorited);
+      setLikesCount(data.likes_count);
+      setNotFound(false);
+    } catch {
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (!post) {
+  /** 获取评论列表 */
+  const fetchComments = async () => {
+    if (!id) return;
+    setCommentsLoading(true);
+    try {
+      const data = await listComments(Number(id), { limit: 20, sort: 'latest' });
+      setComments(data.items);
+    } catch {
+      msg.error('加载评论失败');
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPost();
+    fetchComments();
+  }, [id]);
+
+  /** 点赞/取消点赞 */
+  const handleLike = async () => {
+    if (!id) return;
+    try {
+      const res = await toggleLike(Number(id));
+      setIsLiked(res.is_liked);
+      setLikesCount(res.likes_count);
+    } catch {
+      msg.error('操作失败');
+    }
+  };
+
+  /** 收藏/取消收藏 */
+  const handleFavorite = async () => {
+    if (!id) return;
+    try {
+      const res = await toggleFavorite(Number(id));
+      setIsFavorited(res.is_favorited);
+      msg.success(res.is_favorited ? '已收藏' : '已取消收藏');
+    } catch {
+      msg.error('操作失败');
+    }
+  };
+
+  /** 发表评论 */
+  const handleComment = async () => {
+    if (!commentText.trim()) {
+      msg.warning('请输入评论内容');
+      return;
+    }
+    if (!id) return;
+    setSubmitting(true);
+    try {
+      await createComment(Number(id), { content: commentText.trim() });
+      msg.success('评论发表成功');
+      setCommentText('');
+      fetchComments();
+      if (post) {
+        setPost({ ...post, comments_count: post.comments_count + 1 });
+      }
+    } catch {
+      msg.error('评论失败，请稍后重试');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /** 删除帖子 */
+  const handleDelete = () => {
+    modal.confirm({
+      title: '删除帖子',
+      icon: <ExclamationCircleOutlined />,
+      content: '确定要删除这个帖子吗？删除后无法恢复。',
+      okText: '确定删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        if (!id) return;
+        try {
+          await deletePost(Number(id));
+          msg.success('帖子已删除');
+          navigate('/dashboard/community');
+        } catch {
+          msg.error('删除失败，请稍后重试');
+        }
+      },
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-24">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (notFound || !post) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <h2 className="text-lg font-bold text-[#0D1117] mb-2">帖子不存在</h2>
@@ -79,23 +176,7 @@ const PostDetailPage = () => {
     );
   }
 
-  const handleLike = () => {
-    if (isLiked) {
-      setLikes((prev) => prev - 1);
-    } else {
-      setLikes((prev) => prev + 1);
-    }
-    setIsLiked(!isLiked);
-  };
-
-  const handleComment = () => {
-    if (!commentText.trim()) {
-      msg.warning('请输入评论内容');
-      return;
-    }
-    msg.success('评论发表成功');
-    setCommentText('');
-  };
+  const isAuthor = user?.id === String(post.author?.id);
 
   return (
     <div className="max-w-[800px]">
@@ -111,8 +192,8 @@ const PostDetailPage = () => {
 
       <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
         <div className="flex items-center gap-2 mb-3">
-          {post.isPinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
-          {post.isHot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热门</span>}
+          {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
+          {post.is_hot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热门</span>}
         </div>
 
         <h1 className="text-xl font-extrabold text-[#0D1117] mb-4 leading-snug">
@@ -123,17 +204,25 @@ const PostDetailPage = () => {
           <Avatar
             size={40}
             className="!bg-[#0D1117] flex-shrink-0 !text-base cursor-pointer"
-            onClick={() => navigate(`/dashboard/user/${post.author.id}`)}
+            onClick={() => navigate(`/dashboard/user/${post.author?.id}`)}
           >
-            {post.author.nickname[0]}
+            {post.author?.nickname?.[0] || '?'}
           </Avatar>
-          <div>
+          <div className="flex-1">
             <div
               className="text-sm font-semibold text-[#0D1117] cursor-pointer hover:text-[#FF6B35]"
-              onClick={() => navigate(`/dashboard/user/${post.author.id}`)}
-            >{post.author.nickname}</div>
-            <div className="text-xs text-[#8B949E]">{post.createdAt}</div>
+              onClick={() => navigate(`/dashboard/user/${post.author?.id}`)}
+            >{post.author?.nickname || '未知用户'}</div>
+            <div className="text-xs text-[#8B949E]">{formatTime(post.created_at)}</div>
           </div>
+          {isAuthor && (
+            <button
+              onClick={handleDelete}
+              className="text-xs text-[#8B949E] hover:text-[#CF222E] transition-colors flex items-center gap-1"
+            >
+              <DeleteOutlined /> 删除
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2 mb-5">
@@ -148,13 +237,13 @@ const PostDetailPage = () => {
 
         <div className="flex items-center gap-4 text-sm text-[#8B949E] pb-5 border-b border-[#F0F2F5]">
           <span className="inline-flex items-center gap-1">
-            <LikeOutlined /> {post.likes + likes}
+            <LikeOutlined /> {likesCount}
           </span>
           <span className="inline-flex items-center gap-1">
-            <MessageOutlined /> {post.comments}
+            <MessageOutlined /> {post.comments_count}
           </span>
           <span className="inline-flex items-center gap-1">
-            {post.views} 次浏览
+            {post.views_count} 次浏览
           </span>
         </div>
 
@@ -179,10 +268,7 @@ const PostDetailPage = () => {
             </button>
           </div>
           <button
-            onClick={() => {
-              setIsFavorited(!isFavorited);
-              msg.success(isFavorited ? '已取消收藏' : '已收藏');
-            }}
+            onClick={handleFavorite}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               isFavorited
                 ? 'bg-[#FFF8E6] text-[#BF8700]'
@@ -200,36 +286,44 @@ const PostDetailPage = () => {
           <MessageOutlined className="text-[#FF6B35]" />
           评论 ({comments.length})
         </h3>
-        <div className="space-y-4">
-          {comments.map((comment) => (
-            <div key={comment.id} className="flex gap-3">
-              <Avatar size={32} className="!bg-[#0D1117] flex-shrink-0 !text-xs">
-                {comment.authorName[0]}
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-[#0D1117]">{comment.authorName}</span>
-                  <span className="text-xs text-[#8B949E]">{comment.createdAt}</span>
-                </div>
-                <p className="text-sm text-[#0D1117] leading-relaxed">{comment.content}</p>
-                <div className="flex items-center gap-3 mt-2">
-                  <button
-                    onClick={() => msg.info('点赞功能即将上线')}
-                    className="text-xs text-[#8B949E] hover:text-[#FF6B35] transition-colors inline-flex items-center gap-1"
-                  >
-                    <LikeOutlined /> {comment.likes}
-                  </button>
-                  <button
-                    onClick={() => msg.info('回复功能即将上线')}
-                    className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors"
-                  >
-                    回复
-                  </button>
+        {commentsLoading ? (
+          <div className="flex justify-center py-8">
+            <Spin size="small" />
+          </div>
+        ) : comments.length === 0 ? (
+          <Empty description="暂无评论，快来抢沙发" className="py-4" />
+        ) : (
+          <div className="space-y-4">
+            {comments.map((comment) => (
+              <div key={comment.id} className="flex gap-3">
+                <Avatar size={32} className="!bg-[#0D1117] flex-shrink-0 !text-xs">
+                  {comment.author?.nickname?.[0] || '?'}
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-[#0D1117]">{comment.author?.nickname || '未知用户'}</span>
+                    <span className="text-xs text-[#8B949E]">{formatTime(comment.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-[#0D1117] leading-relaxed">{comment.content}</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      onClick={() => msg.info('评论点赞功能即将上线')}
+                      className="text-xs text-[#8B949E] hover:text-[#FF6B35] transition-colors inline-flex items-center gap-1"
+                    >
+                      <LikeOutlined /> {comment.likes_count}
+                    </button>
+                    <button
+                      onClick={() => msg.info('回复功能即将上线')}
+                      className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors"
+                    >
+                      回复
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
@@ -246,10 +340,10 @@ const PostDetailPage = () => {
             <div className="flex justify-end mt-3">
               <button
                 onClick={handleComment}
-                disabled={!commentText.trim()}
+                disabled={!commentText.trim() || submitting}
                 className="btn-flame !py-2 !px-5 !text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                发表评论
+                {submitting ? '发表中...' : '发表评论'}
               </button>
             </div>
           </div>

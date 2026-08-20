@@ -1,4 +1,4 @@
-import type { InterviewQuestion, InterviewReport, UserBrief, PostComment, SystemMessage, DmConversation, UserProfile } from '@/types';
+import type { InterviewQuestion, InterviewReport, UserBrief, SystemMessage, DmConversation } from '@/types';
 
 export const mockFollowingList: UserBrief[] = [
   { id: 'u2', nickname: '上岸的鱼', avatar: '', bio: '已拿到大厂 offer，分享面试经验', isFollowing: true },
@@ -16,49 +16,6 @@ export const mockFollowersList: UserBrief[] = [
   { id: 'u11', nickname: '面试达人', avatar: '', bio: '已帮助 100+ 人通过面试', isFollowing: false, isFollowedBy: true },
   { id: 'u12', nickname: '全栈小李', avatar: '', bio: '全栈开发，热爱技术分享', isFollowing: true, isFollowedBy: false },
   { id: 'u5', nickname: '老码农', avatar: '', bio: '10 年开发经验，技术管理方向', isFollowing: true, isFollowedBy: true },
-];
-
-export const mockPostDetailComments: PostComment[] = [
-  {
-    id: 'c1',
-    postId: '1',
-    authorId: 'u2',
-    authorName: '上岸的鱼',
-    authorAvatar: '',
-    content: '深有同感！我也是面了好几次才过，建议多刷 leetcode，系统设计可以看看 DDIA。',
-    likes: 23,
-    createdAt: '5 分钟前',
-  },
-  {
-    id: 'c2',
-    postId: '1',
-    authorId: 'u3',
-    authorName: 'Go 夜读',
-    authorAvatar: '',
-    content: '可以参考一下我这个面经整理，里面有很多系统设计的高频题。',
-    likes: 15,
-    createdAt: '15 分钟前',
-  },
-  {
-    id: 'c3',
-    postId: '1',
-    authorId: 'u4',
-    authorName: '求职小白',
-    authorAvatar: '',
-    content: '加油！同是天涯沦落人😭',
-    likes: 8,
-    createdAt: '30 分钟前',
-  },
-  {
-    id: 'c4',
-    postId: '1',
-    authorId: 'u5',
-    authorName: '老码农',
-    authorAvatar: '',
-    content: '三年经验面字节确实有难度，建议先面一些中小厂积累经验再冲大厂。',
-    likes: 32,
-    createdAt: '1 小时前',
-  },
 ];
 
 export const mockQuestions: InterviewQuestion[] = [
@@ -376,7 +333,7 @@ export const mockDmConversations: DmConversation[] = [
   },
 ];
 
-export const mockUserProfiles: Record<string, UserProfile> = {
+export const mockUserProfiles: Record<string, Record<string, unknown>> = {
   u2: {
     id: 'u2',
     nickname: '上岸的鱼',

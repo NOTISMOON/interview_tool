@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Tabs, Avatar, Modal, Input, Upload, Tag } from 'antd';
+import { App, Tabs, Avatar, Modal, Input, Upload, Tag, Spin, Empty } from 'antd';
 import {
   FireOutlined,
   ClockCircleOutlined,
@@ -13,52 +13,32 @@ import {
   PictureOutlined,
   CloseOutlined,
 } from '@ant-design/icons';
-import type { CommunityPost } from '@/types';
+import { createPost, listPosts } from '@/lib/api/posts';
+import type { PostListItem } from '@/types';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
 
-const MOCK_POSTS: CommunityPost[] = [
-  {
-    id: '1', title: '前端三年经验，面试字节挂了三次，求大佬指点',
-    content: '三年 Vue 经验，最近在学 React，面试总挂在系统设计上...',
-    author: { id: 'u7', nickname: '前端小张', avatar: '' },
-    tags: ['面试经验', '前端'], likes: 128, comments: 45, views: 2300,
-    isPinned: true, isHot: true, createdAt: '10 分钟前',
-  },
-  {
-    id: '2', title: 'AI 模拟面试真的有用！拿到 offer 了',
-    content: '用这个工具练习了两周，面试时明显感觉更自信了...',
-    author: { id: 'u2', nickname: '上岸的鱼', avatar: '' },
-    tags: ['经验分享', 'Offer'], likes: 256, comments: 89, views: 5600,
-    isPinned: false, isHot: true, createdAt: '2 小时前',
-  },
-  {
-    id: '3', title: '分享一套后端面试常见问题整理',
-    content: '整理了最近面试遇到的 50 道高频题...',
-    author: { id: 'u3', nickname: 'Go 夜读', avatar: '' },
-    tags: ['资源分享', '后端'], likes: 89, comments: 23, views: 1800,
-    isPinned: false, isHot: false, createdAt: '5 小时前',
-  },
-  {
-    id: '4', title: '面试时如何回答"你的缺点是什么"？',
-    content: '每次被问到这个问题都不知道怎么回答...',
-    author: { id: 'u4', nickname: '求职小白', avatar: '' },
-    tags: ['面试技巧', '求助'], likes: 67, comments: 34, views: 1200,
-    isPinned: false, isHot: false, createdAt: '昨天',
-  },
-  {
-    id: '5', title: '35 岁程序员何去何从？大龄转管理经验分享',
-    content: '做了 10 年开发，最近成功转技术管理...',
-    author: { id: 'u5', nickname: '老码农', avatar: '' },
-    tags: ['职业规划', '经验分享'], likes: 342, comments: 120, views: 8900,
-    isPinned: false, isHot: true, createdAt: '昨天',
-  },
-];
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化时间为相对时间展示 */
+function formatTime(dateStr: string): string {
+  return dayjs(dateStr).fromNow();
+}
 
 const CommunityPage = () => {
   const { message: msg } = App.useApp();
-  const [activeTab, setActiveTab] = useState('hot');
+  const [activeTab, setActiveTab] = useState('latest');
   const navigate = useNavigate();
 
+  const [posts, setPosts] = useState<PostListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [hasMore, setHasMore] = useState(true);
+
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
   const [postTags, setPostTags] = useState<string[]>([]);
@@ -67,6 +47,42 @@ const CommunityPage = () => {
 
   const availableTags = ['面试经验', '经验分享', '资源分享', '前端', '后端', '面试技巧', '求助', '职业规划', 'Offer'];
 
+  /** 获取帖子列表 */
+  const fetchPosts = useCallback(async (sort: string, resetCursor?: boolean) => {
+    setLoading(true);
+    try {
+      const cur = resetCursor ? undefined : cursor;
+      const res = await listPosts({
+        sort: sort as 'latest' | 'hot' | 'pinned',
+        cursor: cur,
+        limit: 20,
+      });
+      if (resetCursor || cur === undefined) {
+        setPosts(res.items);
+      } else {
+        setPosts((prev) => [...prev, ...res.items]);
+      }
+      setCursor(res.next_cursor ?? undefined);
+      setHasMore(res.next_cursor !== null);
+    } catch {
+      msg.error('加载帖子列表失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [cursor, msg]);
+
+  useEffect(() => {
+    fetchPosts(activeTab, true);
+  }, [activeTab]);
+
+  /** 切换Tab */
+  const handleTabChange = (key: string) => {
+    setActiveTab(key);
+    setCursor(undefined);
+    setHasMore(true);
+  };
+
+  /** 添加标签 */
   const handleAddTag = (tag: string) => {
     if (!postTags.includes(tag) && postTags.length < 5) {
       setPostTags([...postTags, tag]);
@@ -74,15 +90,27 @@ const CommunityPage = () => {
     setTagInput('');
   };
 
+  /** 移除标签 */
   const handleRemoveTag = (tag: string) => {
     setPostTags(postTags.filter((t) => t !== tag));
   };
 
+  /** 移除图片 */
   const handleRemoveImage = (idx: number) => {
     setPostImages(postImages.filter((_, i) => i !== idx));
   };
 
-  const handlePublish = () => {
+  /** 重置发帖表单 */
+  const resetForm = () => {
+    setPostTitle('');
+    setPostContent('');
+    setPostTags([]);
+    setPostImages([]);
+    setTagInput('');
+  };
+
+  /** 发布帖子 */
+  const handlePublish = async () => {
     if (!postTitle.trim()) {
       msg.warning('请输入帖子标题');
       return;
@@ -91,12 +119,24 @@ const CommunityPage = () => {
       msg.warning('请输入帖子内容');
       return;
     }
-    msg.success('帖子发布成功！');
+    setPublishing(true);
+    try {
+      await createPost({ title: postTitle.trim(), content: postContent.trim(), tags: postTags });
+      msg.success('帖子发布成功！');
+      setCreateModalOpen(false);
+      resetForm();
+      fetchPosts(activeTab, true);
+    } catch {
+      msg.error('发布失败，请稍后重试');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  /** 关闭发帖弹窗 */
+  const handleCloseModal = () => {
     setCreateModalOpen(false);
-    setPostTitle('');
-    setPostContent('');
-    setPostTags([]);
-    setPostImages([]);
+    resetForm();
   };
 
   const filteredTags = tagInput
@@ -115,13 +155,12 @@ const CommunityPage = () => {
 
         <Tabs
           activeKey={activeTab}
-          onChange={setActiveTab}
+          onChange={handleTabChange}
           className="mb-4"
           items={[
-            { key: 'hot', label: '热门', icon: <FireOutlined /> },
             { key: 'latest', label: '最新', icon: <ClockCircleOutlined /> },
-            { key: 'tips', label: '面经', icon: <BulbOutlined /> },
-            { key: 'qa', label: '问答', icon: <QuestionCircleOutlined /> },
+            { key: 'hot', label: '热门', icon: <FireOutlined /> },
+            { key: 'pinned', label: '置顶', icon: <PushpinOutlined /> },
           ].map((tab) => ({
             key: tab.key,
             label: <span className="flex items-center gap-1.5 text-sm">{tab.icon}{tab.label}</span>,
@@ -130,65 +169,76 @@ const CommunityPage = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3">
-        {MOCK_POSTS.filter((p) => {
-          if (activeTab === 'hot') return p.isHot;
-          if (activeTab === 'tips') return p.tags.includes('面试经验') || p.tags.includes('经验分享');
-          if (activeTab === 'qa') return p.tags.includes('求助') || p.tags.includes('问答');
-          return true;
-        }).map((post) => (
-          <div
-            key={post.id}
-            className="bg-white border border-[#E1E4E8] rounded-xl p-5 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
-            onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
-          >
-            <div className="flex items-start gap-3">
-              <Avatar
-                  size={36}
-                  className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
-                  onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
-                >{post.author.nickname[0]}</Avatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1.5">
-                  {post.isPinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
-                  <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
-                  {post.isHot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热</span>}
-                </div>
-                <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-xs text-[#8B949E]">
-                    <span
-                    className="cursor-pointer hover:text-[#FF6B35]"
-                    onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author.id}`); }}
-                  >{post.author.nickname}</span>
-                    <span>{post.createdAt}</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-[#8B949E]">
-                    <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes}</span>
-                    <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments}</span>
+        {loading && posts.length === 0 ? (
+          <div className="flex justify-center py-16">
+            <Spin size="large" />
+          </div>
+        ) : posts.length === 0 ? (
+          <Empty description="暂无帖子" className="py-16" />
+        ) : (
+          <>
+            {posts.map((post) => (
+              <div
+                key={post.id}
+                className="bg-white border border-[#E1E4E8] rounded-xl p-5 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
+              >
+                <div className="flex items-start gap-3">
+                  <Avatar
+                    size={36}
+                    className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
+                    onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
+                  >{post.author?.nickname?.[0] || '?'}</Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
+                      <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
+                      {post.is_hot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热</span>}
+                    </div>
+                    <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-xs text-[#8B949E]">
+                        <span
+                          className="cursor-pointer hover:text-[#FF6B35]"
+                          onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
+                        >{post.author?.nickname || '未知用户'}</span>
+                        <span>{formatTime(post.created_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-[#8B949E]">
+                        <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes_count}</span>
+                        <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments_count}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
+            ))}
+            {hasMore && (
+              <div className="flex justify-center py-4">
+                <button
+                  onClick={() => fetchPosts(activeTab)}
+                  disabled={loading}
+                  className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                >
+                  {loading ? '加载中...' : '加载更多'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <Modal
         title="发布帖子"
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          setPostTitle('');
-          setPostContent('');
-          setPostTags([]);
-          setPostImages([]);
-        }}
+        onCancel={handleCloseModal}
         onOk={handlePublish}
         okText="发布"
         cancelText="取消"
         width={640}
-        okButtonProps={{ className: '!bg-[#FF6B35] !border-[#FF6B35] hover:!bg-[#E85D26]' }}
+        okButtonProps={{ className: '!bg-[#FF6B35] !border-[#FF6B35] hover:!bg-[#E85D26]', loading: publishing }}
         destroyOnClose
+        confirmLoading={publishing}
       >
         <div className="py-2 space-y-4">
           <div>
@@ -197,7 +247,7 @@ const CommunityPage = () => {
               value={postTitle}
               onChange={(e) => setPostTitle(e.target.value)}
               placeholder="请输入帖子标题（必填）"
-              maxLength={100}
+              maxLength={255}
               showCount
               className="!rounded-lg"
             />
@@ -210,7 +260,7 @@ const CommunityPage = () => {
               onChange={(e) => setPostContent(e.target.value)}
               placeholder="分享你的面试经验、问题或想法..."
               rows={5}
-              maxLength={2000}
+              maxLength={5000}
               showCount
               className="!rounded-lg"
             />

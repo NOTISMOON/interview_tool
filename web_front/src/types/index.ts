@@ -17,6 +17,6 @@ export {
   QUESTION_TYPE_LABEL,
   QUESTION_TYPE_COLOR,
 } from './interview';
-export type { Post, PostComment, CommunityPost, CommunityState } from './community';
+export type { Post, PostDetail, PostListItem, PostListData, PostComment, CommunityPost, CommunityState, PostAuthor } from './community';
 export type { Message, SystemMessage, MessageType, RelatedContent, DmConversation, DmMessage } from './message';
 export { MESSAGE_TYPE_LABEL } from './message';
