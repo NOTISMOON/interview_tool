@@ -21,7 +21,6 @@ out/
 *.swp
 *.swo
 *~
-.trae/
 .codegraph/
 .agents/
 skills-lock.json
