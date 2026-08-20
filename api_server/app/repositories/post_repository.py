@@ -16,7 +16,16 @@ class PostRepository:
     计数更新使用 func.greatest(..., 0) 防 UNSIGNED 溢出。
     """
 
-    def create(self, db: Session, *, author_id: int, title: str, content: str) -> Post:
+    def create(
+        self,
+        db: Session,
+        *,
+        author_id: int,
+        title: str,
+        content: str,
+        cover_url: str | None = None,
+        images: list[str] | None = None,
+    ) -> Post:
         """创建帖子并返回ORM对象。
 
         Args:
@@ -24,11 +33,19 @@ class PostRepository:
             author_id: 作者用户ID。
             title: 帖子标题。
             content: 帖子正文。
+            cover_url: 封面图COS URL。
+            images: 帖子图片COS URL列表。
 
         Returns:
             创建成功的Post对象（id已回填）。
         """
-        post = Post(author_id=author_id, title=title, content=content)
+        post = Post(
+            author_id=author_id,
+            title=title,
+            content=content,
+            cover_url=cover_url,
+            images=images if images else None,
+        )
         db.add(post)
         db.flush()
         return post

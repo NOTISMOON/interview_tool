@@ -13,6 +13,8 @@ class PostCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=255, description="帖子标题")
     content: str = Field(..., min_length=1, description="帖子正文")
+    cover_url: str | None = Field(None, max_length=512, description="封面图COS URL（先通过上传接口获取）")
+    images: list[str] = Field(default_factory=list, max_length=9, description="帖子图片COS URL列表，最多9张")
     tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_COUNT, description="标签列表，最多5个")
 
     @field_validator("tags")
@@ -30,6 +32,8 @@ class PostUpdate(BaseModel):
 
     title: str | None = Field(None, min_length=1, max_length=255, description="帖子标题")
     content: str | None = Field(None, min_length=1, description="帖子正文")
+    cover_url: str | None = Field(None, max_length=512, description="封面图COS URL")
+    images: list[str] | None = Field(None, max_length=9, description="帖子图片COS URL列表，最多9张")
     tags: list[str] | None = Field(None, max_length=MAX_TAGS_COUNT, description="标签列表")
 
     @field_validator("tags")
@@ -46,7 +50,7 @@ class PostUpdate(BaseModel):
     @model_validator(mode="after")
     def check_not_empty(self) -> "PostUpdate":
         """校验请求至少包含一个待更新字段，避免空更新。"""
-        if self.title is None and self.content is None and self.tags is None:
+        if self.title is None and self.content is None and self.tags is None and self.cover_url is None and self.images is None:
             raise ValueError("至少需要提供一个待更新字段")
         return self
 
@@ -68,6 +72,8 @@ class PostResponse(BaseModel):
     author: PostAuthor | None = Field(None, description="作者信息（由Service层组装）")
     title: str
     content: str
+    cover_url: str | None = Field(None, description="封面图COS URL")
+    images: list[str] = Field(default_factory=list, description="帖子图片COS URL列表")
     tags: list[str] = Field(default_factory=list, description="标签列表")
     likes_count: int = Field(0, description="点赞数")
     comments_count: int = Field(0, description="评论数")
@@ -87,6 +93,8 @@ class PostListItem(BaseModel):
     author: PostAuthor | None = Field(None, description="作者信息")
     title: str
     content_preview: str = Field("", description="正文摘要（前200字）")
+    cover_url: str | None = Field(None, description="封面图COS URL")
+    images_count: int = Field(0, description="图片数量")
     tags: list[str] = Field(default_factory=list, description="标签列表")
     likes_count: int = Field(0, description="点赞数")
     comments_count: int = Field(0, description="评论数")

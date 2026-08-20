@@ -30,6 +30,8 @@ class Post(Base):
     author_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="作者 ID")
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="帖子标题")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="帖子正文")
+    cover_url: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="封面图COS URL")
+    images: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="帖子内图片COS URL列表")
     tags: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="标签列表（展示用冗余缓存）")
     likes_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0"), comment="点赞数"

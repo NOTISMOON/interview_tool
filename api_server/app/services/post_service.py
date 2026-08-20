@@ -53,7 +53,12 @@ class PostService:
         with db.begin():
             # ① 创建帖子
             post = post_repository.create(
-                db, author_id=author_id, title=data.title, content=data.content
+                db,
+                author_id=author_id,
+                title=data.title,
+                content=data.content,
+                cover_url=data.cover_url,
+                images=data.images if data.images else None,
             )
             post_id = post.id
 
@@ -125,6 +130,10 @@ class PostService:
             update_fields["title"] = data.title
         if data.content is not None:
             update_fields["content"] = data.content
+        if data.cover_url is not None:
+            update_fields["cover_url"] = data.cover_url
+        if data.images is not None:
+            update_fields["images"] = json.dumps(data.images, ensure_ascii=False)
         if data.tags is not None:
             update_fields["tags"] = json.dumps(data.tags, ensure_ascii=False)
 
@@ -309,6 +318,8 @@ class PostService:
             author=author_info,
             title=post.title,
             content=post.content,
+            cover_url=post.cover_url,
+            images=post.images if isinstance(post.images, list) else [],
             tags=tags if tags else (post.tags if isinstance(post.tags, list) else []),
             likes_count=post.likes_count,
             comments_count=post.comments_count,
@@ -354,6 +365,8 @@ class PostService:
             author=author_info,
             title=post.title,
             content_preview=content_preview,
+            cover_url=post.cover_url,
+            images_count=len(post.images) if isinstance(post.images, list) else 0,
             tags=resolved_tags,
             likes_count=post.likes_count,
             comments_count=post.comments_count,

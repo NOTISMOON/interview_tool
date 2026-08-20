@@ -41,7 +41,7 @@ def _get_user_id(payload: dict) -> int:
 @router.get("/sts-token", response_model=StsTokenResponse, summary="获取STS临时密钥")
 def get_sts_token(
     file_name: str = Query(..., min_length=1, max_length=255, description="原始文件名"),
-    file_type: str = Query(..., description="文件用途：resume/avatar"),
+    file_type: str = Query(..., description="文件用途：resume/avatar/post_image"),
     file_size: int = Query(..., gt=0, description="文件大小（字节）"),
     content_type: str = Query(..., max_length=100, description="文件MIME类型"),
     payload: dict = Depends(get_current_user),
@@ -121,7 +121,7 @@ def upload_callback(
 
 @router.get("/records", response_model=UploadRecordListResponse, summary="查询上传记录列表")
 def list_upload_records(
-    file_type: str | None = Query(None, description="按用途过滤：resume/avatar，不传查全部"),
+    file_type: str | None = Query(None, description="按用途过滤：resume/avatar/post_image，不传查全部"),
     page: int = Query(1, ge=1, le=1000, description="页码（从1开始）"),
     page_size: int = Query(20, ge=1, le=100, description="页大小（1-100）"),
     payload: dict = Depends(get_current_user),
@@ -139,8 +139,8 @@ def list_upload_records(
     Returns:
         UploadRecordListResponse: 记录列表 + 总数 + 分页信息。
     """
-    if file_type is not None and file_type not in ("resume", "avatar"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file_type 仅支持 resume / avatar")
+    if file_type is not None and file_type not in ("resume", "avatar", "post_image"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file_type 仅支持 resume / avatar / post_image")
     return upload_service.list_records(db, _get_user_id(payload), file_type, page, page_size)
 
 

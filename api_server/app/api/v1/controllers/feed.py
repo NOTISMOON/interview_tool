@@ -63,6 +63,8 @@ def _assemble_feed_item(
         author=author_info,
         title=post.title,
         content_preview=content_preview,
+        cover_url=post.cover_url,
+        images_count=len(post.images) if isinstance(post.images, list) else 0,
         tags=tags if tags else [],
         likes_count=post.likes_count,
         comments_count=post.comments_count,

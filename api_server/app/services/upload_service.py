@@ -113,8 +113,8 @@ class UploadService:
             raise DailyLimitExceededError("今日上传次数已用完，请明天再试")
 
         # 4. 生成COS Key：{type_dir}/{user_id}/{uuid}.{ext}
-        # resume → resumes/ 目录，avatar → images/ 目录
-        if req.file_type == "avatar":
+        # avatar → images/ 目录，post_image → images/ 目录，resume → resumes/ 目录
+        if req.file_type in ("avatar", "post_image"):
             type_dir = "images"
         else:
             type_dir = f"{req.file_type}s"
