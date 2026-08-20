@@ -55,10 +55,13 @@ class CommentService:
         post = post_repository.get_by_id(db, data.post_id)
         if post is None:
             raise PostNotFoundError("帖子不存在")
+        post_author_id = post.author_id
 
         is_reply = data.root_id is not None
 
         now = datetime.now()
+        # 结束校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         with db.begin():
             # ① 创建评论
             comment = comment_repository.create(
@@ -97,14 +100,14 @@ class CommentService:
             )
 
             # ⑤ 通知事件：通知帖子作者（非自己评论自己）
-            if post.author_id != author_id:
+            if post_author_id != author_id:
                 sync_outbox_repository.insert_event(
                     db,
                     event_type="notification.created",
                     aggregate_type="message",
-                    aggregate_id=str(post.author_id),
+                    aggregate_id=str(post_author_id),
                     payload={
-                        "recipient_id": post.author_id,
+                        "recipient_id": post_author_id,
                         "type": 2,  # MESSAGE_TYPE_COMMENT
                         "title": "新评论",
                         "content": f"有人评论了你的帖子",
@@ -115,7 +118,7 @@ class CommentService:
                 )
 
             # ⑥ 如果是回复且被回复者不是帖子作者，额外通知被回复者
-            if is_reply and data.reply_user_id is not None and data.reply_user_id != post.author_id:
+            if is_reply and data.reply_user_id is not None and data.reply_user_id != post_author_id:
                 sync_outbox_repository.insert_event(
                     db,
                     event_type="notification.created",
@@ -150,20 +153,26 @@ class CommentService:
         if comment is None or comment.author_id != user_id:
             raise CommentNotFoundError("评论不存在")
 
-        is_reply = comment.root_id is not None
+        # 提前提取属性，rollback会使ORM对象过期
+        comment_post_id = comment.post_id
+        comment_root_id = comment.root_id
+        comment_author_id = comment.author_id
+        is_reply = comment_root_id is not None
         now = datetime.now()
 
+        # 结束校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         with db.begin():
             deleted = comment_repository.soft_delete(db, comment_id)
             if not deleted:
                 raise CommentNotFoundError("评论不存在")
 
             # ① 帖子评论数-1
-            post_repository.decrement_comments_count(db, comment.post_id)
+            post_repository.decrement_comments_count(db, comment_post_id)
 
             # ② 如果是回复，一级评论回复数-1
             if is_reply:
-                comment_repository.decrement_reply_count(db, comment.root_id)
+                comment_repository.decrement_reply_count(db, comment_root_id)
 
             # ③ Outbox事件：comment.deleted
             sync_outbox_repository.insert_event(
@@ -173,16 +182,16 @@ class CommentService:
                 aggregate_id=str(comment_id),
                 payload={
                     "comment_id": comment_id,
-                    "post_id": comment.post_id,
-                    "root_id": comment.root_id,
-                    "author_id": comment.author_id,
+                    "post_id": comment_post_id,
+                    "root_id": comment_root_id,
+                    "author_id": comment_author_id,
                     "is_reply": is_reply,
                     "deleted_at": now.strftime("%Y-%m-%d %H:%M:%S"),
                     "deleted_at_ms": int(now.timestamp() * 1000),
                 },
             )
 
-        logger.info("评论删除成功 comment_id=%s post_id=%s", comment_id, comment.post_id)
+        logger.info("评论删除成功 comment_id=%s post_id=%s", comment_id, comment_post_id)
 
     # ------------------------------------------------------------------
     # 读路径：评论列表

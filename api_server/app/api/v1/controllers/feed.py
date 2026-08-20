@@ -21,12 +21,12 @@ def _get_user_id(payload: dict) -> int:
     """从JWT payload中提取用户ID。
 
     Args:
-        payload: JWT解析后的字典。
+        payload: JWT解析后的字典（sub字段为字符串用户ID）。
 
     Returns:
         用户ID（int）。
     """
-    return int(payload.get("user_id", 0))
+    return int(payload["sub"])
 
 
 def _assemble_feed_item(

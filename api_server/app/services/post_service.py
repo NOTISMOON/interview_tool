@@ -129,6 +129,8 @@ class PostService:
             update_fields["tags"] = json.dumps(data.tags, ensure_ascii=False)
 
         if update_fields:
+            # 结束校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+            db.rollback()
             with db.begin():
                 post_repository.update(db, post_id, update_fields)
                 # 标签全量替换
@@ -157,8 +159,11 @@ class PostService:
         post = post_repository.get_by_id(db, post_id)
         if post is None or post.author_id != author_id:
             raise PostNotFoundError("帖子不存在")
+        post_author_id = post.author_id
 
         now = datetime.now()
+        # 结束校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         with db.begin():
             deleted = post_repository.soft_delete(db, post_id)
             if not deleted:
@@ -172,21 +177,21 @@ class PostService:
                 aggregate_id=str(post_id),
                 payload={
                     "post_id": post_id,
-                    "author_id": post.author_id,
+                    "author_id": post_author_id,
                     "deleted_at": now.strftime("%Y-%m-%d %H:%M:%S"),
                     "deleted_at_ms": int(now.timestamp() * 1000),
                 },
             )
 
             # ② 作者发帖数-1
-            post_repository.decrement_posts_count(db, post.author_id)
+            post_repository.decrement_posts_count(db, post_author_id)
 
         # 事务提交后失效缓存
         self._invalidate_detail_cache(cache_client, post_id)
         from app.services.user_service import user_service
 
-        user_service.invalidate_profile_cache(cache_client, post.author_id)
-        logger.info("帖子删除成功 post_id=%s author_id=%s", post_id, post.author_id)
+        user_service.invalidate_profile_cache(cache_client, post_author_id)
+        logger.info("帖子删除成功 post_id=%s author_id=%s", post_id, post_author_id)
 
     # ------------------------------------------------------------------
     # 读路径：详情/列表
@@ -270,12 +275,14 @@ class PostService:
 
     def _assemble_post_response(
         self,
+        db: Session,
         post: Post,
         current_user_id: int | None = None,
     ) -> PostResponse:
         """将ORM Post对象组装为PostResponse（含作者信息、标签、互动状态）。
 
         Args:
+            db: 数据库同步会话。
             post: Post ORM对象。
             current_user_id: 当前登录用户ID。
 
@@ -284,18 +291,18 @@ class PostService:
         """
         from app.schemas.post import PostAuthor
 
-        author = sync_user_repository.get_by_id(post.author_id)
+        author = sync_user_repository.get_by_id(db, post.author_id)
         author_info = None
         if author:
             author_info = PostAuthor(id=author.id, nickname=author.nickname, avatar=author.avatar)
 
-        tags = post_repository.get_tags_by_post_id(post.id)
+        tags = post_repository.get_tags_by_post_id(db, post.id)
 
         is_liked = False
         is_favorited = False
         if current_user_id is not None:
-            is_liked = self._check_is_liked(current_user_id, post.id)
-            is_favorited = self._check_is_favorited(current_user_id, post.id)
+            is_liked = self._check_is_liked(db, current_user_id, post.id)
+            is_favorited = self._check_is_favorited(db, current_user_id, post.id)
 
         return PostResponse(
             id=post.id,

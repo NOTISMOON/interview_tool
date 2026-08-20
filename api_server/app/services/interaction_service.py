@@ -82,6 +82,8 @@ class InteractionService:
             {"is_liked": True, "likes_count": int}。
         """
         now = datetime.now()
+        # 结束前置校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         try:
             with db.begin():
                 like_repository.create_like(db, post_id, user_id)
@@ -146,6 +148,8 @@ class InteractionService:
             {"is_liked": False, "likes_count": int}。
         """
         now = datetime.now()
+        # 结束前置校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         with db.begin():
             deleted = like_repository.remove_like(db, post_id, user_id)
             if not deleted:
@@ -224,6 +228,8 @@ class InteractionService:
             {"is_favorited": True}。
         """
         now = datetime.now()
+        # 结束前置校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         try:
             with db.begin():
                 favorite_repository.create_favorite(db, post_id, user_id)
@@ -261,6 +267,8 @@ class InteractionService:
             {"is_favorited": False}。
         """
         now = datetime.now()
+        # 结束前置校验查询产生的隐式事务（SQLAlchemy 2.0 autobegin），否则 db.begin() 报错
+        db.rollback()
         with db.begin():
             deleted = favorite_repository.remove_favorite(db, post_id, user_id)
             if not deleted:

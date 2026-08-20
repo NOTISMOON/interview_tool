@@ -126,8 +126,8 @@ class FeedCache:
         user_id: int,
         cursor: int | None = None,
         limit: int = 20,
-    ) -> list[int]:
-        """从缓存读取用户Feed（按score倒序，支持游标分页）。
+    ) -> tuple[list[int], int | None]:
+        """从缓存读取用户Feed（按score倒序，score游标分页）。
 
         Args:
             cache_client: 同步Redis客户端。
@@ -136,15 +136,17 @@ class FeedCache:
             limit: 每页条数。
 
         Returns:
-            帖子ID列表（按时间倒序）。
+            (帖子ID列表, 下一页游标score)，游标为None表示没有更多。
         """
         key = KEY_FEED_USER.format(user_id=user_id)
         if not cache_client.exists(key):
-            return []
+            return [], None
 
         max_score = cursor - 1 if cursor else "+inf"
-        members = cache_client.zrevrangebyscore(key, max_score, "-inf", start=0, num=limit)
-        return [int(m) for m in members]
+        members = cache_client.zrevrangebyscore(key, max_score, "-inf", start=0, num=limit, withscores=True)
+        post_ids = [int(m) for m, _ in members]
+        next_cursor = int(members[-1][1]) if len(members) == limit else None
+        return post_ids, next_cursor
 
     def get_inbox(
         self,
@@ -195,6 +197,18 @@ class FeedCache:
             cache_client.delete(KEY_FEED_USER.format(user_id=user_id))
         except Exception:
             logger.exception("Feed缓存失效失败 user_id=%s", user_id)
+
+    def clear_inbox(self, cache_client: redis.Redis, user_id: int) -> None:
+        """清空用户收件箱（内容已合并进Feed缓存后调用）。
+
+        Args:
+            cache_client: 同步Redis客户端。
+            user_id: 用户ID。
+        """
+        try:
+            cache_client.delete(KEY_FEED_INBOX.format(user_id=user_id))
+        except Exception:
+            logger.exception("清空Feed收件箱失败 user_id=%s", user_id)
 
 
 # 模块级单例

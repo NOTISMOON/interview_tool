@@ -36,29 +36,37 @@ class FeedService:
         cursor: int | None = None,
         limit: int = 20,
     ) -> tuple[list[int], int | None]:
-        """获取用户Feed（Pull模式，游标分页）。
+        """获取用户Feed（Push-Pull混合，score游标分页）。
+
+        读路径:
+            1. 读取收件箱新内容（Push实时写入的帖子）
+            2. Feed缓存命中 → 将收件箱新内容合并进缓存后直接返回
+               （否则缓存TTL期间新帖永远不会出现在Feed）
+            3. 缓存miss → 收件箱 + MySQL关注者帖子 合并重建缓存
 
         Args:
             db: 数据库同步会话。
             cache_client: 同步Redis客户端。
             user_id: 用户ID。
-            cursor: 游标（上一页最后一条的score）。
+            cursor: 游标（上一页最后一条的score，即发帖时间戳ms）。
             limit: 每页条数。
 
         Returns:
             (post_ids, next_cursor)，next_cursor=None表示没有更多。
         """
-        # 1. 查缓存
-        if feed_cache.is_feed_cached(cache_client, user_id):
-            post_ids = feed_cache.get_feed(cache_client, user_id, cursor=cursor, limit=limit)
-            if post_ids:
-                next_cursor = post_ids[-1] if len(post_ids) == limit else None
-                return post_ids, next_cursor
-
-        # 2. 缓存miss → Pull重建
+        # 1. 读取收件箱新内容（Push阶段写入）
         inbox_items = feed_cache.get_inbox(cache_client, user_id, cursor=None, limit=FEED_PULL_LIMIT)
 
-        # 3. 从MySQL补充（补偿Pull：查询关注者最新帖子）
+        # 2. Feed缓存命中 → 合并收件箱新内容后直接返回
+        if feed_cache.is_feed_cached(cache_client, user_id):
+            if inbox_items:
+                feed_cache.merge_feed(cache_client, user_id, inbox_items)
+                feed_cache.clear_inbox(cache_client, user_id)
+            post_ids, next_cursor = feed_cache.get_feed(cache_client, user_id, cursor=cursor, limit=limit)
+            if post_ids:
+                return post_ids, next_cursor
+
+        # 3. 缓存miss → Pull重建（收件箱 + MySQL关注者最新帖子）
         from app.repositories.user_repository import sync_user_repository as follow_repo
         following_ids = follow_repo.get_following_ids(db, user_id)
         db_posts = post_repository.list_following_posts(
@@ -76,16 +84,17 @@ class FeedService:
             score = int(p.created_at.timestamp() * 1000)
             all_posts[p.id] = max(all_posts.get(p.id, 0), score)
 
-        # 5. 排序写入缓存
+        # 5. 排序写入缓存（收件箱内容已并入，清空避免下次重复合并）
         sorted_items = sorted(all_posts.items(), key=lambda x: x[1], reverse=True)
         feed_cache.merge_feed(cache_client, user_id, sorted_items[:FEED_MAX_SIZE])
+        if inbox_items:
+            feed_cache.clear_inbox(cache_client, user_id)
 
-        # 6. 分页返回
-        post_ids = [pid for pid, _ in sorted_items]
+        # 6. score游标分页返回
         if cursor is not None:
-            post_ids = [pid for pid in post_ids if pid < cursor]
-        page = post_ids[:limit]
-        next_cursor = page[-1] if len(page) == limit else None
+            sorted_items = [(pid, score) for pid, score in sorted_items if score < cursor]
+        page = [pid for pid, _ in sorted_items[:limit]]
+        next_cursor = sorted_items[limit - 1][1] if len(sorted_items) > limit else None
         return page, next_cursor
 
 

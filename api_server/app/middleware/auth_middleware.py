@@ -43,7 +43,13 @@ WHITELIST_PATHS: frozenset[str] = frozenset(
 
 # 游客可读路径前缀（仅GET放行）：公开资源类接口，写操作仍强制登录。
 # /api/v1/users/{user_id} 查看他人公开资料；/users/me 由端点内依赖兜底返回401。
-WHITELIST_GET_PREFIXES: tuple[str, ...] = ("/api/v1/users/",)
+# /api/v1/posts/ 帖子列表/详情/评论列表（游客可浏览）；/posts/favorites 由端点内依赖兜底401。
+# /api/v1/comments/{id}/replies 回复列表（游客可浏览）；DELETE /comments/{id} 为写操作不放行。
+WHITELIST_GET_PREFIXES: tuple[str, ...] = (
+    "/api/v1/users/",
+    "/api/v1/posts/",
+    "/api/v1/comments/",
+)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

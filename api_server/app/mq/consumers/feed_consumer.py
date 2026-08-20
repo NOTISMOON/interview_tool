@@ -10,13 +10,14 @@ Push流程:
 幂等性: ZADD天然幂等，重复消费无副作用。
 """
 
+import asyncio
 import logging
 from typing import Any
 
 from app.cache.feed_cache import BIG_V_FOLLOWER_THRESHOLD, feed_cache
 from app.mq.consumer import BaseConsumer, MQMessage
 from app.mq.queues import QueueName
-from app.redis.async_client import AsyncRedisClient
+from app.redis.sync_client import SyncRedisClient
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +53,11 @@ class FeedPushConsumer(BaseConsumer):
         author_id = int(payload["author_id"])
         created_at_ms = int(payload.get("created_at_ms", 0))
 
-        client = await AsyncRedisClient.get_client()
-
-        # 从关注SET获取粉丝列表
+        # 从DB获取粉丝列表
         from app.repositories.user_repository import sync_user_repository as follow_repo
-        from app.db.sync_session import SessionLocal
+        from app.db.sync_session import SyncSessionLocal
 
-        db = SessionLocal()
+        db = SyncSessionLocal()
         try:
             follower_ids = follow_repo.get_follower_ids(db, author_id)
             follower_count = len(follower_ids)
@@ -71,8 +70,16 @@ class FeedPushConsumer(BaseConsumer):
                 )
                 return
 
-            follower_ids = follow_repo.get_follower_ids(db, author_id)
-            feed_cache.batch_push_post(client, follower_ids, post_id, created_at_ms)
+            # feed_cache.batch_push_post 为同步方法（同步Redis Pipeline），
+            # 通过 to_thread 避免阻塞事件循环
+            sync_client = SyncRedisClient.get_client()
+            await asyncio.to_thread(
+                feed_cache.batch_push_post,
+                sync_client,
+                follower_ids,
+                post_id,
+                created_at_ms,
+            )
 
             logger.info(
                 "Feed Push完成 post_id=%s author_id=%s pushed_to=%s",

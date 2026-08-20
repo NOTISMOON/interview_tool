@@ -12,7 +12,7 @@ class CommentCreate(BaseModel):
     回复评论: root_id=一级评论ID, reply_user_id=被回复者ID
     """
 
-    post_id: int = Field(..., ge=1, description="所属帖子ID")
+    post_id: int | None = Field(None, ge=1, description="所属帖子ID（以路径参数为准，body可不传）")
     content: str = Field(..., min_length=1, max_length=1000, description="评论内容")
     root_id: int | None = Field(None, ge=1, description="根评论ID（回复时传一级评论ID）")
     reply_user_id: int | None = Field(None, ge=1, description="被回复者用户ID（回复时传）")
