@@ -54,7 +54,7 @@ export async function getPostDetail(postId: number): Promise<PostResponse> {
 /** 获取帖子列表（游标分页） */
 export async function listPosts(params: {
   author_id?: number;
-  sort?: 'latest' | 'hot' | 'pinned';
+  sort?: 'latest' | 'hot';
   cursor?: number;
   limit?: number;
 } = {}): Promise<PostListResponse> {

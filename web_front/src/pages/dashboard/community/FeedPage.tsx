@@ -7,7 +7,6 @@ import {
   MessageOutlined,
   UserAddOutlined,
   ReloadOutlined,
-  PushpinOutlined,
 } from '@ant-design/icons';
 import { getFeed } from '@/lib/api/feed';
 import type { PostListItem } from '@/types';
@@ -132,7 +131,6 @@ const FeedPage = () => {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
-                    {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
                     <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
                     {post.is_hot && (
                       <span className="tag tag-flame">

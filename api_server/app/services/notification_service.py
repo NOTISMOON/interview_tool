@@ -17,6 +17,7 @@ from app.models.message import (
     MESSAGE_TYPE_COMMENT,
     MESSAGE_TYPE_DM,
     MESSAGE_TYPE_FOLLOW,
+    MESSAGE_TYPE_FOLLOW_POST,
     MESSAGE_TYPE_INTERVIEW,
     MESSAGE_TYPE_LIKE,
     MESSAGE_TYPE_SYSTEM,
@@ -36,6 +37,7 @@ TYPE_NAME_MAP: dict[int, str] = {
     MESSAGE_TYPE_FOLLOW: "follow",
     MESSAGE_TYPE_INTERVIEW: "interview",
     MESSAGE_TYPE_DM: "dm",
+    MESSAGE_TYPE_FOLLOW_POST: "follow_post",
 }
 
 # 关联实体类型 -> 类型名称映射

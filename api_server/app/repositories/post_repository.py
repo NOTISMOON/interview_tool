@@ -129,8 +129,6 @@ class PostRepository:
 
         if sort == "hot":
             stmt = stmt.order_by(Post.is_hot.desc(), Post.likes_count.desc(), Post.id.desc())
-        elif sort == "pinned":
-            stmt = stmt.order_by(Post.is_pinned.desc(), Post.id.desc())
         else:
             stmt = stmt.order_by(Post.id.desc())
 

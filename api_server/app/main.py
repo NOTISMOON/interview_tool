@@ -12,6 +12,7 @@ from app.api.v1 import api_v1_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.middleware.auth_middleware import AuthMiddleware
+from app.scheduler.tasks import create_scheduler
 from app.services.sse_manager import sse_manager
 
 # 应用日志初始化：uvicorn 只配置自身 logger，root logger 无 handler 时
@@ -19,13 +20,25 @@ from app.services.sse_manager import sse_manager
 # 必须显式配置才能看到业务埋点日志
 setup_logging(level=logging.DEBUG if settings.DEBUG else logging.INFO)
 
+logger = logging.getLogger(__name__)
+
+# 全局调度器实例
+_scheduler = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理，在启动和关闭时执行资源初始化与清理。"""
-    # 启动时：SSE Manager 在首次 connect 时懒初始化 Pub/Sub
+    global _scheduler
+    # 启动时：启动定时任务调度器 + SSE Manager 懒初始化
+    _scheduler = create_scheduler()
+    _scheduler.start()
+    logger.info("定时任务调度器已启动")
     yield
-    # 关闭时：清理 SSE Manager 资源
+    # 关闭时：停止调度器 + 清理 SSE Manager 资源
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
+        logger.info("定时任务调度器已停止")
     await sse_manager.shutdown()
 
 

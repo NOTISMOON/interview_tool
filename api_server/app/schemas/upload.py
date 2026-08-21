@@ -5,14 +5,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 # 允许的文件用途
-ALLOWED_FILE_TYPES = ("resume", "avatar")
+ALLOWED_FILE_TYPES = ("resume", "avatar", "post_image")
 
 
 class StsTokenRequest(BaseModel):
     """STS 临时密钥申请请求模型。"""
 
     file_name: str = Field(..., min_length=1, max_length=255, description="原始文件名（用于提取扩展名）")
-    file_type: str = Field(..., description="文件用途：resume（简历）/ avatar（头像）")
+    file_type: str = Field(..., description="文件用途：resume（简历）/ image（图片）")
     file_size: int = Field(..., gt=0, description="文件大小（字节）")
     content_type: str = Field(..., max_length=100, description="文件MIME类型")
 
@@ -21,7 +21,7 @@ class StsTokenRequest(BaseModel):
     def validate_file_type(cls, v: str) -> str:
         """校验文件用途必须在允许列表内。"""
         if v not in ALLOWED_FILE_TYPES:
-            raise ValueError("file_type 仅支持 resume / avatar")
+            raise ValueError(f"file_type 仅支持 resume / avatar / post_image，当前值: {v}")
         return v
 
 

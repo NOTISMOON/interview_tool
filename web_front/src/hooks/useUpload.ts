@@ -35,6 +35,14 @@ function extractErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const detail = err.response?.data?.detail;
     if (typeof detail === 'string' && detail) return detail;
+    // FastAPI 422 校验错误：detail 是数组，取第一个 msg
+    if (Array.isArray(detail) && detail.length > 0) {
+      const msg = detail[0]?.msg;
+      if (typeof msg === 'string' && msg) {
+        // 移除 "Value error, " 前缀
+        return msg.replace(/^Value error,?\s*/i, '');
+      }
+    }
     if (err.response?.status === 429) return '今日上传次数已用完，请明天再试';
     if (err.response?.status === 401) return '登录已过期，请重新登录后再上传';
     return '上传服务异常，请稍后重试';
@@ -45,7 +53,7 @@ function extractErrorMessage(err: unknown): string {
 
 /**
  * 文件上传 Hook（COS 前端直传）。
- * @param fileType 文件用途：resume（简历）/ avatar（头像）
+ * @param fileType 文件用途：resume（简历）/ avatar（头像）/ post_image（帖子图片）
  */
 export function useUpload(fileType: FileType): UseUploadResult {
   const [progress, setProgress] = useState(0);

@@ -7,6 +7,7 @@ runner.py 通过 CONSUMER_REGISTRY 字典统一注册并启动。
 from app.mq.consumers.comment_consumer import CommentCacheSyncConsumer
 from app.mq.consumers.feed_consumer import FeedPushConsumer
 from app.mq.consumers.follow_consumer import FollowCacheSyncConsumer
+from app.mq.consumers.follow_post_consumer import FollowPostNotifyConsumer
 from app.mq.consumers.interaction_consumer import InteractionCacheSyncConsumer
 from app.mq.consumers.interview_consumer import (
     InterviewReportConsumer,
@@ -24,6 +25,7 @@ CONSUMER_REGISTRY: dict[str, type] = {
     "InteractionCacheSyncConsumer": InteractionCacheSyncConsumer,
     "FeedPushConsumer": FeedPushConsumer,
     "NotificationConsumer": NotificationConsumer,
+    "FollowPostNotifyConsumer": FollowPostNotifyConsumer,
 }
 
 __all__ = [
@@ -31,6 +33,7 @@ __all__ = [
     "CommentCacheSyncConsumer",
     "FeedPushConsumer",
     "FollowCacheSyncConsumer",
+    "FollowPostNotifyConsumer",
     "InteractionCacheSyncConsumer",
     "InterviewReportConsumer",
     "InterviewResumeParseConsumer",

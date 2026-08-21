@@ -11,6 +11,7 @@ import {
   VideoCameraOutlined,
   MoreOutlined,
   DeleteOutlined,
+  FireOutlined,
 } from '@ant-design/icons';
 import { getMessageDetail, deleteMessage } from '@/lib/api/messages';
 import type { MessageResponse } from '@/lib/api/messages';
@@ -28,6 +29,7 @@ const TYPE_MAP: Record<string, SystemMessage['type']> = {
   follow: 'follow',
   dm: 'dm',
   interview: 'interview',
+  follow_post: 'follow_post',
 };
 
 const getIcon = (type: string) => {
@@ -38,6 +40,7 @@ const getIcon = (type: string) => {
     case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
     case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
     case 'interview': return <VideoCameraOutlined className="text-[#0D1117]" />;
+    case 'follow_post': return <FireOutlined className="text-[#FF6B35]" />;
     default: return <BellOutlined className="text-[#8B949E]" />;
   }
 };
@@ -50,6 +53,7 @@ const getIconBg = (type: string) => {
     case 'follow': return 'bg-[#F6F8FA]';
     case 'dm': return 'bg-[#FFF3ED]';
     case 'interview': return 'bg-[#F6F8FA]';
+    case 'follow_post': return 'bg-[#FFF3ED]';
     default: return 'bg-[#F6F8FA]';
   }
 };
@@ -167,7 +171,7 @@ const MessageDetailPage = () => {
       navigate(`/dashboard/messages/chat/${detail.from_user?.id ?? ''}`);
     } else if (type === 'follow') {
       if (userLink) navigate(`/dashboard/user/${userLink}`);
-    } else if (type === 'comment' || type === 'like') {
+    } else if (type === 'comment' || type === 'like' || type === 'follow_post') {
       if (postLink) navigate(`/dashboard/community/post/${postLink}`);
     } else if (reportLink) {
       navigate(`/dashboard/report/${reportLink}`);
@@ -183,6 +187,7 @@ const MessageDetailPage = () => {
       case 'like': return '查看详情';
       case 'comment': return '查看帖子';
       case 'follow': return '查看主页';
+      case 'follow_post': return '查看帖子';
       case 'dm': return '查看私信';
       case 'interview': return '查看面试';
       default: return '查看详情';
@@ -217,7 +222,7 @@ const MessageDetailPage = () => {
       );
     }
 
-    if ((type === 'comment' || type === 'like') && post) {
+    if ((type === 'comment' || type === 'like' || type === 'follow_post') && post) {
       return (
         <div
           className="bg-white border border-[#E1E4E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#FF6B35]/30 transition-all cursor-pointer"

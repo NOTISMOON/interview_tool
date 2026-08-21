@@ -1,7 +1,7 @@
 /** 文件上传相关类型定义（与后端 schemas/upload.py 字段对齐）。 */
 
 /** 文件用途类型 */
-export type FileType = 'resume' | 'avatar';
+export type FileType = 'resume' | 'avatar' | 'post_image';
 
 /** 上传状态 */
 export type UploadStatus = 'pending' | 'uploading' | 'completed' | 'failed';
@@ -90,9 +90,9 @@ export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
  */
 export function validateFile(file: File): string | null {
   const ext = `.${file.name.split('.').pop()?.toLowerCase() ?? ''}`;
-  const allowedExts = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg'];
+  const allowedExts = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
   if (!allowedExts.includes(ext)) {
-    return '仅支持 PDF、Word、图片格式';
+    return '仅支持 PDF、Word、图片格式（PNG/JPG/GIF/WebP）';
   }
   if (file.size > MAX_FILE_SIZE) {
     return '文件大小不能超过 10MB';

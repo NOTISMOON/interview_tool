@@ -11,11 +11,12 @@ export interface PostDetail {
   author: PostAuthor | null;
   title: string;
   content: string;
+  cover_url: string | null;
+  images: string[];
   tags: string[];
   likes_count: number;
   comments_count: number;
   views_count: number;
-  is_pinned: boolean;
   is_hot: boolean;
   is_liked: boolean;
   is_favorited: boolean;
@@ -33,7 +34,6 @@ export interface PostListItem {
   likes_count: number;
   comments_count: number;
   views_count: number;
-  is_pinned: boolean;
   is_hot: boolean;
   is_liked: boolean;
   is_favorited: boolean;

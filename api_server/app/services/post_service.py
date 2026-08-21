@@ -19,6 +19,7 @@ from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.post_repository import post_repository
 from app.repositories.user_repository import sync_user_repository
 from app.schemas.post import PostCreate, PostListItem, PostListResponse, PostResponse, PostUpdate
+from app.cos import build_cos_url
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ class PostNotFoundError(Exception):
 
 class PostService:
     """帖子业务逻辑层（同步），编排帖子的创建、更新、删除与查询。"""
+
+    # 数据访问层实例，供外部访问
+    post_repository = post_repository
 
     # ------------------------------------------------------------------
     # 写路径：创建/更新/删除（Transactional Outbox）
@@ -52,13 +56,16 @@ class PostService:
         now = datetime.now()
         with db.begin():
             # ① 创建帖子
+            normalized_images = (
+                [build_cos_url(img) for img in data.images] if data.images else None
+            )
             post = post_repository.create(
                 db,
                 author_id=author_id,
                 title=data.title,
                 content=data.content,
                 cover_url=data.cover_url,
-                images=data.images if data.images else None,
+                images=normalized_images,
             )
             post_id = post.id
 
@@ -133,7 +140,9 @@ class PostService:
         if data.cover_url is not None:
             update_fields["cover_url"] = data.cover_url
         if data.images is not None:
-            update_fields["images"] = json.dumps(data.images, ensure_ascii=False)
+            update_fields["images"] = json.dumps(
+                [build_cos_url(img) for img in data.images], ensure_ascii=False
+            )
         if data.tags is not None:
             update_fields["tags"] = json.dumps(data.tags, ensure_ascii=False)
 
@@ -197,6 +206,9 @@ class PostService:
 
         # 事务提交后失效缓存
         self._invalidate_detail_cache(cache_client, post_id)
+        from app.services.hot_post_service import hot_post_service
+
+        hot_post_service.remove_from_hot_cache(post_id)
         from app.services.user_service import user_service
 
         user_service.invalidate_profile_cache(cache_client, post_author_id)
@@ -324,7 +336,6 @@ class PostService:
             likes_count=post.likes_count,
             comments_count=post.comments_count,
             views_count=post.views_count,
-            is_pinned=bool(post.is_pinned),
             is_hot=bool(post.is_hot),
             is_liked=is_liked,
             is_favorited=is_favorited,
@@ -371,7 +382,6 @@ class PostService:
             likes_count=post.likes_count,
             comments_count=post.comments_count,
             views_count=post.views_count,
-            is_pinned=bool(post.is_pinned),
             is_hot=bool(post.is_hot),
             is_liked=False,
             is_favorited=False,

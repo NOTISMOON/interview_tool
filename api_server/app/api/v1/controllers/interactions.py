@@ -72,7 +72,6 @@ def _assemble_list_item(
         likes_count=post.likes_count,
         comments_count=post.comments_count,
         views_count=post.views_count,
-        is_pinned=bool(post.is_pinned),
         is_hot=bool(post.is_hot),
         is_liked=is_liked,
         is_favorited=is_favorited,

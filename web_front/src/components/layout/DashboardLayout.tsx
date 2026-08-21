@@ -11,6 +11,8 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
+import { getUnreadCount, buildSSEUrl } from '@/lib/api/messages';
+import { useState, useEffect, useRef } from 'react';
 
 const SIDEBAR_ITEMS = [
   { key: '/dashboard', label: '工作台', icon: <HomeOutlined /> },
@@ -78,6 +80,59 @@ const Sidebar = () => {
 const DashboardLayout = () => {
   const navigate = useNavigate();
   const { user } = useAppStore();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const sseRef = useRef<EventSource | null>(null);
+
+  /** 获取未读计数 */
+  const fetchUnreadCount = async () => {
+    try {
+      const res = await getUnreadCount();
+      setUnreadCount(res.total);
+    } catch {
+      // 静默失败
+    }
+  };
+
+  /** 建立 SSE 连接接收实时通知 */
+  useEffect(() => {
+    if (!user) return;
+    fetchUnreadCount();
+
+    try {
+      const url = buildSSEUrl();
+      const es = new EventSource(url);
+      sseRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.kind === 'message' && typeof data.unread_total === 'number') {
+            setUnreadCount(data.unread_total);
+          }
+        } catch {
+          // 解析失败忽略
+        }
+      };
+
+      es.onerror = () => {
+        // SSE 断线后自动重连
+      };
+    } catch {
+      // SSE 创建失败不影响页面
+    }
+
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+    };
+  }, [user]);
+
+  // 路由变化时重新获取未读计数（确保消息中心页面操作后更新）
+  useEffect(() => {
+    fetchUnreadCount();
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-[#F6F8FA]">
@@ -95,7 +150,7 @@ const DashboardLayout = () => {
               onClick={() => navigate('/dashboard/messages')}
               className="relative w-9 h-9 rounded-lg flex items-center justify-center text-[#5F6B7A] hover:bg-[#F6F8FA] hover:text-[#0D1117] transition-colors"
             >
-                                              <Badge dot size="small">
+              <Badge count={unreadCount} size="small" offset={[2, -2]}>
                 <BellOutlined className="text-lg" />
               </Badge>
             </button>

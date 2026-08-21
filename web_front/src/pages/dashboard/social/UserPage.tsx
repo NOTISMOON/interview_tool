@@ -8,7 +8,6 @@ import {
   UserOutlined,
   LikeOutlined,
   FireOutlined,
-  PushpinOutlined,
   EnvironmentOutlined,
   SmileOutlined,
   FileTextOutlined,
@@ -278,7 +277,6 @@ const UserPage = () => {
                             onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
                           >
                             <div className="flex items-center gap-2 mb-1.5">
-                              {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
                               <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
                               {post.is_hot && (
                                 <span className="tag tag-flame">

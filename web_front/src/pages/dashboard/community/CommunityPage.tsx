@@ -6,15 +6,16 @@ import {
   ClockCircleOutlined,
   LikeOutlined,
   MessageOutlined,
-  PushpinOutlined,
   PlusOutlined,
   BulbOutlined,
   QuestionCircleOutlined,
   PictureOutlined,
   CloseOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import { createPost, listPosts } from '@/lib/api/posts';
 import type { PostListItem } from '@/types';
+import { useUpload } from '@/hooks/useUpload';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
@@ -43,7 +44,11 @@ const CommunityPage = () => {
   const [postContent, setPostContent] = useState('');
   const [postTags, setPostTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  /** 已上传到 COS 的图片 URL 列表 */
   const [postImages, setPostImages] = useState<string[]>([]);
+  /** 图片上传中状态 */
+  const [imageUploading, setImageUploading] = useState(false);
+  const { upload: uploadImage } = useUpload('post_image');
 
   const availableTags = ['面试经验', '经验分享', '资源分享', '前端', '后端', '面试技巧', '求助', '职业规划', 'Offer'];
 
@@ -53,10 +58,10 @@ const CommunityPage = () => {
     try {
       const cur = resetCursor ? undefined : cursor;
       const res = await listPosts({
-        sort: sort as 'latest' | 'hot' | 'pinned',
-        cursor: cur,
-        limit: 20,
-      });
+          sort: sort as 'latest' | 'hot',
+          cursor: cur,
+          limit: 20,
+        });
       if (resetCursor || cur === undefined) {
         setPosts(res.items);
       } else {
@@ -121,7 +126,12 @@ const CommunityPage = () => {
     }
     setPublishing(true);
     try {
-      await createPost({ title: postTitle.trim(), content: postContent.trim(), tags: postTags });
+      await createPost({
+        title: postTitle.trim(),
+        content: postContent.trim(),
+        tags: postTags,
+        images: postImages.length > 0 ? postImages : undefined,
+      });
       msg.success('帖子发布成功！');
       setCreateModalOpen(false);
       resetForm();
@@ -160,7 +170,6 @@ const CommunityPage = () => {
           items={[
             { key: 'latest', label: '最新', icon: <ClockCircleOutlined /> },
             { key: 'hot', label: '热门', icon: <FireOutlined /> },
-            { key: 'pinned', label: '置顶', icon: <PushpinOutlined /> },
           ].map((tab) => ({
             key: tab.key,
             label: <span className="flex items-center gap-1.5 text-sm">{tab.icon}{tab.label}</span>,
@@ -191,7 +200,6 @@ const CommunityPage = () => {
                   >{post.author?.nickname?.[0] || '?'}</Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
-                      {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
                       <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
                       {post.is_hot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热</span>}
                     </div>
@@ -323,18 +331,29 @@ const CommunityPage = () => {
                 <Upload
                   accept="image/*"
                   showUploadList={false}
-                  beforeUpload={(file) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                      setPostImages([...postImages, e.target?.result as string]);
-                    };
-                    reader.readAsDataURL(file);
+                  disabled={imageUploading}
+                  beforeUpload={async (file) => {
+                    setImageUploading(true);
+                    try {
+                      const record = await uploadImage(file);
+                      setPostImages([...postImages, record.file_url]);
+                    } catch (err) {
+                      msg.error(err instanceof Error ? err.message : '图片上传失败，请重试');
+                    } finally {
+                      setImageUploading(false);
+                    }
                     return false;
                   }}
                 >
                   <div className="w-24 h-24 rounded-lg border-2 border-dashed border-[#E1E4E8] flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF3ED]/50 transition-colors">
-                    <PictureOutlined className="text-[#8B949E] text-lg" />
-                    <span className="text-[10px] text-[#8B949E]">上传图片</span>
+                    {imageUploading ? (
+                      <LoadingOutlined className="text-[#FF6B35] text-lg" />
+                    ) : (
+                      <>
+                        <PictureOutlined className="text-[#8B949E] text-lg" />
+                        <span className="text-[10px] text-[#8B949E]">上传图片</span>
+                      </>
+                    )}
                   </div>
                 </Upload>
               )}

@@ -2,6 +2,7 @@
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_redis
@@ -41,7 +42,7 @@ def _get_user_id(payload: dict) -> int:
 @router.get("/sts-token", response_model=StsTokenResponse, summary="获取STS临时密钥")
 def get_sts_token(
     file_name: str = Query(..., min_length=1, max_length=255, description="原始文件名"),
-    file_type: str = Query(..., description="文件用途：resume/avatar/post_image"),
+    file_type: str = Query(..., description="文件用途：resume（简历）/ image（图片）"),
     file_size: int = Query(..., gt=0, description="文件大小（字节）"),
     content_type: str = Query(..., max_length=100, description="文件MIME类型"),
     payload: dict = Depends(get_current_user),
@@ -54,7 +55,7 @@ def get_sts_token(
 
     Args:
         file_name: 原始文件名（用于提取扩展名）。
-        file_type: 文件用途（resume/avatar）。
+        file_type: 文件用途（resume/image）。
         file_size: 文件大小（字节）。
         content_type: 文件MIME类型。
         payload: JWT认证载荷。
@@ -66,9 +67,14 @@ def get_sts_token(
     Raises:
         HTTPException: 类型不支持400；大小超限400；次数超限429；STS失败500。
     """
-    req = StsTokenRequest(
-        file_name=file_name, file_type=file_type, file_size=file_size, content_type=content_type
-    )
+    try:
+        req = StsTokenRequest(
+            file_name=file_name, file_type=file_type, file_size=file_size, content_type=content_type
+        )
+    except ValidationError as exc:
+        errors = exc.errors()
+        msgs = [e.get("msg", "参数错误") for e in errors]
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="; ".join(msgs))
     try:
         return upload_service.get_sts_token(cache_client, _get_user_id(payload), req)
     except FileTypeInvalidError as exc:
@@ -121,7 +127,7 @@ def upload_callback(
 
 @router.get("/records", response_model=UploadRecordListResponse, summary="查询上传记录列表")
 def list_upload_records(
-    file_type: str | None = Query(None, description="按用途过滤：resume/avatar/post_image，不传查全部"),
+    file_type: str | None = Query(None, description="按用途过滤：resume/image，不传查全部"),
     page: int = Query(1, ge=1, le=1000, description="页码（从1开始）"),
     page_size: int = Query(20, ge=1, le=100, description="页大小（1-100）"),
     payload: dict = Depends(get_current_user),
@@ -139,8 +145,8 @@ def list_upload_records(
     Returns:
         UploadRecordListResponse: 记录列表 + 总数 + 分页信息。
     """
-    if file_type is not None and file_type not in ("resume", "avatar", "post_image"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file_type 仅支持 resume / avatar / post_image")
+    if file_type is not None and file_type not in ("resume", "image"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file_type 仅支持 resume / image")
     return upload_service.list_records(db, _get_user_id(payload), file_type, page, page_size)
 
 

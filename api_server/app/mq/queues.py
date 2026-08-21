@@ -31,6 +31,7 @@ class QueueName(str, Enum):
     SOCIAL_INTERACTION_CACHE_DLQ = "social.interaction.cache.dlq"  # 互动缓存同步死信队列（仅存档不消费）
     SOCIAL_FEED_PUSH = "social.feed.push.queue"  # Feed Push队列
     SOCIAL_FEED_PUSH_DLQ = "social.feed.push.dlq"  # Feed Push死信队列（仅存档不消费）
+    SOCIAL_FOLLOW_POST_NOTIFY = "social.follow.post.notify.queue"  # 关注动态通知队列
 
 
 # 队列声明参数（仅含DLX配置的队列需要，声明时携带才能生效）。
@@ -157,16 +158,22 @@ QUEUE_BINDINGS: list[QueueBinding] = [
     ),
     # Feed Push：帖子创建事件路由到Feed Push队列
     QueueBinding(
-        queue=QueueName.SOCIAL_FEED_PUSH,
-        exchange=ExchangeName.SOCIAL,
-        routing_key="social.post.created",
-    ),
-    # Feed Push死信队列：消费失败消息存档，仅人工重放，不消费
-    QueueBinding(
-        queue=QueueName.SOCIAL_FEED_PUSH_DLQ,
-        exchange=ExchangeName.SOCIAL_DLX,
-        routing_key="social.feed.push.dead",
-    ),
+    queue=QueueName.SOCIAL_FEED_PUSH,
+    exchange=ExchangeName.SOCIAL,
+    routing_key="social.post.created",
+),
+# Feed Push死信队列：消费失败消息存档，仅人工重放，不消费
+QueueBinding(
+    queue=QueueName.SOCIAL_FEED_PUSH_DLQ,
+    exchange=ExchangeName.SOCIAL_DLX,
+    routing_key="social.feed.push.dead",
+),
+# 关注动态通知：帖子创建事件路由到关注通知队列
+QueueBinding(
+    queue=QueueName.SOCIAL_FOLLOW_POST_NOTIFY,
+    exchange=ExchangeName.SOCIAL,
+    routing_key="social.post.created",
+),
 ]
 
 

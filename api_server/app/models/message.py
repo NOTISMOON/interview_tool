@@ -14,6 +14,7 @@ MESSAGE_TYPE_LIKE = 3
 MESSAGE_TYPE_FOLLOW = 4
 MESSAGE_TYPE_INTERVIEW = 5
 MESSAGE_TYPE_DM = 6
+MESSAGE_TYPE_FOLLOW_POST = 7  # 关注的人发布了新帖子
 
 # 关联实体类型常量
 RELATED_TYPE_POST = 1
@@ -38,7 +39,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="消息接收者")
-    type: Mapped[int] = mapped_column(Integer, nullable=False, comment="1-系统 2-评论 3-点赞 4-关注 5-面试 6-私信")
+    type: Mapped[int] = mapped_column(Integer, nullable=False, comment="1-系统 2-评论 3-点赞 4-关注 5-面试 6-私信 7-关注动态")
     title: Mapped[str] = mapped_column(String(255), nullable=False, comment="消息标题")
     content: Mapped[str] = mapped_column(String(1000), nullable=False, comment="消息内容")
     from_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="消息发送者（系统消息为空）")

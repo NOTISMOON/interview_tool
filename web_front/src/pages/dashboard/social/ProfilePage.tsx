@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Divider, Modal, Input, Upload, DatePicker, Radio, Empty, Popconfirm, Switch } from 'antd';
+import { Avatar, App, Divider, Modal, Input, Upload, DatePicker, Radio, Empty, Popconfirm, Switch, Spin } from 'antd';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import {
   RightOutlined,
   FileTextOutlined,
@@ -27,13 +28,26 @@ import {
   CalendarOutlined,
   SmileOutlined,
   PlusOutlined,
+  FireOutlined,
+  LikeOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import type { ProfileVisibility } from '@/types';
 import type { UploadRecord } from '@/types/upload';
+import type { PostListItem } from '@/types';
 import { useAppStore } from '@/store';
 import { FileUpload } from '@/components/upload/FileUpload';
 import { deleteUploadRecord, getUploadRecords } from '@/lib/api/upload';
+import { listPosts } from '@/lib/api/posts';
 import { useUpload } from '@/hooks/useUpload';
+
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化时间为相对时间展示 */
+function formatTime(dateStr: string): string {
+  return dayjs(dateStr).fromNow();
+}
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -48,6 +62,12 @@ const ProfilePage = () => {
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [resumeModalOpen, setResumeModalOpen] = useState(false);
+  /** 帖子列表状态 */
+  const [posts, setPosts] = useState<PostListItem[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsCursor, setPostsCursor] = useState<number | undefined>(undefined);
+  const [postsHasMore, setPostsHasMore] = useState(true);
+  const [showPosts, setShowPosts] = useState(false);
   const [editForm, setEditForm] = useState({
     nickname: '',
     avatar: '',
@@ -84,6 +104,27 @@ const ProfilePage = () => {
     loadRemoteResumes();
     refreshUser();
   }, []);
+
+  /** 获取当前用户帖子列表 */
+  const fetchPosts = useCallback(async (resetCursor?: boolean) => {
+    if (!user) return;
+    setPostsLoading(true);
+    try {
+      const cur = resetCursor ? undefined : postsCursor;
+      const res = await listPosts({ author_id: Number(user.id), cursor: cur, limit: 20, sort: 'latest' });
+      if (resetCursor || cur === undefined) {
+        setPosts(res.items);
+      } else {
+        setPosts((prev) => [...prev, ...res.items]);
+      }
+      setPostsCursor(res.next_cursor ?? undefined);
+      setPostsHasMore(res.next_cursor !== null);
+    } catch {
+      message.error('加载帖子列表失败');
+    } finally {
+      setPostsLoading(false);
+    }
+  }, [user, postsCursor, message]);
 
   const handleLogout = () => {
     modal.confirm({
@@ -270,6 +311,75 @@ const ProfilePage = () => {
             <div className="text-white/50 text-xs">面试</div>
           </div>
         </div>
+      </div>
+
+      {/* 我的发帖 */}
+      <div className="bg-white border border-[#E1E4E8] rounded-xl mb-5 overflow-hidden">
+        <button
+          onClick={() => {
+            if (!showPosts) {
+              setShowPosts(true);
+              if (posts.length === 0) fetchPosts(true);
+            } else {
+              setShowPosts(false);
+            }
+          }}
+          className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#F6F8FA] transition-colors text-left"
+        >
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: '#FF6B35', backgroundColor: '#FFF3ED' }}>
+            <FileTextOutlined />
+          </div>
+          <span className="flex-1 text-sm font-medium text-[#0D1117]">我的发帖</span>
+          {posts.length > 0 && <span className="text-xs text-[#8B949E] mr-1">{posts.length}</span>}
+          <RightOutlined className={`text-[#E1E4E8] text-xs transition-transform ${showPosts ? 'rotate-90' : ''}`} />
+        </button>
+        {showPosts && (
+          <div className="border-t border-[#E1E4E8] px-4 py-3">
+            {postsLoading && posts.length === 0 ? (
+              <div className="flex justify-center py-8">
+                <Spin size="small" />
+              </div>
+            ) : posts.length === 0 ? (
+              <Empty description="暂无发帖" image={Empty.PRESENTED_IMAGE_SIMPLE} className="!py-8" />
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {posts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="border border-[#E1E4E8] rounded-xl p-3 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                    onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
+                      {post.is_hot && (
+                        <span className="tag tag-flame text-[10px] px-1.5 py-0.5">
+                          <FireOutlined /> 热
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-2">{post.content_preview || post.title}</p>
+                    <div className="flex items-center gap-4 text-xs text-[#8B949E]">
+                      <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes_count}</span>
+                      <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments_count}</span>
+                      <span>{formatTime(post.created_at)}</span>
+                    </div>
+                  </div>
+                ))}
+                {postsHasMore && (
+                  <div className="flex justify-center py-2">
+                    <button
+                      onClick={() => fetchPosts()}
+                      disabled={postsLoading}
+                      className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                    >
+                      {postsLoading ? '加载中...' : '加载更多'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {menuGroups.map((group) => (

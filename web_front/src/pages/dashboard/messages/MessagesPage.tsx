@@ -9,6 +9,7 @@ import {
   TeamOutlined,
   MessageOutlined,
   CheckOutlined,
+  FireOutlined,
 } from '@ant-design/icons';
 import { getMessages, getUnreadCount, markMessageRead, markAllMessagesRead } from '@/lib/api/messages';
 import type { MessageResponse } from '@/lib/api/messages';
@@ -39,6 +40,7 @@ function mapMessage(m: MessageResponse): SystemMessage {
     follow: 'follow',
     dm: 'dm',
     interview: 'interview',
+    follow_post: 'follow_post',
   };
   return {
     id: String(m.id),
@@ -186,6 +188,7 @@ const MessagesPage = () => {
       case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
       case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
       case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
+      case 'follow_post': return <FireOutlined className="text-[#FF6B35]" />;
       default: return <BellOutlined className="text-[#8B949E]" />;
     }
   };
@@ -197,6 +200,7 @@ const MessagesPage = () => {
       case 'comment': return 'bg-[#ECFDF3]';
       case 'follow': return 'bg-[#F6F8FA]';
       case 'dm': return 'bg-[#FFF3ED]';
+      case 'follow_post': return 'bg-[#FFF3ED]';
       default: return 'bg-[#F6F8FA]';
     }
   };
@@ -236,6 +240,7 @@ const MessagesPage = () => {
             { key: 'like', label: '点赞' },
             { key: 'comment', label: '评论' },
             { key: 'follow', label: '关注' },
+            { key: 'follow_post', label: '关注动态' },
             { key: 'dm', label: '私信' },
           ].map((tab) => ({ key: tab.key, label: <span className="text-sm">{tab.label}</span> }))}
         />

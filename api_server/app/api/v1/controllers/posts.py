@@ -1,4 +1,6 @@
-"""帖子管理API端点，提供发帖、查帖、改帖、删帖接口。"""
+"""帖子管理API端点，提供发帖、查帖、改帖、删帖、热门帖子接口。"""
+
+import logging
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
@@ -6,7 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_redis
 from app.schemas.post import PostCreate, PostListResponse, PostResponse, PostUpdate
+from app.services.hot_post_service import hot_post_service
 from app.services.post_service import PostNotFoundError, post_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/posts", tags=["帖子"])
 
@@ -39,6 +44,69 @@ def _try_get_viewer_id(request: Request) -> int | None:
         return None
     payload = decode_access_token(token)
     return int(payload["sub"]) if payload else None
+
+
+# ------------------------------------------------------------------
+# 注意：/hot 必须在 /{post_id} 之前注册，否则 FastAPI 会将 "hot" 当作 post_id 解析
+# ------------------------------------------------------------------
+
+
+@router.get(
+    "/hot",
+    response_model=PostListResponse,
+    summary="获取热门帖子",
+)
+def get_hot_posts(
+    request: Request = None,
+    limit: int = Query(20, ge=1, le=100, description="返回条数"),
+    db: Session = Depends(get_db),
+    cache_client: redis.Redis = Depends(get_redis),
+) -> PostListResponse:
+    """获取热门帖子列表（基于热度算法，从 Redis ZSET 读取，有缓存时走 Redis，无缓存时降级 MySQL）。
+
+    Args:
+        request: FastAPI请求对象（用于可选认证）。
+        limit: 返回条数（默认20，上限100）。
+        db: 数据库同步会话。
+        cache_client: 同步Redis客户端。
+
+    Returns:
+        PostListResponse: 热门帖子列表。
+    """
+    current_user_id = _try_get_viewer_id(request)
+    try:
+        # 优先从 Redis ZSET 获取热门帖子 ID
+        hot_ids = hot_post_service.get_hot_post_ids(limit)
+        if hot_ids:
+            posts_dict = post_service.post_repository.batch_get_by_ids(db, hot_ids)
+            # 保持 ZSET 排序顺序
+            ordered_posts = [posts_dict[pid] for pid in hot_ids if pid in posts_dict]
+        else:
+            # Redis 缓存空，降级：按 is_hot DESC, likes_count DESC 查 MySQL
+            ordered_posts = post_service.post_repository.list_posts(
+                db, sort="hot", limit=limit
+            )
+
+        if not ordered_posts:
+            return PostListResponse(items=[], next_cursor=None, total=0)
+
+        author_ids = list({p.author_id for p in ordered_posts})
+        from app.repositories.user_repository import sync_user_repository as user_repo
+
+        authors = user_repo.batch_get_by_ids(db, author_ids)
+        post_ids = [p.id for p in ordered_posts]
+        tags_map = post_service.post_repository.get_tags_by_post_ids(db, post_ids)
+
+        items = [
+            post_service._assemble_post_list_item(
+                post, authors.get(post.author_id), tags_map.get(post.id, [])
+            )
+            for post in ordered_posts
+        ]
+        return PostListResponse(items=items, next_cursor=None, total=len(items))
+    except Exception:
+        logger.exception("查询热门帖子失败")
+        raise HTTPException(status_code=500, detail="查询热门帖子失败")
 
 
 @router.post(
@@ -75,38 +143,6 @@ def create_post(
 
 
 @router.get(
-    "/{post_id}",
-    response_model=PostResponse,
-    summary="获取帖子详情",
-)
-def get_post_detail(
-    post_id: int = Path(..., ge=1, description="帖子ID"),
-    request: Request = None,
-    db: Session = Depends(get_db),
-    cache_client: redis.Redis = Depends(get_redis),
-) -> PostResponse:
-    """获取帖子详情（含作者信息、标签，游客可查看）。
-
-    Args:
-        post_id: 帖子ID。
-        request: FastAPI请求对象（用于可选认证）。
-        db: 数据库同步会话。
-        cache_client: 同步Redis客户端。
-
-    Returns:
-        PostResponse: 帖子详情。
-
-    Raises:
-        HTTPException: 帖子不存在或已删除时返回404。
-    """
-    current_user_id = _try_get_viewer_id(request)
-    try:
-        return post_service.get_post_detail(db, cache_client, post_id, current_user_id)
-    except PostNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="帖子不存在")
-
-
-@router.get(
     "/",
     response_model=PostListResponse,
     summary="获取帖子列表",
@@ -114,7 +150,7 @@ def get_post_detail(
 def list_posts(
     request: Request = None,
     author_id: int | None = Query(None, ge=1, description="作者ID（不传则查全站）"),
-    sort: str = Query("latest", pattern="^(latest|hot|pinned)$", description="排序方式：latest=最新 hot=热门 pinned=置顶优先"),
+    sort: str = Query("latest", pattern="^(latest|hot)$", description="排序方式：latest=最新 hot=热门"),
     cursor: int | None = Query(None, ge=1, description="分页游标（上一页最后一条帖子ID）"),
     limit: int = Query(20, ge=1, le=100, description="每页条数"),
     db: Session = Depends(get_db),
@@ -143,6 +179,40 @@ def list_posts(
         limit=limit,
         current_user_id=current_user_id,
     )
+
+
+@router.get(
+    "/{post_id}",
+    response_model=PostResponse,
+    summary="获取帖子详情",
+)
+def get_post_detail(
+    post_id: int = Path(..., ge=1, description="帖子ID"),
+    request: Request = None,
+    db: Session = Depends(get_db),
+    cache_client: redis.Redis = Depends(get_redis),
+) -> PostResponse:
+    """获取帖子详情（含作者信息、标签，游客可查看）。
+
+    Args:
+        post_id: 帖子ID。
+        request: FastAPI请求对象（用于可选认证）。
+        db: 数据库同步会话。
+        cache_client: 同步Redis客户端。
+
+    Returns:
+        PostResponse: 帖子详情。
+
+    Raises:
+        HTTPException: 帖子不存在或已删除时返回404。
+    """
+    current_user_id = _try_get_viewer_id(request)
+    try:
+        # 记录浏览数（Redis 计数器，不阻塞响应）
+        hot_post_service.record_view(post_id)
+        return post_service.get_post_detail(db, cache_client, post_id, current_user_id)
+    except PostNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="帖子不存在")
 
 
 @router.put(

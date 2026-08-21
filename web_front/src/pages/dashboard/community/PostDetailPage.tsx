@@ -10,7 +10,6 @@ import {
   MessageOutlined,
   ShareAltOutlined,
   FireOutlined,
-  PushpinOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
@@ -19,6 +18,7 @@ import { getPostDetail, deletePost } from '@/lib/api/posts';
 import { toggleLike, toggleFavorite } from '@/lib/api/interactions';
 import { createComment, listComments } from '@/lib/api/comments';
 import type { PostDetail, PostComment } from '@/types';
+import { buildCosUrl } from '@/utils/cos';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
@@ -192,7 +192,6 @@ const PostDetailPage = () => {
 
       <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
         <div className="flex items-center gap-2 mb-3">
-          {post.is_pinned && <PushpinOutlined className="text-[#CF222E] text-xs" />}
           {post.is_hot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热门</span>}
         </div>
 
@@ -234,6 +233,20 @@ const PostDetailPage = () => {
         <div className="text-sm text-[#0D1117] leading-relaxed whitespace-pre-line mb-6">
           {post.content}
         </div>
+
+        {post.images && post.images.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {post.images.map((img, idx) => (
+              <img
+                key={idx}
+                src={buildCosUrl(img)}
+                alt={`帖子图片-${idx + 1}`}
+                className="w-full rounded-xl object-cover max-h-[400px] border border-[#E1E4E8] cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => window.open(buildCosUrl(img), '_blank')}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-4 text-sm text-[#8B949E] pb-5 border-b border-[#F0F2F5]">
           <span className="inline-flex items-center gap-1">

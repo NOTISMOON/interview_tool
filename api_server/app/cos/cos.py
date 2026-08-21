@@ -280,12 +280,18 @@ cos_client = CosClient()
 def build_cos_url(cos_key: str) -> str:
     """构造对象的永久公网访问 URL（记录库中 cos_url 字段使用）。
 
+    如果传入的已是完整 URL（以 https:// 开头），则原样返回。
+
     Args:
-        cos_key: COS 对象 Key。
+        cos_key: COS 对象 Key 或完整 URL。
 
     Returns:
         完整 URL 字符串。
     """
+    if not cos_key:
+        return ""
+    if cos_key.startswith("http://") or cos_key.startswith("https://"):
+        return cos_key
     return f"https://{cos_client.get_bucket_domain()}/{cos_key}"
 
 
