@@ -1,7 +1,11 @@
 """用户管理API端点，提供个人资料读写、可见性控制、他人公开资料查询、账号注销、关注/取关与关注/粉丝列表。"""
 
+import hashlib
+import json
+
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_redis
@@ -22,6 +26,34 @@ from app.services.follow_service import (
 from app.services.user_service import user_service
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
+
+
+def _etag_response(request: Request, data: BaseModel) -> Response:
+    """对个人资料响应实现ETag协商缓存：数据未变返回304，变化返回200+新ETag。
+
+    策略: Cache-Control: no-cache——浏览器每次点击个人主页都会发请求到服务器
+    （带If-None-Match），服务端比对ETag：数据未变返回304（无响应体，仅头开销），
+    数据已更新返回200+完整新数据并刷新浏览器缓存条目。
+    Vary: Cookie 防止同浏览器不同账号间串用缓存（响应内容依赖登录身份）。
+
+    Args:
+        request: FastAPI请求对象，用于读取If-None-Match请求头。
+        data: 待序列化的Pydantic响应模型。
+
+    Returns:
+        304（协商命中）或200（数据有变）的Response，均携带ETag头。
+    """
+    body = json.dumps(data.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+    etag = f'"{hashlib.sha256(body.encode("utf-8")).hexdigest()[:32]}"'
+    headers = {
+        "Cache-Control": "no-cache",
+        "Vary": "Cookie",
+        "ETag": etag,
+    }
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and etag in [tag.strip() for tag in if_none_match.split(",")]:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 def _get_user_id(payload: dict) -> int:
@@ -56,19 +88,25 @@ def _try_get_viewer_id(request: Request) -> int | None:
 
 @router.get("/me", response_model=UserProfileResponse, summary="获取个人信息")
 def get_my_profile(
+    request: Request,
     payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
     cache_client: redis.Redis = Depends(get_redis),
-) -> UserProfileResponse:
-    """获取当前登录用户的完整资料（Cache-Aside：先查缓存，未命中查库回填）。
+) -> Response:
+    """获取当前登录用户的完整资料（ETag协商缓存：数据未变返回304）。
+
+    服务端走Cache-Aside（Redis→DB），HTTP层走协商缓存：
+    浏览器每次进入个人主页都发请求（Cache-Control: no-cache），
+    If-None-Match命中ETag返回304（无响应体），数据变更返回200+新数据。
 
     Args:
+        request: FastAPI请求对象，用于读取If-None-Match协商头。
         payload: JWT认证载荷。
         db: 数据库同步会话。
         cache_client: 同步Redis客户端。
 
     Returns:
-        UserProfileResponse: 当前用户完整资料（含邮箱、手机等敏感字段）。
+        304（数据未变）或200+UserProfileResponse（数据有变），均带ETag头。
 
     Raises:
         HTTPException: 用户不存在或已注销时返回404。
@@ -76,7 +114,7 @@ def get_my_profile(
     profile = user_service.get_profile(db, cache_client, _get_user_id(payload))
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    return profile
+    return _etag_response(request, profile)
 
 
 @router.put("/me", response_model=UserProfileResponse, summary="更新个人资料")
@@ -196,22 +234,24 @@ def get_user_public_profile(
     user_id: int = Path(..., ge=1, description="被查看的用户ID"),
     db: Session = Depends(get_db),
     cache_client: redis.Redis = Depends(get_redis),
-):
-    """获取指定用户的公开资料（游客可访问），按其可见性设置过滤返回字段。
+) -> Response:
+    """获取指定用户的公开资料（ETag协商缓存：数据未变返回304）。
 
     可见性规则:
         - 公开(0): 返回完整公开资料。
         - 仅关注者(1): 关注者返回完整公开资料，其他人仅返回昵称/头像卡片。
         - 仅自己(2): 非本人返回404（等同于不存在）。
 
+    响应内容依赖访问者身份（可见性过滤），配合Vary: Cookie按登录态区分缓存。
+
     Args:
-        request: FastAPI请求对象，用于可选解析访问者身份。
+        request: FastAPI请求对象，用于可选解析访问者身份与If-None-Match。
         user_id: 被查看的用户ID。
         db: 数据库同步会话。
         cache_client: 同步Redis客户端。
 
     Returns:
-        完整公开资料（UserPublicProfileResponse）或受限卡片（UserCardResponse）。
+        304（数据未变）或200+完整公开资料/受限卡片，均带ETag头。
 
     Raises:
         HTTPException: 用户不存在、已注销或不可见时返回404。
@@ -220,7 +260,7 @@ def get_user_public_profile(
     result = user_service.get_public_profile(db, cache_client, user_id, viewer_id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    return result
+    return _etag_response(request, result)
 
 
 @router.get("/{user_id}/following", response_model=FollowListResponse, summary="他人关注列表")

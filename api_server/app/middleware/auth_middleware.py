@@ -108,7 +108,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 return self._build_unauthorized_response()
 
-            # 续签成功，放行下游并将新双Token写回响应Cookie
+            # 续签成功，将新access_token注入请求头，使下游控制器能正确解析当前用户
+            # 避免下游 get_current_user 仍读取旧Cookie导致401
+            self._inject_access_token(request, tokens.access_token)
+
+            # 放行下游并将新双Token写回响应Cookie
             response = await call_next(request)
             self._set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
             return response
@@ -131,6 +135,59 @@ class AuthMiddleware(BaseHTTPMiddleware):
             status_code=401,
             content={"detail": "未登录或会话已过期，请重新登录"},
         )
+
+    @staticmethod
+    def _inject_access_token(request: Request, access_token: str) -> None:
+        """将续签后的access_token注入请求的Cookie头，使下游控制器能正确解析当前用户。
+
+        修改request.scope中的headers，替换旧的access_token cookie值，
+        避免下游 get_current_user 仍读取旧Cookie导致401。
+
+        Args:
+            request: FastAPI请求对象。
+            access_token: 新的JWT访问令牌。
+        """
+        raw_headers = request.scope.get("headers", [])
+        new_headers: list[tuple[bytes, bytes]] = []
+        for key, value in raw_headers:
+            if key.lower() == b"cookie":
+                # 替换或追加 access_token 到现有Cookie头
+                new_cookie = AuthMiddleware._replace_cookie_value(value.decode("utf-8"), "access_token", access_token)
+                new_headers.append((key, new_cookie.encode("utf-8")))
+            else:
+                new_headers.append((key, value))
+        request.scope["headers"] = new_headers
+
+    @staticmethod
+    def _replace_cookie_value(cookie_header: str, target_key: str, new_value: str) -> str:
+        """替换Cookie头中指定键的值，若不存在则追加。
+
+        Args:
+            cookie_header: 原始Cookie头字符串。
+            target_key: 要替换的Cookie键名。
+            new_value: 新的Cookie值。
+
+        Returns:
+            修改后的Cookie头字符串。
+        """
+        # 兼容 "key=val; key2=val2" 与 "key=val;key2=val2" 两种格式
+        parts = [p.strip() for p in cookie_header.split(";")]
+        found = False
+        new_parts: list[str] = []
+        for part in parts:
+            if not part or "=" not in part:
+                if part:
+                    new_parts.append(part)
+                continue
+            key = part.split("=", 1)[0].strip()
+            if key == target_key:
+                new_parts.append(f"{target_key}={new_value}")
+                found = True
+            else:
+                new_parts.append(part)
+        if not found:
+            new_parts.append(f"{target_key}={new_value}")
+        return "; ".join(new_parts)
 
     @staticmethod
     def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:

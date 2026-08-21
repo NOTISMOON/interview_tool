@@ -173,10 +173,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const user = JSON.parse(userStr) as User;
         set({ user, isLoggedIn: true, authLoading: false });
+        // 本地快照仅用于首屏快速渲染，后台静默刷新一次对齐服务端
+        // （后端ETag协商缓存：数据未变仅304，开销极小；数据更新则同步store）
+        get().refreshUser();
       } catch {
         localStorage.removeItem('auth_user');
         set({ authLoading: false });
       }
+      return;
+    }
+
+    // 登录页和回调页不向后端发认证请求，避免 401 触发 axios 拦截器跳转，
+    // 打断 GitHub OAuth 回调流程（回调页 /callback 并发 initAuth 与 handleGithubCallback 存在竞态）
+    const authPaths = ['/login', '/callback'];
+    if (authPaths.some((p) => window.location.pathname.includes(p))) {
+      set({ authLoading: false });
       return;
     }
 

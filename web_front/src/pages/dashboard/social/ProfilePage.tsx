@@ -38,7 +38,7 @@ import { useUpload } from '@/hooks/useUpload';
 const ProfilePage = () => {
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-  const { user, logout, updateUser, resumes, removeResume, reports } = useAppStore();
+  const { user, logout, updateUser, refreshUser, resumes, removeResume, reports } = useAppStore();
   const { upload: uploadAvatar, uploading: avatarUploading } = useUpload('avatar');
 
   const reportList = Object.values(reports);
@@ -77,9 +77,12 @@ const ProfilePage = () => {
     }
   };
 
-  // 进入页面时拉取一次真实上传记录
+  // 进入页面时拉取一次真实上传记录 + 刷新个人资料
+  // 后端已开启ETag协商缓存：每次进入都发请求，数据未变返回304（极快），
+  // 数据更新（如关注数变化）返回200新数据并同步更新store与localStorage
   useEffect(() => {
     loadRemoteResumes();
+    refreshUser();
   }, []);
 
   const handleLogout = () => {

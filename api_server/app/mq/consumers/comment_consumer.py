@@ -9,15 +9,14 @@
 与outbox event_type一一对应。
 """
 
+import asyncio
 import logging
 from typing import Any
-
-import redis.asyncio as aioredis
 
 from app.cache.comment_cache import comment_cache
 from app.mq.consumer import BaseConsumer, MQMessage
 from app.mq.queues import QueueName
-from app.redis.async_client import AsyncRedisClient
+from app.redis.sync_client import SyncRedisClient
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +57,10 @@ class CommentCacheSyncConsumer(BaseConsumer):
         comment_id = int(payload["comment_id"])
         is_reply = bool(payload.get("is_reply", False))
 
-        client = await AsyncRedisClient.get_client()
+        client = SyncRedisClient.get_client()
 
         # 失效帖子评论列表缓存（新评论导致列表变化）
-        comment_cache.invalidate_list(client, post_id)
+        await asyncio.to_thread(comment_cache.invalidate_list, client, post_id)
 
         logger.info(
             "评论创建事件缓存同步完成 comment_id=%s post_id=%s is_reply=%s",
@@ -79,10 +78,10 @@ class CommentCacheSyncConsumer(BaseConsumer):
         post_id = int(payload["post_id"])
         comment_id = int(payload["comment_id"])
 
-        client = await AsyncRedisClient.get_client()
+        client = SyncRedisClient.get_client()
 
         # 失效帖子评论列表缓存
-        comment_cache.invalidate_list(client, post_id)
+        await asyncio.to_thread(comment_cache.invalidate_list, client, post_id)
 
         logger.info(
             "评论删除事件缓存同步完成 comment_id=%s post_id=%s",

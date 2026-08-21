@@ -112,16 +112,13 @@ class UploadService:
         if count > settings.COS_DAILY_UPLOAD_LIMIT:
             raise DailyLimitExceededError("今日上传次数已用完，请明天再试")
 
-        # 4. 生成COS Key：{type_dir}/{user_id}/{uuid}.{ext}
-        # avatar → images/ 目录，post_image → images/ 目录，resume → resumes/ 目录
-        if req.file_type in ("avatar", "post_image"):
-            type_dir = "images"
-        else:
-            type_dir = f"{req.file_type}s"
-        cos_key = f"{type_dir}/{user_id}/{uuid.uuid4().hex}{ext}"
+        # 4. 生成COS Key：uploads/{file_type}s/{user_id}/{uuid}.{ext}
+        # （与《文件上传功能文档》12.2 COS目录结构一致：uploads/resumes/、uploads/avatars/）
+        type_dir = f"{req.file_type}s"
+        cos_key = f"uploads/{type_dir}/{user_id}/{uuid.uuid4().hex}{ext}"
 
         # 5. 调用STS生成限定目录的临时密钥
-        resource_prefix = f"{type_dir}/{user_id}"
+        resource_prefix = f"uploads/{type_dir}/{user_id}"
         credentials = cos_client.get_sts_credentials(resource_prefix)
 
         # 6. Redis登记上传pending状态（回调校验依据，TTL 1小时）
@@ -303,8 +300,8 @@ class UploadService:
     def _parse_and_check_cos_key(cos_key: str, user_id: int) -> str:
         """解析并校验cos_key路径前缀归属（防伪造回调的关键防线）。
 
-        期望格式: {type_dir}/{user_id}/{filename}，
-        其中 type_dir 为 resumes 或 images，{user_id} 必须与当前登录用户一致。
+        期望格式: uploads/{type_dir}/{user_id}/{filename}，
+        其中 type_dir 为 resumes 或 avatars，{user_id} 必须与当前登录用户一致。
 
         Args:
             cos_key: COS对象Key。
@@ -317,17 +314,17 @@ class UploadService:
             CallbackInvalidError: 路径格式非法或归属不匹配。
         """
         parts = cos_key.strip("/").split("/")
-        if len(parts) != 3:
+        if len(parts) != 4 or parts[0] != "uploads":
             raise CallbackInvalidError("cos_key路径格式非法")
-        type_dir = parts[0]
-        if type_dir == "images":
-            file_type = "avatar"
-        elif type_dir == "resumes":
+        type_dir = parts[1]
+        if type_dir == "resumes":
             file_type = "resume"
+        elif type_dir == "avatars":
+            file_type = "avatar"
         else:
             raise CallbackInvalidError("cos_key文件用途非法")
         try:
-            path_user_id = int(parts[1])
+            path_user_id = int(parts[2])
         except ValueError as exc:
             raise CallbackInvalidError("cos_key路径用户ID非法") from exc
         if path_user_id != user_id:

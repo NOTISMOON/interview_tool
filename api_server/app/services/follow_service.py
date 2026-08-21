@@ -136,6 +136,8 @@ class FollowService:
         # 事务提交后失效双方资料缓存（计数已变更，下次查询回填最新值）
         user_service.invalidate_profile_cache(cache_client, follower_id)
         user_service.invalidate_profile_cache(cache_client, following_id)
+        # 同步增量更新关注列表缓存（键存在才写，保证关注后立即可见，不等待MQ异步同步）
+        follow_cache.apply_follow_change(cache_client, follower_id, following_id, int(now.timestamp() * 1000))
         logger.info("关注成功 follower_id=%s following_id=%s", follower_id, following_id)
 
     def unfollow(self, db: Session, cache_client: redis.Redis, follower_id: int, following_id: int) -> None:
@@ -187,6 +189,8 @@ class FollowService:
         # 事务提交后失效双方资料缓存（计数已变更）
         user_service.invalidate_profile_cache(cache_client, follower_id)
         user_service.invalidate_profile_cache(cache_client, following_id)
+        # 同步移除缓存成员（幂等空操作安全），保证取关后立即刷新不可见
+        follow_cache.apply_unfollow_change(cache_client, follower_id, following_id)
         logger.info("取关成功 follower_id=%s following_id=%s", follower_id, following_id)
 
     # ------------------------------------------------------------------
@@ -323,6 +327,7 @@ class FollowService:
         has_more = len(db_rows) > size
         db_rows = db_rows[:size]
         ids = [user.id for user, _ in db_rows]
+        self._ensure_relation_sets(db, cache_client, viewer_id)
         flags = follow_cache.batch_relation_flags(cache_client, viewer_id, ids)
         items = [
             FollowItemResponse(
@@ -345,6 +350,22 @@ class FollowService:
             followers_count=profile.followers_count,
         )
 
+    def _ensure_relation_sets(self, db: Session, cache_client: redis.Redis, viewer_id: int | None) -> None:
+        """确保访问者的关注/粉丝SET缓存已回源，防止关系标记误报。
+
+        batch_relation_flags依赖viewer的两个SET做SMISMEMBER判断，SET未回源
+        （viewer从未访问过自己的列表）时Redis返回空，导致"已关注却显示未关注"。
+
+        Args:
+            db: 数据库同步会话。
+            cache_client: 同步Redis客户端。
+            viewer_id: 当前访问者ID，游客为None（跳过）。
+        """
+        if viewer_id is None:
+            return
+        follow_cache.rebuild_set(cache_client, db, viewer_id, DIRECTION_FOLLOWING)
+        follow_cache.rebuild_set(cache_client, db, viewer_id, DIRECTION_FOLLOWERS)
+
     def _assemble_items(
         self,
         cache_client: redis.Redis,
@@ -357,6 +378,7 @@ class FollowService:
         注意: next_cursor由调用方基于ZSET原始行计算（非过滤后的items），
         避免注销用户被过滤后游标回退造成死循环。
         """
+        self._ensure_relation_sets(db, cache_client, viewer_id)
         ids = [uid for uid, _ in page_rows]
         users = sync_user_repository.batch_get_by_ids(db, ids)
         flags = follow_cache.batch_relation_flags(cache_client, viewer_id, ids)

@@ -19,8 +19,12 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from app.cache.follow_cache import DIRECTION_FOLLOWERS, DIRECTION_FOLLOWING, follow_cache
-from app.core.config import settings
+from app.cache.follow_cache import (
+    DIRECTION_FOLLOWERS,
+    DIRECTION_FOLLOWING,
+    FOLLOW_CHANGE_LUA,
+    follow_cache,
+)
 from app.mq.consumer import BaseConsumer, MQMessage
 from app.mq.queues import QueueName
 from app.redis.async_client import AsyncRedisClient
@@ -65,7 +69,11 @@ class FollowCacheSyncConsumer(BaseConsumer):
     # ------------------------------------------------------------------
 
     async def _on_follow_created(self, payload: dict[str, Any]) -> None:
-        """处理关注事件：双向ZADD/SADD + 清空标记 + 刷新TTL（1次pipeline）。
+        """处理关注事件：Lua原子增量同步（键存在才ZADD/SADD+清空标记+刷TTL）。
+
+        键不存在（未回源）时跳过增量写，避免建立只含单个成员的残缺缓存
+        （残缺缓存会令rebuild的double-check误判已重建而跳过全量回源）；
+        写路径已同步执行相同脚本，本消费者作为兜底（幂等，重复执行无害）。
 
         Args:
             payload: 含follower_id、following_id、created_at_ms的事件负载。
@@ -76,28 +84,8 @@ class FollowCacheSyncConsumer(BaseConsumer):
         score_ms = int(payload["created_at_ms"])
 
         client = await AsyncRedisClient.get_client()
-        pipe = client.pipeline()
-        pipe.zadd(
-            follow_cache._zset_key(follower_id, DIRECTION_FOLLOWING),
-            {str(following_id): score_ms},
-        )
-        pipe.zadd(
-            follow_cache._zset_key(following_id, DIRECTION_FOLLOWERS),
-            {str(follower_id): score_ms},
-        )
-        pipe.sadd(follow_cache._set_key(follower_id, DIRECTION_FOLLOWING), str(following_id))
-        pipe.sadd(follow_cache._set_key(following_id, DIRECTION_FOLLOWERS), str(follower_id))
-        # 闭环读路径B-5：空标记期内新关注，DEL标记立即可见
-        pipe.delete(
-            follow_cache._empty_key(follower_id, DIRECTION_FOLLOWING),
-            follow_cache._empty_key(following_id, DIRECTION_FOLLOWERS),
-        )
-        # ZADD已确保键存在，刷新滑动TTL（闭环B-6：TTL期间实时维护）
-        pipe.expire(follow_cache._zset_key(follower_id, DIRECTION_FOLLOWING), settings.FOLLOW_CACHE_TTL)
-        pipe.expire(follow_cache._zset_key(following_id, DIRECTION_FOLLOWERS), settings.FOLLOW_CACHE_TTL)
-        pipe.expire(follow_cache._set_key(follower_id, DIRECTION_FOLLOWING), settings.FOLLOW_CACHE_TTL)
-        pipe.expire(follow_cache._set_key(following_id, DIRECTION_FOLLOWERS), settings.FOLLOW_CACHE_TTL)
-        await pipe.execute()
+        keys_and_args = follow_cache.follow_change_keys_and_args(follower_id, following_id, score_ms)
+        await client.eval(FOLLOW_CHANGE_LUA, 6, *keys_and_args)
         logger.info(
             "关注事件缓存同步完成 follower_id=%s following_id=%s score_ms=%s",
             follower_id,

@@ -40,12 +40,14 @@ app = FastAPI(
 app.add_middleware(AuthMiddleware)
 
 # CORS中间件配置：allow_credentials=True时origins不能用通配符，必须明确白名单
+# expose_headers暴露ETag：跨域下前端JS可读取协商缓存头（If-None-Match由浏览器自动携带）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["ETag"],
 )
 
 # 注册API路由

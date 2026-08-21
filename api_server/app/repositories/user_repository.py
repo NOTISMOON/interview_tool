@@ -132,16 +132,16 @@ class UserRepository:
             avatar=user_info.avatar_url,
         )
         db.add(user)
-        await db.flush()  # 提前获取自增主键，供user_auth外键使用
-
-        db.add(
-            UserAuth(
-                user_id=user.id,
-                provider=PROVIDER_GITHUB,
-                provider_user_id=github_id,
-            )
-        )
         try:
+            # flush阶段即执行INSERT：邮箱唯一索引冲突（uk_email）在此抛出，必须一并捕获
+            await db.flush()  # 提前获取自增主键，供user_auth外键使用
+            db.add(
+                UserAuth(
+                    user_id=user.id,
+                    provider=PROVIDER_GITHUB,
+                    provider_user_id=github_id,
+                )
+            )
             await db.commit()
         except IntegrityError:
             # 唯一键冲突：邮箱被占用或并发创建同一GitHub用户

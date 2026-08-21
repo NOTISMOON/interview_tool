@@ -13,9 +13,22 @@ import {
 import { getMessages, getUnreadCount, markMessageRead, markAllMessagesRead } from '@/lib/api/messages';
 import type { MessageResponse } from '@/lib/api/messages';
 import type { SystemMessage } from '@/types';
+import { useAppStore } from '@/store';
+import {
+  getCachedMessages,
+  hasFullCache,
+  setCachedMessages,
+  mergeCachedMessages,
+  updateCachedMessage,
+  markAllCachedRead,
+} from '@/lib/messageCache';
 
-/** localStorage键：最后一条已接收消息ID，跨页面/跨重启共用 */
-const NOTIFY_LAST_ID_KEY = 'notify:last_msg_id';
+/** 全量加载每页大小（后端cursor模式上限50） */
+const PAGE_SIZE = 50;
+/** 增量拉取每页大小（后端since_id模式上限10） */
+const DELTA_LIMIT = 10;
+/** 循环翻页安全上限（防异常死循环） */
+const MAX_PAGES = 20;
 
 /** 将后端MessageResponse映射为前端SystemMessage */
 function mapMessage(m: MessageResponse): SystemMessage {
@@ -25,6 +38,7 @@ function mapMessage(m: MessageResponse): SystemMessage {
     comment: 'comment',
     follow: 'follow',
     dm: 'dm',
+    interview: 'interview',
   };
   return {
     id: String(m.id),
@@ -42,61 +56,39 @@ function mapMessage(m: MessageResponse): SystemMessage {
 const MessagesPage = () => {
   const navigate = useNavigate();
   const { message: msg } = App.useApp();
+  const { user } = useAppStore();
   const [activeTab, setActiveTab] = useState('all');
   const [messages, setMessages] = useState<SystemMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [markingAll, setMarkingAll] = useState(false);
 
-  /** 加载消息列表。
-   *  - 首次加载（无 cursor 且 tab 为 'all'）：增量模式 since_id + limit=10
-   *  - 按类型筛选 / 加载更多：翻页模式 cursor + size=20
-   */
-  const loadMessages = useCallback(async (cursor?: number | null, type?: string) => {
-    try {
-      const isFirstLoad = !cursor && (!type || type === 'all');
-      const params: { since_id?: number; limit?: number; cursor?: number; size?: number; type?: string } = {};
-
-      if (isFirstLoad) {
-        const lastId = Number(localStorage.getItem(NOTIFY_LAST_ID_KEY) || 0);
-        params.since_id = lastId;
-        params.limit = 10;
-      } else {
-        params.size = 20;
-        if (cursor) params.cursor = cursor;
-        if (type && type !== 'all') params.type = type;
-      }
-
-      const res = await getMessages(params);
-      const items = res.items.map(mapMessage);
-
-      if (cursor) {
-        setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const newItems = items.filter((m) => !existingIds.has(m.id));
-          return [...prev, ...newItems];
-        });
-      } else {
-        setMessages(items);
-      }
-
-      setNextCursor(res.next_cursor);
-      setUnreadCount(res.unread_total);
-
-      // 更新本地 last_msg_id（取本次返回的最大 id）
-      if (items.length > 0) {
-        const maxId = Math.max(...items.map((m) => Number(m.id)));
-        const prev = Number(localStorage.getItem(NOTIFY_LAST_ID_KEY) || 0);
-        if (maxId > prev) {
-          localStorage.setItem(NOTIFY_LAST_ID_KEY, String(maxId));
-        }
-      }
-    } catch {
-      msg.error('加载消息失败');
+  /** 全量加载：循环cursor翻页，直到取完所有历史消息 */
+  const loadAllMessages = useCallback(async (): Promise<SystemMessage[]> => {
+    const all: SystemMessage[] = [];
+    let cursor = 0;
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const res = await getMessages({ cursor: cursor || undefined, size: PAGE_SIZE });
+      all.push(...res.items.map(mapMessage));
+      if (res.next_cursor === null || res.items.length === 0) break;
+      cursor = res.next_cursor;
     }
-  }, [msg]);
+    return all;
+  }, []);
+
+  /** 增量加载：从缓存最后一条消息之后拉取新消息（未满页说明增量已取完） */
+  const loadDeltaMessages = useCallback(async (sinceId: number): Promise<SystemMessage[]> => {
+    const delta: SystemMessage[] = [];
+    let currentSince = sinceId;
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const res = await getMessages({ since_id: currentSince, limit: DELTA_LIMIT });
+      const items = res.items.map(mapMessage);
+      delta.push(...items);
+      if (items.length < DELTA_LIMIT) break;
+      currentSince = Math.max(...res.items.map((m) => m.id));
+    }
+    return delta;
+  }, []);
 
   /** 加载未读计数 */
   const loadUnreadCount = useCallback(async () => {
@@ -108,33 +100,52 @@ const MessagesPage = () => {
     }
   }, []);
 
+  /** 进入页面：有缓存则增量拉取合并，无缓存则全量加载建缓存 */
   useEffect(() => {
-    setLoading(true);
-    loadMessages().finally(() => setLoading(false));
+    if (!user) return;
+    let cancelled = false;
+    const bootstrap = async () => {
+      setLoading(true);
+      try {
+        if (hasFullCache(user.id)) {
+          // 已有全量缓存：先展示缓存，再拉取缓存之后的新消息合并
+          setMessages(getCachedMessages(user.id));
+          const cached = getCachedMessages(user.id);
+          const lastId = Math.max(...cached.map((m) => Number(m.id)));
+          const delta = await loadDeltaMessages(lastId);
+          if (!cancelled && delta.length > 0) {
+            mergeCachedMessages(user.id, delta);
+            setMessages(getCachedMessages(user.id));
+          }
+        } else {
+          // 首次进入：全量加载并写入缓存
+          const all = await loadAllMessages();
+          if (!cancelled) {
+            setCachedMessages(user.id, all);
+            setMessages(getCachedMessages(user.id));
+          }
+        }
+      } catch {
+        msg.error('加载消息失败');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    bootstrap();
     loadUnreadCount();
-  }, [loadMessages, loadUnreadCount]);
+    return () => { cancelled = true; };
+  }, [user, loadAllMessages, loadDeltaMessages, loadUnreadCount, msg]);
 
-  /** 切换标签时重新加载 */
-  useEffect(() => {
-    setLoading(true);
-    setMessages([]);
-    setNextCursor(null);
-    loadMessages(null, activeTab).finally(() => setLoading(false));
-  }, [activeTab, loadMessages]);
-
-  /** 加载更多 */
-  const handleLoadMore = async () => {
-    if (loadingMore || nextCursor === null) return;
-    setLoadingMore(true);
-    await loadMessages(nextCursor, activeTab);
-    setLoadingMore(false);
-  };
+  /** 标签筛选：全部消息已在缓存中，纯前端过滤，无需请求 */
+  const filteredMessages =
+    activeTab === 'all' ? messages : messages.filter((m) => m.type === activeTab);
 
   /** 点击消息 */
   const handleMessageClick = async (msgItem: SystemMessage) => {
-    if (!msgItem.isRead) {
+    if (!msgItem.isRead && user) {
       try {
         await markMessageRead(Number(msgItem.id));
+        updateCachedMessage(user.id, msgItem.id, { isRead: true });
         setMessages((prev) =>
           prev.map((m) => (m.id === msgItem.id ? { ...m, isRead: true } : m)),
         );
@@ -155,8 +166,11 @@ const MessagesPage = () => {
     setMarkingAll(true);
     try {
       const res = await markAllMessagesRead();
+      if (user) {
+        markAllCachedRead(user.id);
+        setMessages(getCachedMessages(user.id));
+      }
       msg.success(`已标记 ${res.count} 条消息为已读`);
-      setMessages((prev) => prev.map((m) => ({ ...m, isRead: true })));
       setUnreadCount(0);
     } catch {
       msg.error('操作失败');
@@ -232,7 +246,7 @@ const MessagesPage = () => {
           <div className="flex items-center justify-center py-24">
             <Spin size="large" />
           </div>
-        ) : messages.length === 0 ? (
+        ) : filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24">
             <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mb-4">
               <BellOutlined className="text-2xl text-[#8B949E]" />
@@ -241,7 +255,7 @@ const MessagesPage = () => {
             <p className="text-sm text-[#5F6B7A]">当你收到通知时，会显示在这里</p>
           </div>
         ) : (
-          messages.map((msgItem) => (
+          filteredMessages.map((msgItem) => (
             <div
               key={msgItem.id}
               className={`bg-white border rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer ${!msgItem.isRead ? 'border-[#FF6B35]/30 bg-[#FFF3ED]/30' : 'border-[#E1E4E8]'}`}
@@ -264,17 +278,6 @@ const MessagesPage = () => {
               </div>
             </div>
           ))
-        )}
-        {nextCursor !== null && !loading && (
-          <div className="p-4 text-center">
-            <button
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              className="text-sm text-[#FF6B35] font-medium hover:text-[#E85D26] transition-colors"
-            >
-              {loadingMore ? '加载中...' : '加载更多'}
-            </button>
-          </div>
         )}
       </div>
     </div>

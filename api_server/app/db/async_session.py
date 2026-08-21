@@ -14,6 +14,10 @@ async_engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
+    connect_args={
+        "ssl": False,  # aiomysql 在 Windows 上通过 caching_sha2_password 认证时需关闭 SSL
+        "charset": "utf8mb4",
+    },
 )
 
 AsyncSessionLocal = async_sessionmaker(

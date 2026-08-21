@@ -11,13 +11,14 @@
 幂等性: Redis SET操作（SADD/SREM）天然幂等，重复消费无副作用。
 """
 
+import asyncio
 import logging
 from typing import Any
 
 from app.cache.interaction_cache import interaction_cache
 from app.mq.consumer import BaseConsumer, MQMessage
 from app.mq.queues import QueueName
-from app.redis.async_client import AsyncRedisClient
+from app.redis.sync_client import SyncRedisClient
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,8 @@ class InteractionCacheSyncConsumer(BaseConsumer):
         post_id = int(payload["post_id"])
         user_id = int(payload["user_id"])
 
-        client = await AsyncRedisClient.get_client()
-        interaction_cache.add_like(client, post_id, user_id)
+        client = SyncRedisClient.get_client()
+        await asyncio.to_thread(interaction_cache.add_like, client, post_id, user_id)
 
         logger.info("点赞事件缓存同步完成 post_id=%s user_id=%s", post_id, user_id)
 
@@ -78,8 +79,8 @@ class InteractionCacheSyncConsumer(BaseConsumer):
         post_id = int(payload["post_id"])
         user_id = int(payload["user_id"])
 
-        client = await AsyncRedisClient.get_client()
-        interaction_cache.remove_like(client, post_id, user_id)
+        client = SyncRedisClient.get_client()
+        await asyncio.to_thread(interaction_cache.remove_like, client, post_id, user_id)
 
         logger.info("取消点赞事件缓存同步完成 post_id=%s user_id=%s", post_id, user_id)
 
@@ -92,8 +93,8 @@ class InteractionCacheSyncConsumer(BaseConsumer):
         post_id = int(payload["post_id"])
         user_id = int(payload["user_id"])
 
-        client = await AsyncRedisClient.get_client()
-        interaction_cache.add_favorite(client, post_id, user_id)
+        client = SyncRedisClient.get_client()
+        await asyncio.to_thread(interaction_cache.add_favorite, client, post_id, user_id)
 
         logger.info("收藏事件缓存同步完成 post_id=%s user_id=%s", post_id, user_id)
 
@@ -106,7 +107,7 @@ class InteractionCacheSyncConsumer(BaseConsumer):
         post_id = int(payload["post_id"])
         user_id = int(payload["user_id"])
 
-        client = await AsyncRedisClient.get_client()
-        interaction_cache.remove_favorite(client, post_id, user_id)
+        client = SyncRedisClient.get_client()
+        await asyncio.to_thread(interaction_cache.remove_favorite, client, post_id, user_id)
 
         logger.info("取消收藏事件缓存同步完成 post_id=%s user_id=%s", post_id, user_id)

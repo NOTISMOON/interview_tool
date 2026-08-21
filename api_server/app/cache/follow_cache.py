@@ -33,6 +33,38 @@ logger = logging.getLogger(__name__)
 DIRECTION_FOLLOWING = "following"
 DIRECTION_FOLLOWERS = "followers"
 
+# 关注事件增量同步Lua脚本：仅当缓存键已存在（已回源）时才ZADD/SADD，
+# 避免对未回源的键建立只含单个成员的残缺缓存（残缺缓存会令rebuild的
+# double-check误判"已重建"而跳过全量回源，导致列表丢数据）。
+# 同时删除空列表标记（空标记期内新关注需立即可见）并刷新TTL。
+# KEYS: 1=follower的following ZSET 2=following的followers ZSET
+#       3=follower的following SET  4=following的followers SET
+#       5=follower的following空标记 6=following的followers空标记
+# ARGV: 1=following_id 2=follower_id 3=score_ms 4=TTL秒
+FOLLOW_CHANGE_LUA = """
+local changed = 0
+if redis.call('EXISTS', KEYS[1]) == 1 then
+    redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
+    redis.call('EXPIRE', KEYS[1], ARGV[4])
+    changed = changed + 1
+end
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    redis.call('ZADD', KEYS[2], ARGV[3], ARGV[2])
+    redis.call('EXPIRE', KEYS[2], ARGV[4])
+    changed = changed + 1
+end
+if redis.call('EXISTS', KEYS[3]) == 1 then
+    redis.call('SADD', KEYS[3], ARGV[1])
+    redis.call('EXPIRE', KEYS[3], ARGV[4])
+end
+if redis.call('EXISTS', KEYS[4]) == 1 then
+    redis.call('SADD', KEYS[4], ARGV[2])
+    redis.call('EXPIRE', KEYS[4], ARGV[4])
+end
+redis.call('DEL', KEYS[5], KEYS[6])
+return changed
+"""
+
 
 class FollowCache:
     """关注关系缓存操作层（同步），不包含业务可见性逻辑。"""
@@ -133,6 +165,82 @@ class FollowCache:
         return int(cache_client.zcard(self._zset_key(user_id, direction)))
 
     # ------------------------------------------------------------------
+    # 写路径增量同步（关注/取关后立即可见）
+    # ------------------------------------------------------------------
+
+    def follow_change_keys_and_args(
+        self, follower_id: int, following_id: int, score_ms: int
+    ) -> list[str]:
+        """构建关注增量同步Lua脚本的KEYS+ARGV参数（供同步写路径与异步消费端复用）。
+
+        Args:
+            follower_id: 关注者用户ID。
+            following_id: 被关注者用户ID。
+            score_ms: 关注时间的毫秒时间戳。
+
+        Returns:
+            6个KEYS与4个ARGV拼接的参数列表。
+        """
+        return [
+            self._zset_key(follower_id, DIRECTION_FOLLOWING),
+            self._zset_key(following_id, DIRECTION_FOLLOWERS),
+            self._set_key(follower_id, DIRECTION_FOLLOWING),
+            self._set_key(following_id, DIRECTION_FOLLOWERS),
+            self._empty_key(follower_id, DIRECTION_FOLLOWING),
+            self._empty_key(following_id, DIRECTION_FOLLOWERS),
+            str(following_id),
+            str(follower_id),
+            str(score_ms),
+            str(settings.FOLLOW_CACHE_TTL),
+        ]
+
+    def apply_follow_change(
+        self,
+        cache_client: redis.Redis,
+        follower_id: int,
+        following_id: int,
+        score_ms: int,
+    ) -> None:
+        """关注后原子增量同步缓存（Lua）：键存在才ZADD/SADD，删空标记，刷TTL。
+
+        写路径在DB事务提交后同步调用，保证用户关注后立即刷新页面即可看到
+        新列表（不必等待MQ消费者异步同步）；未回源的键跳过增量写，由下次
+        读请求触发rebuild全量回源（DB已提交，数据正确）。
+
+        Args:
+            cache_client: 同步Redis客户端。
+            follower_id: 关注者用户ID。
+            following_id: 被关注者用户ID。
+            score_ms: 关注时间的毫秒时间戳（ZSET score，与回源口径一致）。
+        """
+        cache_client.eval(
+            FOLLOW_CHANGE_LUA, 6, *self.follow_change_keys_and_args(follower_id, following_id, score_ms)
+        )
+
+    def apply_unfollow_change(
+        self,
+        cache_client: redis.Redis,
+        follower_id: int,
+        following_id: int,
+    ) -> None:
+        """取关后同步移除缓存成员：双向ZREM/SREM（1次pipeline）。
+
+        ZREM/SREM对不存在的键是空操作且不会创建键，天然幂等安全；
+        写路径在DB事务提交后同步调用，保证取关后立即刷新不可见。
+
+        Args:
+            cache_client: 同步Redis客户端。
+            follower_id: 关注者用户ID。
+            following_id: 被取关者用户ID。
+        """
+        pipe = cache_client.pipeline()
+        pipe.zrem(self._zset_key(follower_id, DIRECTION_FOLLOWING), str(following_id))
+        pipe.zrem(self._zset_key(following_id, DIRECTION_FOLLOWERS), str(follower_id))
+        pipe.srem(self._set_key(follower_id, DIRECTION_FOLLOWING), str(following_id))
+        pipe.srem(self._set_key(following_id, DIRECTION_FOLLOWERS), str(follower_id))
+        pipe.execute()
+
+    # ------------------------------------------------------------------
     # 关系判断（SET批量）
     # ------------------------------------------------------------------
 
@@ -172,6 +280,49 @@ class FollowCache:
     # ------------------------------------------------------------------
     # 回源重建（ZSET部分 + SET全量）
     # ------------------------------------------------------------------
+
+    def rebuild_set(
+        self,
+        cache_client: redis.Redis,
+        db: Session,
+        user_id: int,
+        direction: str,
+    ) -> None:
+        """仅回源单个方向的关系SET（不动ZSET），修复SET单独过期导致的误报。
+
+        SET与ZSET的TTL独立刷新，可能出现"ZSET仍在、SET已过期"的中间态：
+        此时rebuild的double-check看到ZSET存在即跳过，SET永远不会被重建，
+        SMISMEMBER对缺失键返回空导致关系判断误报（已关注却显示未关注）。
+
+        Args:
+            cache_client: 同步Redis客户端。
+            db: 数据库同步会话。
+            user_id: 关系属主用户ID。
+            direction: following或followers。
+        """
+        set_key = self._set_key(user_id, direction)
+        if cache_client.exists(set_key):
+            return  # double-check：SET已存在
+
+        lock = self._get_lock(set_key)
+        with lock:
+            if cache_client.exists(set_key):
+                return  # double-check
+
+            if direction == DIRECTION_FOLLOWING:
+                all_ids = sync_user_repository.fetch_all_following_ids(db, user_id)
+            else:
+                all_ids = sync_user_repository.fetch_all_follower_ids(db, user_id)
+
+            if all_ids:
+                pipe = cache_client.pipeline()
+                pipe.sadd(set_key, *[str(i) for i in all_ids])
+                pipe.expire(set_key, settings.FOLLOW_CACHE_TTL)
+                pipe.execute()
+                logger.info(
+                    "关注SET单独回源完成: user_id=%s direction=%s count=%d", user_id, direction, len(all_ids)
+                )
+            # 空列表不写SET键：SMISMEMBER对缺失键返回False，语义即"未关注"，正确
 
     def rebuild(
         self,
