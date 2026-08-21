@@ -16,7 +16,7 @@ import {
 import { useAppStore } from '@/store';
 import { getPostDetail, deletePost } from '@/lib/api/posts';
 import { toggleLike, toggleFavorite } from '@/lib/api/interactions';
-import { createComment, listComments } from '@/lib/api/comments';
+import { createComment, listComments, listReplies } from '@/lib/api/comments';
 import type { PostDetail, PostComment } from '@/types';
 import { buildCosUrl } from '@/utils/cos';
 import dayjs from 'dayjs';
@@ -49,6 +49,14 @@ const PostDetailPage = () => {
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // 回复相关状态：每条一级评论的回复列表、展开状态、加载状态
+  const [repliesMap, setRepliesMap] = useState<Record<number, PostComment[]>>({});
+  const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
+  const [repliesLoading, setRepliesLoading] = useState<Record<number, boolean>>({});
+  const [replyingTo, setReplyingTo] = useState<{ root: PostComment; target: PostComment } | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replySubmitting, setReplySubmitting] = useState(false);
 
   /** 获取帖子详情 */
   const fetchPost = async () => {
@@ -131,6 +139,68 @@ const PostDetailPage = () => {
       msg.error('评论失败，请稍后重试');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /** 加载某条一级评论的回复列表（仅首次） */
+  const loadReplies = async (commentId: number) => {
+    if (repliesMap[commentId]) return;
+    setRepliesLoading((prev) => ({ ...prev, [commentId]: true }));
+    try {
+      const data = await listReplies(commentId, { limit: 20 });
+      setRepliesMap((prev) => ({ ...prev, [commentId]: data.items }));
+    } catch {
+      msg.error('加载回复失败');
+    } finally {
+      setRepliesLoading((prev) => ({ ...prev, [commentId]: false }));
+    }
+  };
+
+  /** 展开/收起某条一级评论的回复列表 */
+  const toggleReplies = (comment: PostComment) => {
+    if (!expandedComments[comment.id]) {
+      loadReplies(comment.id);
+    }
+    setExpandedComments((prev) => ({ ...prev, [comment.id]: !prev[comment.id] }));
+  };
+
+  /** 开始回复：定位到一级评论及其对应的被回复者 */
+  const startReply = (root: PostComment, target: PostComment) => {
+    setReplyingTo({ root, target });
+    setReplyText('');
+    loadReplies(root.id);
+    setExpandedComments((prev) => ({ ...prev, [root.id]: true }));
+  };
+
+  /** 提交回复 */
+  const submitReply = async () => {
+    if (!replyingTo || !id) return;
+    if (!replyText.trim()) {
+      msg.warning('请输入回复内容');
+      return;
+    }
+    setReplySubmitting(true);
+    try {
+      await createComment(Number(id), {
+        content: replyText.trim(),
+        root_id: replyingTo.root.id,
+        reply_user_id: replyingTo.target.author?.id ?? null,
+      });
+      msg.success('回复成功');
+      setReplyText('');
+      // 回复后重拉该一级评论的回复列表，并将帖子评论数+1
+      const commentId = replyingTo.root.id;
+      setReplyingTo(null);
+      const data = await listReplies(commentId, { limit: 20 });
+      setRepliesMap((prev) => ({ ...prev, [commentId]: data.items }));
+      setExpandedComments((prev) => ({ ...prev, [commentId]: true }));
+      if (post) {
+        setPost({ ...post, comments_count: post.comments_count + 1 });
+      }
+    } catch {
+      msg.error('回复失败，请稍后重试');
+    } finally {
+      setReplySubmitting(false);
     }
   };
 
@@ -326,12 +396,103 @@ const PostDetailPage = () => {
                       <LikeOutlined /> {comment.likes_count}
                     </button>
                     <button
-                      onClick={() => msg.info('回复功能即将上线')}
-                      className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors"
+                      onClick={() => startReply(comment, comment)}
+                      className={`text-xs transition-colors ${
+                        replyingTo?.root.id === comment.id
+                          ? 'text-[#FF6B35] font-medium'
+                          : 'text-[#8B949E] hover:text-[#0D1117]'
+                      }`}
                     >
                       回复
                     </button>
+                    {comment.reply_count > 0 && (
+                      <button
+                        onClick={() => toggleReplies(comment)}
+                        className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors"
+                      >
+                        {expandedComments[comment.id]
+                          ? '收起回复'
+                          : `查看 ${comment.reply_count} 条回复`}
+                      </button>
+                    )}
                   </div>
+
+                  {/* 展开的回复列表 */}
+                  {expandedComments[comment.id] && (
+                    <div className="mt-3 pl-4 border-l border-[#F0F2F5] space-y-3">
+                      {repliesLoading[comment.id] ? (
+                        <div className="flex justify-center py-2">
+                          <Spin size="small" />
+                        </div>
+                      ) : repliesMap[comment.id]?.length ? (
+                        repliesMap[comment.id].map((reply) => (
+                          <div key={reply.id} className="flex gap-2">
+                            <Avatar size={24} className="!bg-[#0D1117] flex-shrink-0 !text-[10px]">
+                              {reply.author?.nickname?.[0] || '?'}
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-sm font-medium text-[#0D1117]">
+                                  {reply.author?.nickname || '未知用户'}
+                                </span>
+                                {reply.reply_to && (
+                                  <span className="text-xs text-[#FF6B35]">
+                                    回复 @{reply.reply_to.nickname}
+                                  </span>
+                                )}
+                                <span className="text-xs text-[#8B949E]">{formatTime(reply.created_at)}</span>
+                              </div>
+                              <p className="text-sm text-[#0D1117] leading-relaxed">{reply.content}</p>
+                              <button
+                                onClick={() => startReply(comment, reply)}
+                                className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors mt-1"
+                              >
+                                回复
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-xs text-[#8B949E]">暂无回复</div>
+                      )}
+
+                      {/* 回复该一级评论的表单 */}
+                      {replyingTo?.root.id === comment.id && (
+                        <div className="flex gap-2 mt-2">
+                          <Avatar size={24} className="!bg-[#FF6B35] flex-shrink-0 !text-[10px]">
+                            {user?.nickname?.[0] || 'U'}
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="text-xs text-[#8B949E] mb-1">
+                              回复 @{replyingTo.target.author?.nickname || '用户'}
+                            </div>
+                            <textarea
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value)}
+                              placeholder="写下你的回复..."
+                              autoFocus
+                              className="w-full px-3 py-2 border border-[#E1E4E8] rounded-lg text-sm text-[#0D1117] placeholder:text-[#8B949E] resize-none focus:outline-none focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35]/20 transition-all min-h-[60px]"
+                            />
+                            <div className="flex justify-end gap-2 mt-2">
+                              <button
+                                onClick={() => { setReplyingTo(null); setReplyText(''); }}
+                                className="px-3 py-1 rounded-lg text-xs text-[#5F6B7A] hover:bg-[#F6F8FA] transition-colors"
+                              >
+                                取消
+                              </button>
+                              <button
+                                onClick={submitReply}
+                                disabled={!replyText.trim() || replySubmitting}
+                                className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF6B35] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                              >
+                                {replySubmitting ? '回复中...' : '回复'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

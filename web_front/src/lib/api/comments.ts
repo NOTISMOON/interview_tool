@@ -73,6 +73,18 @@ export async function listComments(
   return data;
 }
 
+/** 获取某条一级评论的回复列表 */
+export async function listReplies(
+  commentId: number,
+  params: {
+    cursor?: number;
+    limit?: number;
+  } = {},
+): Promise<CommentListResponse> {
+  const { data } = await request.get<CommentListResponse>(`/comments/${commentId}/replies`, { params });
+  return data;
+}
+
 /** 删除评论 */
 export async function deleteComment(commentId: number): Promise<void> {
   await request.delete(`/posts/comments/${commentId}`);
