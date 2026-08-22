@@ -31,15 +31,21 @@ import {
   FireOutlined,
   LikeOutlined,
   MessageOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import type { ProfileVisibility } from '@/types';
-import type { UploadRecord } from '@/types/upload';
 import type { PostListItem } from '@/types';
 import { useAppStore } from '@/store';
 import { FileUpload } from '@/components/upload/FileUpload';
-import { deleteUploadRecord, getUploadRecords } from '@/lib/api/upload';
 import { listPosts } from '@/lib/api/posts';
 import { useUpload } from '@/hooks/useUpload';
+import {
+  getResumes,
+  deleteResume,
+  retryResume,
+  RESUME_STATUS_LABEL,
+} from '@/lib/api/resume';
+import type { ApiResume } from '@/lib/api/resume';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -52,7 +58,7 @@ function formatTime(dateStr: string): string {
 const ProfilePage = () => {
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-  const { user, logout, updateUser, refreshUser, resumes, removeResume, reports } = useAppStore();
+  const { user, logout, updateUser, refreshUser, reports } = useAppStore();
   const { upload: uploadAvatar, uploading: avatarUploading } = useUpload('avatar');
 
   const reportList = Object.values(reports);
@@ -84,24 +90,28 @@ const ProfilePage = () => {
       phone: false,
     } as ProfileVisibility,
   });
-  /** 服务端真实上传记录（COS直传落库，id为纯数字） */
-  const [remoteResumes, setRemoteResumes] = useState<UploadRecord[]>([]);
+  /** 服务端真实简历列表（GET /resumes，含解析状态） */
+  const [resumes, setResumes] = useState<ApiResume[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(false);
 
-  /** 拉取服务端简历上传记录（失败静默，保留本地列表） */
-  const loadRemoteResumes = async () => {
+  /** 拉取服务端简历列表（失败静默，保留已有展示） */
+  const loadResumes = async () => {
+    setResumesLoading(true);
     try {
-      const res = await getUploadRecords('resume');
-      setRemoteResumes(res.items);
+      const res = await getResumes(1, 20);
+      setResumes(res.items);
     } catch {
-      // 接口失败不影响本地简历展示
+      // 接口失败不影响已有展示
+    } finally {
+      setResumesLoading(false);
     }
   };
 
-  // 进入页面时拉取一次真实上传记录 + 刷新个人资料
+  // 进入页面时拉取一次简历列表 + 刷新个人资料
   // 后端已开启ETag协商缓存：每次进入都发请求，数据未变返回304（极快），
   // 数据更新（如关注数变化）返回200新数据并同步更新store与localStorage
   useEffect(() => {
-    loadRemoteResumes();
+    loadResumes();
     refreshUser();
   }, []);
 
@@ -180,10 +190,10 @@ const ProfilePage = () => {
     }
   };
 
-  /** 上传成功回调：刷新服务端记录列表并提示 */
+  /** 上传成功回调：刷新服务端简历列表并提示 */
   const handleResumeUploaded = async () => {
     message.success('简历上传成功');
-    await loadRemoteResumes();
+    await loadResumes();
   };
 
   /** 上传失败回调：展示用户可读错误 */
@@ -191,32 +201,41 @@ const ProfilePage = () => {
     message.error(errMsg);
   };
 
-  /** 删除简历：服务端记录（纯数字id）走COS删除接口，本地mock直接移除 */
-  const handleDeleteResume = async (resumeId: string) => {
-    if (/^\d+$/.test(resumeId)) {
-      try {
-        await deleteUploadRecord(Number(resumeId));
-        await loadRemoteResumes();
-        message.success('简历已删除');
-      } catch {
-        message.error('删除简历失败，请重试');
-      }
-      return;
-    }
-    removeResume(resumeId);
-    message.success('简历已删除');
+  /** 删除简历：走独立删除接口（软删 + 联动清理） */
+  const handleDeleteResume = (resume: ApiResume) => {
+    modal.confirm({
+      title: '确定要删除这份简历吗？',
+      content: '删除后不可恢复',
+      okText: '删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteResume(resume.id);
+          message.success('简历已删除');
+          await loadResumes();
+        } catch {
+          message.error('删除简历失败，请重试');
+        }
+      },
+    });
   };
 
-  const handleStartInterview = (_resumeId?: string) => {
+  /** 对解析失败的简历一键重试 */
+  const handleRetryResume = async (resume: ApiResume) => {
+    try {
+      await retryResume(resume.id);
+      message.success('已重新分析，请稍候');
+      await loadResumes();
+    } catch {
+      message.error('重试失败，请稍后重试');
+    }
+  };
+
+  const handleStartInterview = (_resumeId?: number) => {
     setResumeModalOpen(false);
     navigate('/dashboard/interview');
   };
-
-  /** 合并展示列表：服务端真实记录在前，本地mock简历在后 */
-  const resumeItems: { id: string; fileName: string; uploadTime: string }[] = [
-    ...remoteResumes.map((r) => ({ id: String(r.upload_id), fileName: r.file_name, uploadTime: r.created_at })),
-    ...resumes,
-  ];
 
   interface MenuItem {
     icon: React.ReactNode;
@@ -231,7 +250,7 @@ const ProfilePage = () => {
     {
       title: '数据',
       items: [
-        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length + remoteResumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => setResumeModalOpen(true) },
+        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => setResumeModalOpen(true) },
         { icon: <HistoryOutlined />, label: '面试记录', count: reportList.length, color: '#2DA44E', bg: '#ECFDF3', onClick: () => navigate('/dashboard/history') },
         { icon: <TrophyOutlined />, label: '平均得分', count: totalScore ? `${totalScore} 分` : '--', color: '#BF8700', bg: '#FFF8E6', onClick: () => navigate('/dashboard/history') },
       ],
@@ -300,7 +319,7 @@ const ProfilePage = () => {
             className="bg-white/10 rounded-xl p-3 text-center cursor-pointer hover:bg-white/15 transition-colors"
             onClick={() => setResumeModalOpen(true)}
           >
-            <div className="text-white font-bold text-lg">{resumes.length + remoteResumes.length}</div>
+            <div className="text-white font-bold text-lg">{resumes.length}</div>
             <div className="text-white/50 text-xs">简历</div>
           </div>
           <div
@@ -633,7 +652,11 @@ const ProfilePage = () => {
         destroyOnClose
       >
         <div className="py-2">
-          {resumeItems.length === 0 ? (
+          {resumesLoading && resumes.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <Spin size="small" />
+            </div>
+          ) : resumes.length === 0 ? (
             <Empty
               description="还没有上传简历"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -641,7 +664,7 @@ const ProfilePage = () => {
             />
           ) : (
             <div className="space-y-2 mb-6 max-h-[300px] overflow-y-auto">
-              {resumeItems.map((resume) => (
+              {resumes.map((resume) => (
                 <div
                   key={resume.id}
                   className="flex items-center gap-3 bg-[#F6F8FA] rounded-xl p-3 hover:bg-[#EDF0F4] transition-colors group"
@@ -650,9 +673,22 @@ const ProfilePage = () => {
                     <FileTextOutlined className="text-[#FF6B35] text-lg" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#0D1117] truncate">{resume.fileName}</p>
-                    <p className="text-xs text-[#8B949E]">
-                      {new Date(resume.uploadTime).toLocaleDateString('zh-CN', {
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-[#0D1117] truncate">{resume.file_name}</p>
+                      <span
+                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                          resume.status === 1
+                            ? 'bg-[#ECFDF3] text-[#2DA44E]'
+                            : resume.status === 2
+                              ? 'bg-[#FFF0F1] text-[#CF222E]'
+                              : 'bg-[#FFF8E6] text-[#BF8700]'
+                        }`}
+                      >
+                        {RESUME_STATUS_LABEL[resume.status] ?? '未知'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#8B949E] mt-0.5">
+                      {new Date(resume.created_at).toLocaleDateString('zh-CN', {
                         year: 'numeric',
                         month: '2-digit',
                         day: '2-digit',
@@ -662,16 +698,29 @@ const ProfilePage = () => {
                     </p>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {resume.status === 2 && (
+                      <button
+                        onClick={() => handleRetryResume(resume)}
+                        className="w-8 h-8 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#BF8700] hover:text-[#BF8700] transition-colors"
+                        title="重新分析"
+                      >
+                        <ReloadOutlined className="text-sm" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleStartInterview(resume.id)}
-                      className="w-8 h-8 rounded-lg bg-[#FF6B35] flex items-center justify-center hover:bg-[#E85D26] transition-colors"
-                      title="使用此简历去面试"
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                        resume.status === 1
+                          ? 'bg-[#FF6B35] hover:bg-[#E85D26]'
+                          : 'bg-[#E1E4E8] cursor-not-allowed'
+                      }`}
+                      title={resume.status === 1 ? '使用此简历去面试' : '简历尚未就绪'}
                     >
                       <ThunderboltOutlined className="text-white text-sm" />
                     </button>
                     <Popconfirm
                       title="确定要删除这份简历吗？"
-                      onConfirm={() => handleDeleteResume(resume.id)}
+                      onConfirm={() => handleDeleteResume(resume)}
                       okText="删除"
                       cancelText="取消"
                       okButtonProps={{ danger: true }}

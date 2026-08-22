@@ -90,9 +90,10 @@ export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
  */
 export function validateFile(file: File): string | null {
   const ext = `.${file.name.split('.').pop()?.toLowerCase() ?? ''}`;
-  const allowedExts = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  // 与后端 COS_ALLOWED_EXTENSIONS 白名单保持一致（.pdf/.doc/.docx/.png/.jpg/.jpeg）
+  const allowedExts = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg'];
   if (!allowedExts.includes(ext)) {
-    return '仅支持 PDF、Word、图片格式（PNG/JPG/GIF/WebP）';
+    return '仅支持 PDF、Word、图片格式（PNG/JPG）';
   }
   if (file.size > MAX_FILE_SIZE) {
     return '文件大小不能超过 10MB';

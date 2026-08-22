@@ -80,8 +80,23 @@ class Settings(BaseSettings):
     COS_REGION: str = "ap-chengdu"  # COS地域
     COS_STS_DURATION: int = 1800  # STS临时密钥有效期（秒，默认30分钟）
     COS_MAX_FILE_SIZE: int = 10485760  # 上传文件大小上限（字节，默认10MB）
-    COS_ALLOWED_EXTENSIONS: str = ".pdf,.doc,.docx,.png,.jpg,.jpeg"  # 允许的扩展名白名单
+    COS_ALLOWED_EXTENSIONS: str = ".pdf,.docx,.png,.jpg,.jpeg"  # 允许的扩展名白名单（简历仅 .pdf/.docx）
     COS_DAILY_UPLOAD_LIMIT: int = 20  # 单用户每日上传次数上限
+
+    # ---- LLM 配置（LangChain 抽象层，供应商/模型可切换，见简历上传分析蓝图 §5.11） ----
+    LLM_PROVIDER: str = "ollama"  # 模型供应商：ollama / openai 等，经 LangChain init_chat_model 切换
+    LLM_BASE_URL: str = "http://localhost:11434"  # 供应商服务地址（ollama 默认本地端口）
+    LLM_MODEL_INTERVIEW: str = "qwen3.5:4b"  # 面试/简历解析基座模型（文本结构化提取）
+    LLM_TEMPERATURE_INTERVIEW: float = 0.5  # 面试/简历解析温度（低温度更稳定）
+    LLM_TIMEOUT: float = 120.0  # 单次 LLM 调用超时（秒），简历分析 10 分钟目标内单步可控
+    LLM_MAX_TOKENS: int = 4096  # 单次 LLM 调用最大输出 Token 数（预算上限）
+    LLM_NUM_CTX: int = 8192  # Ollama 上下文窗口大小（简历长文本提取需要较大上下文）
+
+    # ---- DeepSeek 线上模型（文本分析主用，配置在 .env，见简历上传分析蓝图 §5.11） ----
+    DEEPSEEK_API_KEY: str = ""  # DeepSeek API Key（为空则回退本地 Ollama）
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"  # DeepSeek API 地址（OpenAI 兼容）
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"  # 结构化提取模型
+
     model_config = {
         "env_file": str(Path(__file__).resolve().parent.parent.parent / ".env"),
         "env_file_encoding": "utf-8",

@@ -119,7 +119,11 @@ async def message_stream(
                 yield _format_sse_event(
                     event="message",
                     event_id=msg.id,
-                    data=msg.model_dump(mode="json", by_alias=True),
+                    data=json.dumps(
+                        msg.model_dump(mode="json", by_alias=True),
+                        ensure_ascii=False,
+                        default=str,
+                    ),
                 )
 
             # 4. 推送未读计数（与实时 unread_count 事件载荷结构保持一致）

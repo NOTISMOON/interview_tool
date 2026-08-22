@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.cos import CosError, build_cos_url, cos_client, format_upload_date
 from app.core.config import settings
+from app.repositories.resume_repository import resume_repository
 from app.repositories.upload_repository import upload_repository
 from app.schemas.upload import (
     StsTokenRequest,
@@ -232,12 +233,26 @@ class UploadService:
             user_id, record.id, req.cos_key, req.file_size,
         )
 
+        # 6. 简历上传联动：SHA256去重 → 创建简历记录 → 调度AI分析（蓝图§3.2）
+        resume_id: int | None = None
+        resume_status: int | None = None
+        if file_type == "resume":
+            from app.services.resume_service import resume_service
+
+            resume_out = resume_service.on_resume_uploaded(
+                db, cache_client, user_id, req.cos_key, req.file_name, req.file_size
+            )
+            resume_id = resume_out["resume_id"]
+            resume_status = resume_out["status"]
+
         return UploadCallbackResponse(
             upload_id=record.id,
             cos_key=record.cos_key,
             file_url=record.cos_url,
             status=record.status,
             created_at=record.created_at or datetime.now(),
+            resume_id=resume_id,
+            resume_status=resume_status,
         )
 
     # ------------------------------------------------------------------
@@ -303,7 +318,18 @@ class UploadService:
 
         # 再删数据库记录
         upload_repository.delete_by_id(db, record_id)
-        logger.info("删除上传记录: user_id=%s record_id=%s cos_key=%s", user_id, record_id, record.cos_key)
+
+        # 简历类记录联动软删除简历行：前端"删除简历"即走本接口，
+        # 不联动会留下指向已删COS对象的悬空简历，后续解析/下载均404
+        removed_resumes = 0
+        if record.file_type == "resume":
+            removed_resumes = resume_repository.soft_delete_by_file_url(
+                db, user_id, build_cos_url(record.cos_key)
+            )
+        logger.info(
+            "删除上传记录: user_id=%s record_id=%s cos_key=%s removed_resumes=%s",
+            user_id, record_id, record.cos_key, removed_resumes,
+        )
 
     # ------------------------------------------------------------------
     # 内部工具

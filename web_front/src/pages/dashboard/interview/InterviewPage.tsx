@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Steps, Upload, App } from 'antd';
+import { App, Steps } from 'antd';
 import {
-  InboxOutlined,
   ArrowLeftOutlined,
   ThunderboltOutlined,
   FileTextOutlined,
@@ -11,12 +10,19 @@ import {
   AudioOutlined,
   VideoCameraOutlined,
   LoadingOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
-import type { UploadProps, UploadFile } from 'antd';
 import { useAppStore } from '@/store';
 import { mockQuestions } from '@/lib/mocks/data';
-
-const { Dragger } = Upload;
+import { FileUpload } from '@/components/upload/FileUpload';
+import {
+  getResumes,
+  deleteResume,
+  retryResume,
+  RESUME_STATUS_LABEL,
+} from '@/lib/api/resume';
+import type { ApiResume } from '@/lib/api/resume';
 
 /** 步骤条索引：0=选择简历, 1=AI 分析, 2=设备检测 */
 type StepIndex = 0 | 1 | 2;
@@ -30,12 +36,20 @@ const ANALYSIS_STEPS = [
   '构建面试者能力画像',
 ];
 
+// 解析状态 → 标签配色（对齐后端 resume.status）
+const STATUS_TAG_CLASS: Record<number, string> = {
+  0: 'bg-[#FFF8E6] text-[#BF8700]',
+  1: 'bg-[#ECFDF3] text-[#2DA44E]',
+  2: 'bg-[#FFF0F1] text-[#CF222E]',
+};
+
 const InterviewPage = () => {
   const [step, setStep] = useState<StepIndex>(0);
   const [analysisStepIdx, setAnalysisStepIdx] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
-  const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
+  const [resumes, setResumes] = useState<ApiResume[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   // 设备检测状态
@@ -48,8 +62,8 @@ const InterviewPage = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const navigate = useNavigate();
-  const { message } = App.useApp();
-  const { resumes, addResume, startInterview } = useAppStore();
+  const { message, modal } = App.useApp();
+  const { startInterview } = useAppStore();
 
   // 组件卸载时释放摄像头/麦克风资源
   useEffect(() => {
@@ -61,26 +75,28 @@ const InterviewPage = () => {
     };
   }, []);
 
-  const uploadProps: UploadProps = {
-    name: 'resume',
-    multiple: false,
-    fileList,
-    accept: '.pdf,.doc,.docx,.png,.jpg,.jpeg',
-    beforeUpload: (file) => {
-      if (file.size / 1024 / 1024 > 10) {
-        message.error('文件大小不能超过 10MB');
-        return Upload.LIST_IGNORE;
-      }
-      setFileList([file]);
-      return false;
-    },
-    onRemove: () => setFileList([]),
+  /** 拉取当前用户的简历列表（含解析状态，供选择/轮询） */
+  const loadResumes = async () => {
+    setResumesLoading(true);
+    try {
+      const res = await getResumes(1, 20);
+      setResumes(res.items);
+    } catch {
+      message.error('加载简历列表失败');
+    } finally {
+      setResumesLoading(false);
+    }
   };
 
-  const handleSelectResume = (id: string) => {
+  // 进入页面时拉取一次真实简历
+  useEffect(() => {
+    loadResumes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSelectResume = (id: number) => {
     setSelectedResumeId(id);
     setShowUpload(false);
-    setFileList([]);
   };
 
   const handleOpenUpload = () => {
@@ -90,32 +106,65 @@ const InterviewPage = () => {
 
   const handleCloseUpload = () => {
     setShowUpload(false);
-    setFileList([]);
   };
 
-  const canProceed = showUpload ? fileList.length > 0 : selectedResumeId !== null;
+  /** 上传成功后刷新列表并自动选中新简历 */
+  const handleResumeUploaded = async () => {
+    message.success('简历上传成功');
+    await loadResumes();
+  };
 
-  // STEP 1 -> STEP 2: 触发 AI 分析动画
-  const handleGenerate = async () => {
-    if (showUpload && fileList.length === 0) {
-      message.warning('请先上传简历');
-      return;
+  /** 删除简历（后端软删+联动清理） */
+  const handleDeleteResume = (resume: ApiResume) => {
+    modal.confirm({
+      title: '确定要删除这份简历吗？',
+      content: '删除后不可恢复，且需重新上传才能再次使用',
+      okText: '删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteResume(resume.id);
+          message.success('简历已删除');
+          if (selectedResumeId === resume.id) setSelectedResumeId(null);
+          await loadResumes();
+        } catch {
+          message.error('删除简历失败，请重试');
+        }
+      },
+    });
+  };
+
+  /** 对解析失败的简历一键重试 */
+  const handleRetryResume = async (resume: ApiResume) => {
+    try {
+      await retryResume(resume.id);
+      message.success('已重新分析，请稍候');
+      await loadResumes();
+    } catch {
+      message.error('重试失败，请稍后重试');
     }
-    if (!showUpload && !selectedResumeId) {
+  };
+
+  /** 新上传但仍在解析中的简历：轮询状态直到就绪/失败（蓝图§3.5 面试模块进度） */
+  useEffect(() => {
+    if (!showUpload) return;
+    const hasParsing = resumes.some((r) => r.status === 0);
+    if (!hasParsing) return;
+    const timer = setInterval(loadResumes, 3000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showUpload, resumes]);
+
+  const canProceed = !showUpload && selectedResumeId !== null;
+
+  // STEP 1 -> STEP 2: 触发 AI 分析动画（简历已就绪才可进入）
+  const handleGenerate = async () => {
+    if (!selectedResumeId) {
       message.warning('请先选择一份简历');
       return;
     }
-
     setGenerating(true);
-    if (showUpload) {
-      addResume({
-        id: `resume_${Date.now()}`,
-        fileName: fileList[0].name,
-        uploadTime: new Date().toISOString(),
-        status: 'ready',
-      });
-    }
-
     await new Promise((r) => setTimeout(r, 600));
     setGenerating(false);
     setStep(1);
@@ -187,7 +236,7 @@ const InterviewPage = () => {
 
   // STEP 3 -> 面试间
   const handleStart = () => {
-    startInterview(selectedResumeId || 'resume_1', mockQuestions);
+    startInterview(selectedResumeId ? String(selectedResumeId) : 'resume_1', mockQuestions);
     navigate(`/dashboard/interview/session/${Date.now()}`);
   };
 
@@ -236,7 +285,11 @@ const InterviewPage = () => {
               )}
             </div>
 
-            {resumes.length > 0 ? (
+            {resumesLoading && resumes.length === 0 ? (
+              <div className="flex justify-center py-8">
+                <LoadingOutlined className="text-2xl text-[#D0D7DE]" />
+              </div>
+            ) : resumes.length > 0 ? (
               <div className="border border-[#E1E4E8] rounded-xl overflow-hidden max-h-[240px] overflow-y-auto">
                 {resumes.map((resume, idx) => {
                   const selected = selectedResumeId === resume.id && !showUpload;
@@ -244,10 +297,10 @@ const InterviewPage = () => {
                     <div key={resume.id}>
                       {idx > 0 && <div className="border-t border-[#F0F2F5]" />}
                       <div
-                        onClick={() => handleSelectResume(resume.id)}
-                        className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-colors ${
-                          selected ? 'bg-[#FFF3ED]' : 'hover:bg-[#F6F8FA]'
-                        }`}
+                        onClick={() => resume.status === 1 && handleSelectResume(resume.id)}
+                        className={`flex items-center gap-4 px-5 py-4 transition-colors ${
+                          resume.status === 1 ? 'cursor-pointer' : 'cursor-default'
+                        } ${selected ? 'bg-[#FFF3ED]' : resume.status === 1 ? 'hover:bg-[#F6F8FA]' : ''}`}
                       >
                         <div
                           className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -260,9 +313,9 @@ const InterviewPage = () => {
                           <FileTextOutlined className="text-[#FF6B35] text-base" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[#0D1117] truncate">{resume.fileName}</p>
+                          <p className="text-sm font-medium text-[#0D1117] truncate">{resume.file_name}</p>
                           <p className="text-xs text-[#8B949E] mt-0.5">
-                            {new Date(resume.uploadTime).toLocaleDateString('zh-CN', {
+                            {new Date(resume.created_at).toLocaleDateString('zh-CN', {
                               year: 'numeric',
                               month: '2-digit',
                               day: '2-digit',
@@ -270,6 +323,29 @@ const InterviewPage = () => {
                               minute: '2-digit',
                             })}
                           </p>
+                        </div>
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_TAG_CLASS[resume.status] ?? ''}`}
+                        >
+                          {RESUME_STATUS_LABEL[resume.status] ?? '未知'}
+                        </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {resume.status === 2 && (
+                            <button
+                              onClick={() => handleRetryResume(resume)}
+                              className="w-7 h-7 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#BF8700] hover:text-[#BF8700] transition-colors"
+                              title="重新分析"
+                            >
+                              <ReloadOutlined className="text-xs" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteResume(resume)}
+                            className="w-7 h-7 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#CF222E] hover:text-[#CF222E] transition-colors"
+                            title="删除简历"
+                          >
+                            <DeleteOutlined className="text-xs" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -314,16 +390,11 @@ const InterviewPage = () => {
                     取消
                   </button>
                 </div>
-                <Dragger
-                  {...uploadProps}
-                  className="!bg-transparent !border-dashed !border-[#E1E4E8] !rounded-xl hover:!border-[#FF6B35]"
-                >
-                  <p className="text-3xl mb-2">
-                    <InboxOutlined className="text-[#FF6B35]" />
-                  </p>
-                  <p className="text-sm font-medium text-[#0D1117] mb-0.5">点击或拖拽简历文件到此处</p>
-                  <p className="text-xs text-[#8B949E]">支持 PDF、Word、图片格式，不超过 10MB</p>
-                </Dragger>
+                <FileUpload
+                  fileType="resume"
+                  onUploaded={handleResumeUploaded}
+                  onError={(msg) => message.error(msg)}
+                />
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, Resume, InterviewQuestion, InterviewReport, InterviewState } from '@/types';
+import type { User, InterviewQuestion, InterviewReport, InterviewState } from '@/types';
 import { mockQuestions, mockReport } from '@/lib/mocks/data';
 import { githubCallback, logout as logoutApi } from '@/lib/api/auth';
 import type { GithubUser } from '@/lib/api/auth';
@@ -17,7 +17,6 @@ interface AppState {
   user: User | null;
   isLoggedIn: boolean;
   authLoading: boolean;
-  resumes: Resume[];
   currentInterview: InterviewState | null;
   reports: Record<string, InterviewReport>;
 
@@ -29,8 +28,6 @@ interface AppState {
   logout: () => Promise<void>;
   updateUser: (updates: Partial<Pick<User, 'nickname' | 'avatar' | 'gender' | 'birthday' | 'bio' | 'phone' | 'location' | 'profileVisibility'>>) => Promise<void>;
   deleteAccount: () => Promise<void>;
-  removeResume: (resumeId: string) => void;
-  addResume: (resume: Resume) => void;
   startInterview: (resumeId: string, questions: InterviewQuestion[]) => void;
   submitAnswer: (questionId: string, answer: string) => void;
   completeInterview: (report: InterviewReport) => void;
@@ -102,7 +99,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   isLoggedIn: false,
   authLoading: true,
-  resumes: [],
   currentInterview: null,
   reports: {},
 
@@ -272,18 +268,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       isLoggedIn: false,
       currentInterview: null,
     });
-  },
-
-  removeResume: (resumeId: string) => {
-    set((state) => ({
-      resumes: state.resumes.filter((r) => r.id !== resumeId),
-    }));
-  },
-
-  addResume: (resume: Resume) => {
-    set((state) => ({
-      resumes: [resume, ...state.resumes],
-    }));
   },
 
   startInterview: (resumeId: string, questions: InterviewQuestion[]) => {

@@ -14,6 +14,7 @@ from app.schemas.upload import (
     UploadCallbackResponse,
     UploadRecordListResponse,
 )
+from app.services.resume_service import ResumeLimitExceededError
 from app.services.upload_service import (
     CallbackInvalidError,
     CosFileNotFoundError,
@@ -115,6 +116,9 @@ def upload_callback(
     """
     try:
         return upload_service.upload_callback(db, cache_client, _get_user_id(payload), request_body)
+    except ResumeLimitExceededError as exc:
+        # 简历份数上限（蓝图§3.2：未删除简历上限6）
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except CallbackInvalidError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except CosFileNotFoundError:

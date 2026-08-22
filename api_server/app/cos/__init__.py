@@ -5,7 +5,15 @@ from app.cos.cos import (
     CosError,
     build_cos_url,
     cos_client,
+    cos_key_from_url,
     format_upload_date,
 )
 
-__all__ = ["CosClient", "CosError", "build_cos_url", "cos_client", "format_upload_date"]
+__all__ = [
+    "CosClient",
+    "CosError",
+    "build_cos_url",
+    "cos_client",
+    "cos_key_from_url",
+    "format_upload_date",
+]

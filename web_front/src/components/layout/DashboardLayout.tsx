@@ -100,7 +100,9 @@ const DashboardLayout = () => {
 
     try {
       const url = buildSSEUrl();
-      const es = new EventSource(url);
+      // 跨域场景（前端5645 → 后端8000）必须携带Cookie（HttpOnly access_token），
+      // 否则认证401、SSE永远连不上，后端推送始终"无实例接收"
+      const es = new EventSource(url, { withCredentials: true });
       sseRef.current = es;
 
       es.onmessage = (event) => {

@@ -37,6 +37,28 @@ CREATE TABLE upload_records (
 )
 """
 
+# SQLite兼容的resume建表语句（删除上传记录联动软删除简历时查询用）
+_RESUME_DDL = """
+CREATE TABLE resume (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_url VARCHAR(512),
+    file_size INTEGER,
+    file_hash VARCHAR(64),
+    status INTEGER NOT NULL DEFAULT 0,
+    parsed_name VARCHAR(128),
+    parsed_skills JSON,
+    parsed_education JSON,
+    parsed_projects JSON,
+    error_message VARCHAR(512),
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    deleted_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
 
 class FakeRedis:
     """内存版Redis桩，实现上传服务用到的最小接口。"""
@@ -83,6 +105,7 @@ def db_session() -> Session:
     )
     with engine.begin() as conn:
         conn.execute(text(_UPLOAD_RECORDS_DDL))
+        conn.execute(text(_RESUME_DDL))
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = factory()
     try:
@@ -173,3 +196,22 @@ def mock_delete_object(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     monkeypatch.setattr(cos_client, "delete_object", _fake_delete)
     return calls
+
+
+@pytest.fixture()
+def stub_resume_link(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """桩掉上传回调内的简历联动（去重+调度），隔离上传模块自身测试。
+
+    返回holder记录联动调用参数，返回值模拟"新建简历并已调度"。
+    """
+    from app.services.resume_service import resume_service
+
+    holder: dict = {"calls": []}
+
+    def _fake_on_uploaded(db, cache_client, user_id, cos_key, file_name, file_size):
+        """记录调用并返回固定的简历联动结果。"""
+        holder["calls"].append({"user_id": user_id, "cos_key": cos_key, "file_name": file_name})
+        return {"resume_id": 101, "created": True, "status": 0, "scheduled": True}
+
+    monkeypatch.setattr(resume_service, "on_resume_uploaded", _fake_on_uploaded)
+    return holder

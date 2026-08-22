@@ -146,6 +146,72 @@ class CosClient:
         logger.error("DELETE Object失败: key=%s status=%s", cos_key, response.status_code)
         raise CosError(f"DELETE Object失败: HTTP {response.status_code}")
 
+    def get_object_bytes(self, cos_key: str) -> bytes | None:
+        """GET Object 下载对象内容（回调内计算文件SHA256去重用）。
+
+        Args:
+            cos_key: COS 对象 Key。
+
+        Returns:
+            文件内容字节；对象不存在返回None。
+
+        Raises:
+            CosError: COS 服务异常。
+        """
+        url = self._build_object_url(cos_key)
+        response = self._signed_request("GET", url, timeout=30)
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            logger.error("GET Object失败: key=%s status=%s", cos_key, response.status_code)
+            raise CosError(f"GET Object失败: HTTP {response.status_code}")
+        return response.content
+
+    def put_object(self, cos_key: str, content: bytes, content_type: str = "application/octet-stream") -> str:
+        """PUT Object 上传对象（管理端永久密钥签名）。
+
+        按 COS 官方签名规范，HttpString 固定为
+        "HttpMethod\\nUriPathname\\nHttpParameters\\nHttpHeaders\\n"，不带 Body 摘要行；
+        Body 完整性通过可选的 x-cos-content-sha1 请求头传递并纳入签名（参考官方示例）。
+        供测试与未来服务端上传场景复用。
+
+        Args:
+            cos_key: COS 对象 Key。
+            content: 对象内容字节。
+            content_type: MIME 类型。
+
+        Returns:
+            COS 返回的 ETag（单块上传即对象 MD5）。
+
+        Raises:
+            CosError: 上传失败（HTTP 非 200）。
+        """
+        url = self._build_object_url(cos_key)
+        now = int(time.time())
+        key_time = f"{now};{now + 600}"
+        content_sha1 = hashlib.sha1(content).hexdigest()
+        # 仅签 x-cos-content-sha1 一个头（值 urlencode），HeaderList 与之对应
+        http_headers = f"x-cos-content-sha1={quote(content_sha1, safe='')}"
+        signature = self._calc_signature("put", self._path_from_url(url), "", http_headers, key_time)
+        headers = {
+            "Authorization": (
+                f"q-sign-algorithm=sha1&q-ak={settings.COS_SECRET_ID}"
+                f"&q-sign-time={key_time}&q-key-time={key_time}"
+                f"&q-header-list=x-cos-content-sha1&q-url-param-list=&q-signature={signature}"
+            ),
+            "Content-Type": content_type,
+            "x-cos-content-sha1": content_sha1,
+        }
+        try:
+            response = requests.request("PUT", url, data=content, headers=headers, timeout=30)
+        except requests.RequestException:
+            logger.exception("COS PUT请求异常: key=%s", cos_key)
+            raise CosError("COS服务请求异常")
+        if response.status_code != 200:
+            logger.error("PUT Object失败: key=%s status=%s body=%s", cos_key, response.status_code, response.text[:300])
+            raise CosError(f"PUT Object失败: HTTP {response.status_code}")
+        return response.headers.get("ETag", "").strip('"')
+
     def generate_presigned_url(self, cos_key: str, expires: int = 3600) -> str:
         """生成 GET 预签名访问 URL（签名放查询参数，浏览器可直接访问）。
 
@@ -216,12 +282,13 @@ class CosClient:
         """
         return "/" + url.split("/", 3)[3].split("?")[0]
 
-    def _signed_request(self, method: str, url: str) -> requests.Response:
+    def _signed_request(self, method: str, url: str, timeout: int = 10) -> requests.Response:
         """发起带 Authorization 签名头的 COS 请求（管理端永久密钥签名）。
 
         Args:
-            method: HTTP 方法（HEAD/DELETE 等）。
+            method: HTTP 方法（HEAD/DELETE/GET 等）。
             url: 完整请求 URL。
+            timeout: 请求超时（秒），下载对象等大响应场景可调大。
 
         Returns:
             requests.Response 响应对象。
@@ -240,19 +307,26 @@ class CosClient:
             )
         }
         try:
-            return requests.request(method, url, headers=headers, timeout=10)
+            return requests.request(method, url, headers=headers, timeout=timeout)
         except requests.RequestException:
             logger.exception("COS请求异常: method=%s url=%s", method, url)
             raise CosError("COS服务请求异常")
 
     def _calc_signature(
-        self, method: str, path: str, params_str: str, headers_str: str, key_time: str
+        self,
+        method: str,
+        path: str,
+        params_str: str,
+        headers_str: str,
+        key_time: str,
     ) -> str:
         """按 COS XML API 规范计算请求签名。
 
         算法: SignKey=HmacSHA1(SecretKey, KeyTime)，
               StringToSign=sha1\\n{KeyTime}\\n{SHA1(HttpString)}\\n，
               Signature=HmacSHA1(SignKey, StringToSign)，均取hex小写。
+        HttpString 固定为 "HttpMethod\\nUriPathname\\nHttpParameters\\nHttpHeaders\\n"，
+        其中某段为空时其前后换行符保留（如 "get\\n/path\\n\\n\\n"）。
 
         Args:
             method: HTTP 方法（小写参与签名）。
@@ -293,6 +367,24 @@ def build_cos_url(cos_key: str) -> str:
     if cos_key.startswith("http://") or cos_key.startswith("https://"):
         return cos_key
     return f"https://{cos_client.get_bucket_domain()}/{cos_key}"
+
+
+def cos_key_from_url(url: str) -> str:
+    """从完整 COS URL 中提取对象 Key（build_cos_url 的逆操作）。
+
+    Args:
+        url: 完整 URL 或本身就是 Key 的字符串。
+
+    Returns:
+        COS 对象 Key 字符串（无法解析时原样返回）。
+    """
+    if not url:
+        return ""
+    if not url.startswith("http://") and not url.startswith("https://"):
+        return url
+    # 形如 https://{bucket}.cos.{region}.myqcloud.com/{key}，取域名后路径
+    parts = url.split("/", 3)
+    return parts[3] if len(parts) == 4 else url
 
 
 def format_upload_date() -> str:

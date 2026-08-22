@@ -8,6 +8,7 @@ from app.api.v1.controllers.feed import router as feed_router
 from app.api.v1.controllers.interactions import router as interactions_router
 from app.api.v1.controllers.messages import router as messages_router
 from app.api.v1.controllers.posts import router as posts_router
+from app.api.v1.controllers.resumes import router as resumes_router
 from app.api.v1.controllers.upload import router as upload_router
 from app.api.v1.controllers.users import router as users_router
 
@@ -18,5 +19,6 @@ api_v1_router.include_router(feed_router)
 api_v1_router.include_router(interactions_router)
 api_v1_router.include_router(messages_router)
 api_v1_router.include_router(posts_router)
+api_v1_router.include_router(resumes_router)
 api_v1_router.include_router(upload_router)
 api_v1_router.include_router(users_router)

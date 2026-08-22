@@ -1,0 +1,97 @@
+%PDF-1.3
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 4 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+4 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 <<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+>>
+>>
+/MediaBox [ 0.0 0.0 612 792 ]
+/Parent 2 0 R
+/Contents <<
+/Length 763
+>>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(Resume) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Name: Zhang San) Tj
+0 -18 Td
+(Email: zhangsan@example.com) Tj
+0 -18 Td
+(Phone: 138-0000-0000) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Skills: Python, FastAPI, MySQL, Redis, Docker, LangChain) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Education:) Tj
+0 -18 Td
+(Tsinghua University, Bachelor, Computer Science, 2016-2020) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Projects:) Tj
+0 -18 Td
+(AI Interview System: Built an AI-powered interview coaching backend with FastAPI and LangChain.) Tj
+0 -18 Td
+(Tech stack: FastAPI, MySQL, Redis, LangChain, RabbitMQ) Tj
+0 -18 Td
+() Tj
+0 -18 Td
+(Work Experience:) Tj
+0 -18 Td
+(ByteDance, Backend Engineer, 2020-2023) Tj
+0 -18 Td
+(Developed high-concurrency services and optimized MySQL queries.) Tj
+0 -18 Td
+ET
+endstream
+>>
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000113 00000 n 
+0000000162 00000 n 
+trailer
+<<
+/Size 5
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+1136
+%%EOF

@@ -64,6 +64,12 @@ class UploadCallbackResponse(BaseModel):
     file_url: str = Field(..., description="文件访问URL")
     status: str = Field(..., description="上传状态：completed")
     created_at: datetime = Field(..., description="记录创建时间")
+    resume_id: int | None = Field(
+        None, description="简历ID（仅file_type=resume时返回，供前端轮询分析状态）"
+    )
+    resume_status: int | None = Field(
+        None, description="简历解析状态（0-解析中 1-就绪 2-错误，仅简历上传返回）"
+    )
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

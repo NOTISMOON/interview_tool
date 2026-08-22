@@ -20,6 +20,7 @@ MESSAGE_TYPE_FOLLOW_POST = 7  # 关注的人发布了新帖子
 RELATED_TYPE_POST = 1
 RELATED_TYPE_REPORT = 2
 RELATED_TYPE_USER = 3
+RELATED_TYPE_RESUME = 4  # 简历（简历AI分析完成/失败通知跳转用）
 
 
 class Message(Base):

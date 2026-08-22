@@ -127,5 +127,39 @@ class UploadRepository:
         db.commit()
         return result.rowcount > 0
 
+    def list_by_user_and_cos_url(
+        self, db: Session, user_id: int, cos_url: str
+    ) -> Sequence[UploadRecord]:
+        """按用户+COS访问URL查询上传记录（独立删简历联动物理清理用）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户ID。
+            cos_url: COS访问URL（与 resume.file_url 一致）。
+
+        Returns:
+            匹配的上传记录列表。
+        """
+        stmt = select(UploadRecord).where(
+            UploadRecord.user_id == user_id, UploadRecord.cos_url == cos_url
+        )
+        return db.execute(stmt).scalars().all()
+
+    def delete_by_ids(self, db: Session, record_ids: list[int]) -> int:
+        """按ID列表物理删除上传记录（批量，独立删简历联动）。
+
+        Args:
+            db: 数据库同步会话。
+            record_ids: 上传记录ID列表。
+
+        Returns:
+            已删除的记录条数。
+        """
+        if not record_ids:
+            return 0
+        result = db.execute(delete(UploadRecord).where(UploadRecord.id.in_(record_ids)))
+        db.commit()
+        return result.rowcount or 0
+
 
 upload_repository = UploadRepository()

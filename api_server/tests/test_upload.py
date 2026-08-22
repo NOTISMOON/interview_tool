@@ -30,8 +30,8 @@ def _insert_record(db: Session, **overrides: object) -> UploadRecord:
         "file_name": _FILE_NAME,
         "file_size": _FILE_SIZE,
         "content_type": _CONTENT_TYPE,
-        "cos_key": "uploads/resumes/1/record-key.pdf",
-        "cos_url": "https://bucket.cos.ap-guangzhou.myqcloud.com/uploads/resumes/1/record-key.pdf",
+        "cos_key": "resumes/1/record-key.pdf",
+        "cos_url": "https://bucket.cos.ap-guangzhou.myqcloud.com/resumes/1/record-key.pdf",
         "etag": "abc123def456",
         "status": "completed",
     }
@@ -86,11 +86,11 @@ def test_get_sts_token_with_valid_request_returns_credentials(client, mock_sts, 
     assert data["bucket"] == settings.COS_BUCKET
     assert data["region"] == settings.COS_REGION
     assert data["upload_url"].startswith("https://")
-    # cos_key格式：uploads/resumes/{user_id}/{uuid}.pdf
+    # cos_key格式：resumes/{user_id}/{uuid}.pdf
     cos_key = data["cos_key"]
     parts = cos_key.split("/")
-    assert parts[0] == "uploads" and parts[1] == "resumes" and parts[2] == "1"
-    assert parts[3].endswith(".pdf")
+    assert parts[0] == "resumes" and parts[1] == "1"
+    assert parts[2].endswith(".pdf")
     # Redis登记pending状态且设置TTL
     status = fake_redis.hashes[f"upload:status:{cos_key}"]
     assert status["status"] == "pending"
@@ -138,8 +138,10 @@ def test_get_sts_token_without_auth_returns_401(client, mock_sts):
 # POST /cos/callback
 # ---------------------------------------------------------------------------
 
-def test_upload_callback_success_persists_record(client, mock_sts, mock_head_object, db_session, fake_redis):
-    """测试正常回调：三重校验通过后落库并更新Redis状态为completed。"""
+def test_upload_callback_success_persists_record(
+    client, mock_sts, mock_head_object, db_session, fake_redis, stub_resume_link
+):
+    """测试正常回调：三重校验通过后落库并更新Redis状态为completed（简历联动已桩掉）。"""
     # 1. 先走真实STS流程获得cos_key（同时在Redis登记pending状态）
     sts_resp = _request_sts(client)
     assert sts_resp.status_code == 200
@@ -164,10 +166,15 @@ def test_upload_callback_success_persists_record(client, mock_sts, mock_head_obj
     # 4. Redis状态已更新为completed
     assert fake_redis.hashes[f"upload:status:{cos_key}"]["status"] == "completed"
 
+    # 5. 简历联动被触发且响应携带简历ID（真实去重/调度逻辑由test_resume_parse.py覆盖）
+    assert stub_resume_link["calls"] and stub_resume_link["calls"][0]["cos_key"] == cos_key
+    assert data["resume_id"] == 101
+    assert data["resume_status"] == 0
+
 
 def test_upload_callback_with_other_users_cos_key_returns_400(client, mock_sts, mock_head_object):
     """测试回调他人目录的cos_key返回400（防越权伪造）。"""
-    resp = _request_callback(client, cos_key="uploads/resumes/999/not-mine.pdf")
+    resp = _request_callback(client, cos_key="resumes/999/not-mine.pdf")
     assert resp.status_code == 400
     assert "不属于当前用户" in resp.json()["detail"]
 
@@ -181,7 +188,7 @@ def test_upload_callback_with_malformed_cos_key_returns_400(client, mock_sts, mo
 def test_upload_callback_with_missing_status_returns_400(client, mock_sts, mock_head_object):
     """测试Redis上传状态不存在（伪造/超时）返回400。"""
     # 未先调STS，Redis无pending状态
-    resp = _request_callback(client, cos_key="uploads/resumes/1/forged.pdf")
+    resp = _request_callback(client, cos_key="resumes/1/forged.pdf")
     assert resp.status_code == 400
     assert "重新上传" in resp.json()["detail"]
 
@@ -219,7 +226,7 @@ def test_upload_callback_with_etag_mismatch_returns_400(client, mock_sts, mock_h
 def test_upload_callback_without_auth_returns_401(client, mock_sts, mock_head_object):
     """测试未认证回调返回401。"""
     client.app.dependency_overrides.pop(get_current_user)
-    resp = _request_callback(client, cos_key="uploads/resumes/1/any.pdf")
+    resp = _request_callback(client, cos_key="resumes/1/any.pdf")
     assert resp.status_code == 401
 
 
@@ -229,8 +236,8 @@ def test_upload_callback_without_auth_returns_401(client, mock_sts, mock_head_ob
 
 def test_list_records_returns_user_records_desc(client, db_session):
     """测试查询当前用户记录（按ID倒序）并返回分页信息。"""
-    first = _insert_record(db_session, cos_key="uploads/resumes/1/a.pdf")
-    second = _insert_record(db_session, cos_key="uploads/resumes/1/b.pdf")
+    first = _insert_record(db_session, cos_key="resumes/1/a.pdf")
+    second = _insert_record(db_session, cos_key="resumes/1/b.pdf")
     resp = client.get("/api/v1/cos/records")
     assert resp.status_code == 200
     data = resp.json()
@@ -241,14 +248,14 @@ def test_list_records_returns_user_records_desc(client, db_session):
 
 
 def test_list_records_with_file_type_filter(client, db_session):
-    """测试按file_type过滤记录。"""
-    _insert_record(db_session, cos_key="uploads/resumes/1/a.pdf", file_type="resume")
-    _insert_record(db_session, cos_key="uploads/avatars/1/a.png", file_type="avatar")
-    resp = client.get("/api/v1/cos/records", params={"file_type": "avatar"})
+    """测试按file_type过滤记录（仅支持 resume / image）。"""
+    _insert_record(db_session, cos_key="resumes/1/a.pdf", file_type="resume")
+    _insert_record(db_session, cos_key="images/1/a.png", file_type="image")
+    resp = client.get("/api/v1/cos/records", params={"file_type": "image"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 1
-    assert data["items"][0]["file_type"] == "avatar"
+    assert data["items"][0]["file_type"] == "image"
 
 
 def test_list_records_with_invalid_file_type_returns_400(client, db_session):
@@ -259,7 +266,7 @@ def test_list_records_with_invalid_file_type_returns_400(client, db_session):
 
 def test_list_records_excludes_other_users_records(client, db_session, auth_user_id):
     """测试列表不包含其他用户的记录（防越权）。"""
-    _insert_record(db_session, user_id=auth_user_id + 100, cos_key="uploads/resumes/101/x.pdf")
+    _insert_record(db_session, user_id=auth_user_id + 100, cos_key="resumes/101/x.pdf")
     resp = client.get("/api/v1/cos/records")
     assert resp.status_code == 200
     assert resp.json()["total"] == 0
@@ -268,7 +275,7 @@ def test_list_records_excludes_other_users_records(client, db_session, auth_user
 def test_list_records_with_pagination(client, db_session):
     """测试分页参数（page/page_size）生效。"""
     for i in range(3):
-        _insert_record(db_session, cos_key=f"uploads/resumes/1/{i}.pdf")
+        _insert_record(db_session, cos_key=f"resumes/1/{i}.pdf")
     resp = client.get("/api/v1/cos/records", params={"page": 2, "page_size": 2})
     assert resp.status_code == 200
     data = resp.json()
@@ -292,6 +299,54 @@ def test_delete_record_success_returns_204(client, db_session, mock_delete_objec
     assert mock_delete_object == [record.cos_key]
 
 
+def test_delete_resume_record_cascades_soft_delete_resume(client, db_session, mock_delete_object):
+    """测试删除简历类上传记录联动软删除关联简历行（防悬空简历指向已删COS对象）。"""
+    from app.cos import build_cos_url
+    from app.models.resume import RESUME_STATUS_READY, Resume
+
+    record = _insert_record(db_session)
+    # 简历行的 file_url 与回调写入一致（build_cos_url生成）
+    resume = Resume(
+        user_id=1,
+        file_name=_FILE_NAME,
+        file_url=build_cos_url(record.cos_key),
+        file_size=_FILE_SIZE,
+        file_hash="a" * 64,
+        status=RESUME_STATUS_READY,
+    )
+    db_session.add(resume)
+    db_session.commit()
+    db_session.refresh(resume)
+
+    resp = client.delete(f"/api/v1/cos/records/{record.id}")
+    assert resp.status_code == 204
+
+    # 简历行被软删除，file_hash 释放唯一约束（允许重新上传同一文件）
+    db_session.expire_all()
+    soft_deleted = db_session.get(Resume, resume.id)
+    assert soft_deleted is not None
+    assert soft_deleted.is_deleted == 1
+    assert soft_deleted.deleted_at is not None
+    assert soft_deleted.file_hash is None
+
+
+def test_delete_image_record_does_not_touch_resume(client, db_session, mock_delete_object):
+    """测试删除图片类上传记录不联动简历表。"""
+    from app.models.resume import Resume
+
+    record = _insert_record(db_session, file_type="image", cos_key="images/1/a.png")
+    resume = Resume(user_id=1, file_name="x.pdf", file_url="https://x/resumes/1/a.pdf", file_hash="b" * 64)
+    db_session.add(resume)
+    db_session.commit()
+    db_session.refresh(resume)
+
+    resp = client.delete(f"/api/v1/cos/records/{record.id}")
+    assert resp.status_code == 204
+
+    db_session.expire_all()
+    assert db_session.get(Resume, resume.id).is_deleted == 0
+
+
 def test_delete_record_not_found_returns_404(client, db_session, mock_delete_object):
     """测试删除不存在的记录返回404。"""
     resp = client.delete("/api/v1/cos/records/99999")
@@ -301,7 +356,7 @@ def test_delete_record_not_found_returns_404(client, db_session, mock_delete_obj
 
 def test_delete_record_of_other_user_returns_404(client, db_session, mock_delete_object, auth_user_id):
     """测试删除他人记录返回404（防越权，不暴露存在性）。"""
-    record = _insert_record(db_session, user_id=auth_user_id + 100, cos_key="uploads/resumes/101/x.pdf")
+    record = _insert_record(db_session, user_id=auth_user_id + 100, cos_key="resumes/101/x.pdf")
     resp = client.delete(f"/api/v1/cos/records/{record.id}")
     assert resp.status_code == 404
     # 他人的记录与COS文件均未被删除

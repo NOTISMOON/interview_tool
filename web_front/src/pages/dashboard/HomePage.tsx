@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PlayCircleOutlined,
@@ -10,10 +11,22 @@ import {
   TrophyOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
+import { getResumes } from '@/lib/api/resume';
 
 const DashboardHome = () => {
   const navigate = useNavigate();
-  const { user, resumes, reports } = useAppStore();
+  const { user, reports } = useAppStore();
+  /** 简历数量（从后端 GET /resumes 拉取，仅取数量展示） */
+  const [resumeCount, setResumeCount] = useState(0);
+
+  // 进入页面时拉取一次简历数量
+  useEffect(() => {
+    getResumes(1, 1)
+      .then((res) => setResumeCount(res.total))
+      .catch(() => {
+        /* 加载失败静默，保持默认0 */
+      });
+  }, []);
 
   const reportList = Object.values(reports);
 
@@ -37,7 +50,7 @@ const DashboardHome = () => {
     {
       icon: <FileTextOutlined />,
       label: '我的简历',
-      desc: `${resumes.length} 份`,
+      desc: `${resumeCount} 份`,
       onClick: () => navigate('/dashboard/interview'),
     },
     {
@@ -97,7 +110,7 @@ const DashboardHome = () => {
                 <div className="text-xs text-[#5F6B7A]">平均得分</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-[#2DA44E]">{resumes.length}</div>
+                <div className="text-2xl font-bold text-[#2DA44E]">{resumeCount}</div>
                 <div className="text-xs text-[#5F6B7A]">简历数量</div>
               </div>
               <div>
