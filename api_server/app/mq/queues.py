@@ -18,9 +18,13 @@ class QueueName(str, Enum):
     # 面试业务队列
     INTERVIEW_RESUME_PARSE = "interview.resume.parse.queue"  # 简历解析任务队列
     INTERVIEW_REPORT_GENERATE = "interview.report.queue"  # 面试报告生成队列
+    INTERVIEW_ANALYSIS = "interview.analysis.queue"  # 面试回答异步分析队列（v2）
 
     # 通知业务队列
     NOTIFICATION_DELIVER = "notification.deliver.queue"  # 通知投递队列
+
+    # 私信业务队列（Outbox 扇出：未读数 + 推送对端 WS）
+    CHAT_FANOUT = "chat.fanout.queue"  # 私信扇出队列
 
     # 社交业务队列（关注/取关缓存同步，消费失败经DLX进死信队列存档）
     SOCIAL_FOLLOW_CACHE = "social.follow.cache.queue"  # 关注缓存同步队列
@@ -86,9 +90,20 @@ QUEUE_BINDINGS: list[QueueBinding] = [
         routing_key="interview.report.generate",
     ),
     QueueBinding(
+        queue=QueueName.INTERVIEW_ANALYSIS,
+        exchange=ExchangeName.INTERVIEW,
+        routing_key="interview.analysis",
+    ),
+    QueueBinding(
         queue=QueueName.NOTIFICATION_DELIVER,
         exchange=ExchangeName.NOTIFICATION,
         routing_key="notification.deliver",
+    ),
+    # 私信扇出：落库成功事件路由到私信扇出队列
+    QueueBinding(
+        queue=QueueName.CHAT_FANOUT,
+        exchange=ExchangeName.NOTIFICATION,
+        routing_key="chat.message.sent",
     ),
     # 关注缓存同步：三类事件路由到同一队列，顺序消费保证同一关系事件有序
     QueueBinding(

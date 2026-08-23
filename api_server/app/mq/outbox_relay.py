@@ -46,7 +46,10 @@ EVENT_EXCHANGE_MAP: dict[str, tuple[ExchangeName, str]] = {
     "comment.created": (ExchangeName.SOCIAL, "social.comment.created"),
     "comment.deleted": (ExchangeName.SOCIAL, "social.comment.deleted"),
     "notification.created": (ExchangeName.NOTIFICATION, "notification.deliver"),
+    "chat.message.sent": (ExchangeName.NOTIFICATION, "chat.message.sent"),
     "resume.parse": (ExchangeName.INTERVIEW, "interview.resume.parse"),
+    "interview.analysis": (ExchangeName.INTERVIEW, "interview.analysis"),
+    "interview.report.generate": (ExchangeName.INTERVIEW, "interview.report.generate"),
 }
 
 # 清理任务执行间隔（秒）

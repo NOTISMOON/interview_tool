@@ -4,11 +4,13 @@
 runner.py 通过 CONSUMER_REGISTRY 字典统一注册并启动。
 """
 
+from app.mq.consumers.chat_fanout_consumer import ChatMessageFanoutConsumer
 from app.mq.consumers.comment_consumer import CommentCacheSyncConsumer
 from app.mq.consumers.feed_consumer import FeedPushConsumer
 from app.mq.consumers.follow_consumer import FollowCacheSyncConsumer
 from app.mq.consumers.follow_post_consumer import FollowPostNotifyConsumer
 from app.mq.consumers.interaction_consumer import InteractionCacheSyncConsumer
+from app.mq.consumers.interview_analysis_consumer import InterviewAnalysisConsumer
 from app.mq.consumers.interview_consumer import (
     InterviewReportConsumer,
     InterviewResumeParseConsumer,
@@ -20,21 +22,25 @@ from app.mq.consumers.notification_consumer import NotificationConsumer
 CONSUMER_REGISTRY: dict[str, type] = {
     "InterviewResumeParseConsumer": InterviewResumeParseConsumer,
     "InterviewReportConsumer": InterviewReportConsumer,
+    "InterviewAnalysisConsumer": InterviewAnalysisConsumer,
     "FollowCacheSyncConsumer": FollowCacheSyncConsumer,
     "CommentCacheSyncConsumer": CommentCacheSyncConsumer,
     "InteractionCacheSyncConsumer": InteractionCacheSyncConsumer,
     "FeedPushConsumer": FeedPushConsumer,
     "NotificationConsumer": NotificationConsumer,
     "FollowPostNotifyConsumer": FollowPostNotifyConsumer,
+    "ChatMessageFanoutConsumer": ChatMessageFanoutConsumer,
 }
 
 __all__ = [
     "CONSUMER_REGISTRY",
+    "ChatMessageFanoutConsumer",
     "CommentCacheSyncConsumer",
     "FeedPushConsumer",
     "FollowCacheSyncConsumer",
     "FollowPostNotifyConsumer",
     "InteractionCacheSyncConsumer",
+    "InterviewAnalysisConsumer",
     "InterviewReportConsumer",
     "InterviewResumeParseConsumer",
     "NotificationConsumer",

@@ -23,6 +23,7 @@ from app.mq.connection import MQConnection
 from app.mq.consumers import CONSUMER_REGISTRY
 from app.mq.outbox_relay import outbox_relay
 from app.mq.queues import declare_all_queues
+from app.services.chat_flush import chat_flush_worker
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ async def run_consumers() -> None:
 
     # 启动Outbox Relay（事件投递器，与消费者同进程）
     await outbox_relay.start()
+
+    # 启动私信流消费Worker（Redis Stream -> MySQL 批量落库，与消费者同进程）
+    await chat_flush_worker.start()
 
     # 注册停止信号，触发优雅关闭
     stop_event = asyncio.Event()
@@ -71,6 +75,11 @@ async def run_consumers() -> None:
         await outbox_relay.stop()
     except Exception:
         logger.exception("关闭 Outbox Relay 失败")
+
+    try:
+        await chat_flush_worker.stop()
+    except Exception:
+        logger.exception("关闭私信流消费Worker失败")
 
     for consumer in consumers:
         try:

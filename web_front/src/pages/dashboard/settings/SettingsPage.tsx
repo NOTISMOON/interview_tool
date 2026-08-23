@@ -153,7 +153,7 @@ const SettingsPage = () => {
   ];
 
   return (
-    <div className="max-w-[700px]">
+    <div className="max-w-[900px]">
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate('/dashboard/profile')}
