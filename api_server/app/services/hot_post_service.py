@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 
 import redis
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
 from app.db.sync_session import SyncSessionLocal
@@ -27,6 +27,8 @@ VIEWS_PREFIX = "post:views:"
 VIEWS_SYNC_LOCK_KEY = "lock:views:sync"
 # 热门计算锁 Key
 HOT_CALC_LOCK_KEY = "lock:hot:calc"
+# 缓存对账锁 Key（多实例防重复对账）
+RECONCILE_CACHE_LOCK_KEY = "lock:hot:reconcile"
 
 # 热度公式参数
 LIKE_WEIGHT = 3          # 点赞权重
@@ -173,6 +175,9 @@ class HotPostService:
 
             if not rows:
                 logger.info("热门计算：近 %s 天无帖子", HOT_RECENT_DAYS)
+                # 近 7 天无帖子时清空所有热门标记，避免历史热门残留
+                db.execute(update(Post).where(Post.is_hot == 1).values(is_hot=0))
+                db.commit()
                 return 0
 
             # 计算热度分
@@ -191,30 +196,29 @@ class HotPostService:
             # 按热度分降序排序
             scored.sort(key=lambda x: x[1], reverse=True)
 
+            # 仅热度分 > 0 的帖子有资格成为热门：避免低活跃社区"矮子里拔将军"，
+            # 让时间衰减后为负分的帖子（即使仍在前 Top N 名额内）被强制标记热门而长期霸榜
+            eligible = [(pid, score) for pid, score in scored if score > 0]
+
             # Top 100 为热门
-            hot_ids = {pid for pid, _ in scored[:HOT_TOP_N]}
+            hot_ids = {pid for pid, _ in eligible[:HOT_TOP_N]}
 
             # 批量更新 is_hot
-            all_post_ids = [pid for pid, _ in scored]
-            if all_post_ids:
-                # 全部置为 0
+            # 先将所有当前标记为热门的帖子置 0（含超过 7 天窗口的历史热门，
+            # 避免"最热僵尸"——旧帖子 is_hot 永远不被重置）
+            db.execute(update(Post).where(Post.is_hot == 1).values(is_hot=0))
+            # 再标记本次 Top 100 为热门
+            if hot_ids:
                 db.execute(
-                    text("UPDATE post SET is_hot = 0 WHERE id IN :ids"),
-                    {"ids": all_post_ids},
+                    update(Post).where(Post.id.in_(list(hot_ids))).values(is_hot=1)
                 )
-                # 热门置为 1
-                if hot_ids:
-                    db.execute(
-                        text("UPDATE post SET is_hot = 1 WHERE id IN :ids"),
-                        {"ids": list(hot_ids)},
-                    )
-                db.commit()
+            db.commit()
 
             # 写入 Redis ZSET
             client = self._get_cache()
             pipeline = client.pipeline()
             pipeline.delete(HOT_ZSET_KEY)
-            for pid, score in scored[:HOT_TOP_N]:
+            for pid, score in eligible[:HOT_TOP_N]:
                 pipeline.zadd(HOT_ZSET_KEY, {str(pid): score})
             # 设置 TTL：7 天，防内存泄漏
             pipeline.expire(HOT_ZSET_KEY, 7 * 86400)
