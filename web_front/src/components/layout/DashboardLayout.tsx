@@ -11,8 +11,9 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
-import { getUnreadCount, buildSSEUrl } from '@/lib/api/messages';
-import { useState, useEffect, useRef } from 'react';
+import { getUnreadCount } from '@/lib/api/messages';
+import { useMessageVersion } from '@/lib/messageVersion';
+import { useState, useEffect } from 'react';
 
 const SIDEBAR_ITEMS = [
   { key: '/dashboard', label: '工作台', icon: <HomeOutlined /> },
@@ -80,8 +81,8 @@ const Sidebar = () => {
 const DashboardLayout = () => {
   const navigate = useNavigate();
   const { user } = useAppStore();
+  const { revision: msgRevision } = useMessageVersion();
   const [unreadCount, setUnreadCount] = useState(0);
-  const sseRef = useRef<EventSource | null>(null);
 
   /** 获取未读计数 */
   const fetchUnreadCount = async () => {
@@ -93,43 +94,16 @@ const DashboardLayout = () => {
     }
   };
 
-  /** 建立 SSE 连接接收实时通知 */
   useEffect(() => {
     if (!user) return;
     fetchUnreadCount();
-
-    try {
-      const url = buildSSEUrl();
-      // 跨域场景（前端5645 → 后端8000）必须携带Cookie（HttpOnly access_token），
-      // 否则认证401、SSE永远连不上，后端推送始终"无实例接收"
-      const es = new EventSource(url, { withCredentials: true });
-      sseRef.current = es;
-
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.kind === 'message' && typeof data.unread_total === 'number') {
-            setUnreadCount(data.unread_total);
-          }
-        } catch {
-          // 解析失败忽略
-        }
-      };
-
-      es.onerror = () => {
-        // SSE 断线后自动重连
-      };
-    } catch {
-      // SSE 创建失败不影响页面
-    }
-
-    return () => {
-      if (sseRef.current) {
-        sseRef.current.close();
-        sseRef.current = null;
-      }
-    };
   }, [user]);
+
+  // 全局消息版本号变化（收到 SSE 通知 / 未读 / 系统广播）时刷新未读数
+  useEffect(() => {
+    if (!user) return;
+    fetchUnreadCount();
+  }, [msgRevision, user]);
 
   // 路由变化时重新获取未读计数（确保消息中心页面操作后更新）
   useEffect(() => {

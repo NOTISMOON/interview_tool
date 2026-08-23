@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     SSE_RETRY_INTERVAL_MS: int = 3000  # 服务端建议浏览器断线重连间隔（毫秒）
     SSE_CATCHUP_LIMIT: int = 10  # 建立/重连SSE时的增量补偿上限（固定最多10条）
 
+    # ---- 私信 Redis Stream 写缓冲配置 ----
+    CHAT_STREAM_MAXLEN: int = 1000  # Stream 近似裁剪上限（XTRIM ~MAXLEN）
+    CHAT_MSG_RECENT_LEN: int = 50  # 热窗口最近消息缓存条数
+    CHAT_UNREAD_TTL: int = 2592000  # 未读数 HASH 失效时间（秒，默认30天，惰性失效）
+    CHAT_FLUSH_BATCH: int = 20  # 流消费者批量落库条数
+    CHAT_FLUSH_INTERVAL: float = 0.2  # 流消费者攒批超时窗口（秒）
+
     # ---- Redis Pub/Sub 通道 ----
     NOTIFY_PUSH_CHANNEL_PREFIX: str = "notify:push"  # notify:push:{user_id}
     NOTIFY_BROADCAST_CHANNEL: str = "notify:broadcast"  # 系统公告通道

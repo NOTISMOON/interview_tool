@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.middleware.auth_middleware import AuthMiddleware
 from app.scheduler.tasks import create_scheduler
+from app.services.chat_connection_manager import chat_connection_manager
 from app.services.sse_manager import sse_manager
 
 # 应用日志初始化：uvicorn 只配置自身 logger，root logger 无 handler 时
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
     if _scheduler:
         _scheduler.shutdown(wait=False)
         logger.info("定时任务调度器已停止")
+    await chat_connection_manager.shutdown()
     await sse_manager.shutdown()
 
 

@@ -21,6 +21,7 @@ class DmConversation(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user1_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="较小用户ID")
     user2_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="另一用户ID")
+    last_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="最后一条消息ID")
     last_message: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="最后一条消息摘要")
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="最后消息时间")
     created_at: Mapped[datetime] = mapped_column(

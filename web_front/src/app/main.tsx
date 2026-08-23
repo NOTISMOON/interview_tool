@@ -5,6 +5,7 @@ import ConfigProvider from 'antd/es/config-provider';
 import AntApp from 'antd/es/app';
 import zhCN from 'antd/es/locale/zh_CN';
 import App from './App';
+import { MessageVersionProvider } from '@/lib/messageVersion';
 import "./styles/index.css";
 
 const theme = {
@@ -29,7 +30,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ConfigProvider theme={theme} locale={zhCN}>
       <AntApp>
         <BrowserRouter>
-          <App />
+          <MessageVersionProvider>
+            <App />
+          </MessageVersionProvider>
         </BrowserRouter>
       </AntApp>
     </ConfigProvider>

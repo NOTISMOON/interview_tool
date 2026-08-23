@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Tabs, App, Spin, Tooltip } from 'antd';
+import { Tabs, App, Spin, Tooltip, Avatar } from 'antd';
 import {
   ArrowLeftOutlined,
   BellOutlined,
@@ -13,7 +13,9 @@ import {
 } from '@ant-design/icons';
 import { getMessages, getUnreadCount, markMessageRead, markAllMessagesRead } from '@/lib/api/messages';
 import type { MessageResponse } from '@/lib/api/messages';
+import { getChatConversations, type ChatConversation } from '@/lib/api/chat';
 import type { SystemMessage } from '@/types';
+import { useMessageVersion } from '@/lib/messageVersion';
 import { useAppStore } from '@/store';
 import {
   getCachedMessages,
@@ -59,11 +61,14 @@ const MessagesPage = () => {
   const navigate = useNavigate();
   const { message: msg } = App.useApp();
   const { user } = useAppStore();
+  const { revision: msgRevision } = useMessageVersion();
   const [activeTab, setActiveTab] = useState('all');
   const [messages, setMessages] = useState<SystemMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [markingAll, setMarkingAll] = useState(false);
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const conversationsTotalUnread = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
 
   /** 全量加载：循环cursor翻页，直到取完所有历史消息 */
   const loadAllMessages = useCallback(async (): Promise<SystemMessage[]> => {
@@ -102,25 +107,25 @@ const MessagesPage = () => {
     }
   }, []);
 
-  /** 进入页面：有缓存则增量拉取合并，无缓存则全量加载建缓存 */
+  /** 进入页面/版本号变更：首次全量加载建缓存，之后增量拉取合并（不闪烁） */
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    const bootstrap = async () => {
-      setLoading(true);
+    const bootstrap = async (isInit: boolean) => {
+      if (isInit) setLoading(true);
       try {
         if (hasFullCache(user.id)) {
-          // 已有全量缓存：先展示缓存，再拉取缓存之后的新消息合并
-          setMessages(getCachedMessages(user.id));
+          // 已有全量缓存：先展示缓存，再增量拉取合并（版本号变更时无 loading）
+          if (isInit) setMessages(getCachedMessages(user.id));
           const cached = getCachedMessages(user.id);
-          const lastId = Math.max(...cached.map((m) => Number(m.id)));
+          const lastId = cached.length > 0 ? Math.max(...cached.map((m) => Number(m.id))) : 0;
           const delta = await loadDeltaMessages(lastId);
           if (!cancelled && delta.length > 0) {
             mergeCachedMessages(user.id, delta);
             setMessages(getCachedMessages(user.id));
           }
         } else {
-          // 首次进入：全量加载并写入缓存
+          // 首次进入且无缓存：全量加载并写入缓存
           const all = await loadAllMessages();
           if (!cancelled) {
             setCachedMessages(user.id, all);
@@ -128,15 +133,53 @@ const MessagesPage = () => {
           }
         }
       } catch {
-        msg.error('加载消息失败');
+        if (isInit) msg.error('加载消息失败');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (isInit && !cancelled) setLoading(false);
       }
     };
-    bootstrap();
+    bootstrap(true);
     loadUnreadCount();
+    // 加载私信会话列表（独立于通知消息）
+    getChatConversations()
+      .then((res) => {
+        if (!cancelled) setConversations(res.items);
+      })
+      .catch(() => {
+        // 会话加载失败静默
+      });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loadAllMessages, loadDeltaMessages, loadUnreadCount, msg]);
+
+  // 版本号变化（收到新通知）：仅增量合并，不显示 loading / 不整页重载
+  useEffect(() => {
+    if (!user || !hasFullCache(user.id)) return;
+    let cancelled = false;
+    const refresh = async () => {
+      const cached = getCachedMessages(user.id);
+      const lastId = cached.length > 0 ? Math.max(...cached.map((m) => Number(m.id))) : 0;
+      try {
+        const delta = await loadDeltaMessages(lastId);
+        if (!cancelled && delta.length > 0) {
+          mergeCachedMessages(user.id, delta);
+          setMessages(getCachedMessages(user.id));
+        }
+      } catch {
+        // 增量失败静默，下次版本变化再补
+      }
+    };
+    refresh();
+    // 刷新未读计数与私信会话列表（局部，不含消息列表）
+    loadUnreadCount();
+    getChatConversations()
+      .then((res) => {
+        if (!cancelled) setConversations(res.items);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgRevision, user, loadDeltaMessages, loadUnreadCount, getChatConversations]);
 
   /** 标签筛选：全部消息已在缓存中，纯前端过滤，无需请求 */
   const filteredMessages =
@@ -244,6 +287,61 @@ const MessagesPage = () => {
             { key: 'dm', label: '私信' },
           ].map((tab) => ({ key: tab.key, label: <span className="text-sm">{tab.label}</span> }))}
         />
+
+        {conversations.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageOutlined className="text-[#FF6B35]" />
+              <span className="text-sm font-semibold text-[#0D1117]">私信</span>
+              {conversationsTotalUnread > 0 && (
+                <span className="tag tag-flame text-xs">{conversationsTotalUnread}</span>
+              )}
+            </div>
+            <div className="bg-white border border-[#E1E4E8] rounded-xl divide-y divide-[#F0F2F5] overflow-hidden">
+              {conversations.map((conv) => (
+                <div
+                  key={conv.id}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-[#FAFBFC] transition-colors cursor-pointer"
+                  onClick={() => navigate(`/dashboard/messages/chat/${conv.peer?.id}`)}
+                >
+                  <Avatar
+                    size={40}
+                    className="!bg-[#0D1117] flex-shrink-0 !text-sm"
+                  >
+                    {(conv.peer?.nickname || '?')[0]}
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-[#0D1117] truncate">
+                        {conv.peer?.nickname || `用户${conv.peer?.id}`}
+                      </span>
+                      {conv.last_message_at && (
+                        <span className="text-xs text-[#8B949E] flex-shrink-0">
+                          {new Date(conv.last_message_at).toLocaleString('zh-CN', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-xs text-[#5F6B7A] truncate flex-1 mr-2">
+                        {conv.last_message || '暂无消息'}
+                      </p>
+                      {conv.unread > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#FF6B35] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
+                          {conv.unread > 99 ? '99+' : conv.unread}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-2">

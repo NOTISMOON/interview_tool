@@ -153,18 +153,37 @@ class NotificationService:
         return MessageListResponse(items=items, next_cursor=next_cursor, unread_total=unread_total)
 
     async def get_unread_count(self, db: AsyncSession, user_id: int) -> UnreadCountResponse:
-        """获取用户未读计数（含分类汇总）。
+        """获取用户未读计数（含分类汇总），并合并私信未读数。
+
+        通知未读统计 message 表；私信未读为独立体系（Redis unread:{user_id} 哈希，
+        见 chat 模块写路径），此处求和并入 total，使消息中心总未读数包含私信。
 
         Args:
             db: 数据库异步会话。
             user_id: 用户ID。
 
         Returns:
-            UnreadCountResponse: 含总数与分类汇总。
+            UnreadCountResponse: 含总数（通知+私信）与分类汇总。
         """
+        import asyncio
+
+        from app.redis.sync_client import SyncRedisClient
+
+        # 通知未读（message 表）
         total = await message_repository.get_unread_count(db, user_id)
         by_type_raw = await message_repository.get_unread_count_by_type(db, user_id)
         by_type = {TYPE_NAME_MAP.get(k, str(k)): v for k, v in by_type_raw.items()}
+
+        # 私信未读（Redis unread:{user_id}，字段为会话ID、值为该会话未读条数）
+        redis_client = SyncRedisClient.get_client()
+        dm_unread = await asyncio.to_thread(redis_client.hgetall, f"unread:{user_id}")
+        dm_total = sum(
+            int(v) for v in dm_unread.values() if str(v).isdigit()
+        )
+        if dm_total:
+            total += dm_total
+            by_type["dm"] = by_type.get("dm", 0) + dm_total
+
         return UnreadCountResponse(total=total, by_type=by_type)
 
     async def get_message(self, db: AsyncSession, user_id: int, message_id: int) -> Message | None:
