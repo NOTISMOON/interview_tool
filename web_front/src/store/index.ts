@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import type { User, InterviewQuestion, InterviewReport, InterviewState } from '@/types';
-import { mockQuestions, mockReport } from '@/lib/mocks/data';
+import type { User } from '@/types';
 import { githubCallback, logout as logoutApi } from '@/lib/api/auth';
 import type { GithubUser } from '@/lib/api/auth';
 import {
@@ -17,8 +16,6 @@ interface AppState {
   user: User | null;
   isLoggedIn: boolean;
   authLoading: boolean;
-  currentInterview: InterviewState | null;
-  reports: Record<string, InterviewReport>;
 
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
@@ -28,10 +25,6 @@ interface AppState {
   logout: () => Promise<void>;
   updateUser: (updates: Partial<Pick<User, 'nickname' | 'avatar' | 'gender' | 'birthday' | 'bio' | 'phone' | 'location' | 'profileVisibility'>>) => Promise<void>;
   deleteAccount: () => Promise<void>;
-  startInterview: (resumeId: string, questions: InterviewQuestion[]) => void;
-  submitAnswer: (questionId: string, answer: string) => void;
-  completeInterview: (report: InterviewReport) => void;
-  nextQuestion: () => void;
 }
 
 /** 将后端性别整数映射为前端性别字符串 */
@@ -99,8 +92,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   isLoggedIn: false,
   authLoading: true,
-  currentInterview: null,
-  reports: {},
 
   login: async (email: string, _password: string) => {
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -221,7 +212,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       user: null,
       isLoggedIn: false,
-      currentInterview: null,
     });
   },
 
@@ -266,58 +256,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       user: null,
       isLoggedIn: false,
-      currentInterview: null,
-    });
-  },
-
-  startInterview: (resumeId: string, questions: InterviewQuestion[]) => {
-    const id = `interview_${Date.now()}`;
-    set({
-      currentInterview: {
-        id,
-        resumeId,
-        questions,
-        currentQuestionIndex: 0,
-        status: 'in_progress',
-      },
-    });
-  },
-
-  submitAnswer: (questionId: string, answer: string) => {
-    set((state) => {
-      if (!state.currentInterview) return state;
-      const questions = state.currentInterview.questions.map((q) =>
-        q.id === questionId ? { ...q, userAnswer: answer } : q
-      );
-      return {
-        currentInterview: { ...state.currentInterview, questions },
-      };
-    });
-  },
-
-  completeInterview: (report: InterviewReport) => {
-    const { currentInterview } = get();
-    if (!currentInterview) return;
-    set((state) => ({
-      currentInterview: { ...currentInterview, status: 'completed' },
-      reports: {
-        ...state.reports,
-        [currentInterview.id]: report,
-      },
-    }));
-  },
-
-  nextQuestion: () => {
-    set((state) => {
-      if (!state.currentInterview) return state;
-      return {
-        currentInterview: {
-          ...state.currentInterview,
-          currentQuestionIndex: state.currentInterview.currentQuestionIndex + 1,
-        },
-      };
     });
   },
 }));
-
-export { mockQuestions, mockReport };

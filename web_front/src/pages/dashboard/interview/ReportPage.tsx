@@ -1,5 +1,13 @@
+/**
+ * 面试报告页（真实后端对接：GET /report + GET /questions + regenerate）。
+ *
+ * 报告未生成时轮询（generating）；失败可手动重试（§13.1）；
+ * 报告内容含维度得分、能力画像与逐题详情（仅已结束面试返回全量）。
+ */
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Progress, App, Rate } from 'antd';
+import { Progress, App, Rate, Tag, Empty } from 'antd';
 import {
   ArrowLeftOutlined,
   ReloadOutlined,
@@ -8,21 +16,176 @@ import {
   BulbOutlined,
   WarningOutlined,
   CheckCircleOutlined,
+  LoadingOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
-import { useAppStore } from '@/store';
-import { mockReport } from '@/lib/mocks/data';
+import {
+  getInterviewReport,
+  getInterviewQuestions,
+  regenerateReport,
+  CATEGORY_LABEL,
+} from '@/lib/api/interview';
+import type {
+  ApiInterviewReport,
+  ApiInterviewQuestionDetail,
+} from '@/lib/api/interview';
+
+/** 报告轮询间隔 */
+const POLL_INTERVAL = 3000;
 
 const ReportPage = () => {
   const { id } = useParams<{ id: string }>();
+  const interviewId = Number(id);
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const reports = useAppStore((s) => s.reports);
 
-  const report = id ? reports[id] : null;
-  const displayReport = report || mockReport;
-  const score = displayReport.totalScore;
+  const [loading, setLoading] = useState(true);
+  const [reportStatus, setReportStatus] = useState<string>('generating');
+  const [report, setReport] = useState<ApiInterviewReport | null>(null);
+  const [questions, setQuestions] = useState<ApiInterviewQuestionDetail[]>([]);
+  const [regenerating, setRegenerating] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** 拉取报告状态；未就绪时启动轮询（§13.1 惰性触发） */
+  const loadReport = useCallback(async () => {
+    try {
+      const res = await getInterviewReport(interviewId);
+      setReportStatus(res.status);
+      setReport(res.report);
+      return res.status;
+    } catch {
+      setReportStatus('error');
+      return 'error';
+    }
+  }, [interviewId]);
+
+  /** 拉取逐题详情（仅已结束面试返回） */
+  const loadQuestions = useCallback(async () => {
+    try {
+      const res = await getInterviewQuestions(interviewId);
+      setQuestions(res.items);
+    } catch {
+      // 面试进行中或无权限时不展示逐题区
+      setQuestions([]);
+    }
+  }, [interviewId]);
+
+  // 初始加载 + generating 状态轮询
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      const status = await loadReport();
+      if (!mounted) return;
+      setLoading(false);
+      if (status === 'ready' || status === 'invalid') {
+        await loadQuestions();
+      } else if (status === 'generating') {
+        pollTimerRef.current = setInterval(async () => {
+          const s = await loadReport();
+          if (s === 'ready' || s === 'failed' || s === 'invalid' || s === 'error') {
+            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+            if (s === 'ready') await loadQuestions();
+          }
+        }, POLL_INTERVAL);
+      }
+    })();
+    return () => {
+      mounted = false;
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interviewId]);
+
+  /** 手动重试报告生成（§13.1 regenerate） */
+  const handleRegenerate = useCallback(async () => {
+    setRegenerating(true);
+    try {
+      await regenerateReport(interviewId);
+      message.success('已重新触发报告生成');
+      setReportStatus('generating');
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      pollTimerRef.current = setInterval(async () => {
+        const s = await loadReport();
+        if (s === 'ready' || s === 'failed' || s === 'invalid' || s === 'error') {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          if (s === 'ready') await loadQuestions();
+          setRegenerating(false);
+        }
+      }, POLL_INTERVAL);
+    } catch {
+      message.error('触发重试失败，请稍后再试');
+      setRegenerating(false);
+    }
+  }, [interviewId, loadQuestions, loadReport, message]);
+
+  // ===== 加载中 =====
+  if (loading) {
+    return (
+      <div className="max-w-[900px] flex justify-center py-24">
+        <LoadingOutlined className="text-3xl text-[#D0D7DE]" />
+      </div>
+    );
+  }
+
+  // ===== 无效（进行中/已中断） =====
+  if (reportStatus === 'invalid') {
+    return (
+      <div className="max-w-[900px]">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate('/dashboard/history')}
+            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          >
+            <ArrowLeftOutlined />
+          </button>
+        </div>
+        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16">
+          <Empty description="该面试暂无报告（进行中或已中断）" />
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 生成中 / 失败 =====
+  if (reportStatus !== 'ready' || !report) {
+    return (
+      <div className="max-w-[900px]">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate('/dashboard/history')}
+            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          >
+            <ArrowLeftOutlined />
+          </button>
+        </div>
+        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
+          {reportStatus === 'failed' ? (
+            <>
+              <WarningOutlined className="text-4xl text-[#BF8700] mb-4" />
+              <h3 className="text-base font-semibold text-[#0D1117] mb-2">报告生成失败</h3>
+              <p className="text-sm text-[#5F6B7A] mb-6">AI 分析多次超时，题目与评分已保留，可手动重试生成</p>
+              <button onClick={handleRegenerate} disabled={regenerating} className="btn-flame">
+                {regenerating ? <LoadingOutlined /> : <ReloadOutlined />} 重新生成报告
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[#F0F2F5] border-t-[#FF6B35] animate-spin" />
+              <h3 className="text-base font-semibold text-[#0D1117] mb-2">报告生成中…</h3>
+              <p className="text-sm text-[#5F6B7A]">AI 正在汇总你的整场表现，通常需要 10~30 秒</p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 报告就绪 =====
+  const score = Math.round(report.total_score);
   const scoreEmoji = score >= 85 ? '🏆' : score >= 70 ? '👍' : score >= 60 ? '💪' : '📚';
   const scoreLevel = score >= 85 ? '表现优秀' : score >= 70 ? '表现良好' : score >= 60 ? '需要提升' : '继续努力';
+  const dimensionEntries = Object.entries(report.dimension_scores ?? {});
 
   return (
     <div className="max-w-[900px]">
@@ -55,16 +218,52 @@ const ReportPage = () => {
             </div>
           )} />
           <h2 className="text-xl font-bold text-[#0D1117] mt-4 mb-1">{scoreEmoji} {scoreLevel}</h2>
-          <p className="text-sm text-[#5F6B7A]">{displayReport.summary}</p>
+          <p className="text-sm text-[#5F6B7A]">{report.summary}</p>
+          {/* 能力画像（§14.3 capability_profile） */}
+          {report.capability_profile && Object.keys(report.capability_profile).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-[#F0F2F5]">
+              <p className="text-xs font-semibold text-[#8B949E] mb-2 flex items-center justify-center gap-1">
+                <UserOutlined /> 能力画像
+              </p>
+              <div className="flex flex-wrap gap-1.5 justify-center">
+                {Object.entries(report.capability_profile).map(([k, v]) => (
+                  <Tag key={k} className="!m-0">{k}: {v}</Tag>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="lg:col-span-2 space-y-4">
+          {/* 各维度得分（§14.3 dimension_scores） */}
+          {dimensionEntries.length > 0 && (
+            <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
+              <h3 className="text-sm font-bold text-[#0D1117] mb-4">维度得分</h3>
+              <div className="space-y-3">
+                {dimensionEntries.map(([name, val]) => (
+                  <div key={name} className="flex items-center gap-3">
+                    <span className="text-sm text-[#0D1117] w-20 flex-shrink-0">{name}</span>
+                    <div className="flex-1 h-2 rounded-full bg-[#F6F8FA] overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#FF6B35] transition-all"
+                        style={{ width: `${Math.min(100, Math.max(0, val))}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-[#0D1117] w-10 text-right tabular-nums">
+                      {Math.round(val)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
             <h3 className="text-sm font-bold text-[#0D1117] mb-3 flex items-center gap-2">
               <StarOutlined className="text-[#FF6B35]" /> 优势亮点
             </h3>
             <div className="space-y-2">
-              {displayReport.strengths.map((s, i) => (
+              {report.strengths.map((s, i) => (
                 <div key={i} className="flex items-start gap-2 text-sm">
                   <CheckCircleOutlined className="text-[#2DA44E] mt-0.5 flex-shrink-0" />
                   <span className="text-[#0D1117]">{s}</span>
@@ -77,7 +276,7 @@ const ReportPage = () => {
               <WarningOutlined className="text-[#BF8700]" /> 待改进
             </h3>
             <div className="space-y-2">
-              {displayReport.weaknesses.map((w, i) => (
+              {report.weaknesses.map((w, i) => (
                 <div key={i} className="flex items-start gap-2 text-sm">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#BF8700] mt-1.5 flex-shrink-0" />
                   <span className="text-[#0D1117]">{w}</span>
@@ -90,7 +289,7 @@ const ReportPage = () => {
               <BulbOutlined className="text-[#FF6B35]" /> 改进建议
             </h3>
             <div className="space-y-2">
-              {displayReport.suggestions.map((s, i) => (
+              {report.suggestions.map((s, i) => (
                 <div key={i} className="flex items-start gap-2 text-sm">
                   <span className="text-[#8B949E] text-xs font-mono min-w-[16px]">{i + 1}.</span>
                   <span className="text-[#0D1117]">{s}</span>
@@ -101,21 +300,49 @@ const ReportPage = () => {
         </div>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-6">
-        <h3 className="text-sm font-bold text-[#0D1117] mb-4">逐题详情</h3>
-        <div className="space-y-3">
-          {displayReport.questionDetails?.slice(0, 5).map((qd, i) => (
-            <div key={i} className="bg-[#F6F8FA] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="tag tag-flame">第 {qd.questionNo} 题</span>
-                <Rate disabled value={qd.aiScore} count={5} className="!text-xs" />
+      {/* 逐题详情（全量，仅已结束面试返回） */}
+      {questions.length > 0 && (
+        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-6">
+          <h3 className="text-sm font-bold text-[#0D1117] mb-4">
+            逐题详情（{questions.length} 题 · 追问 {report.follow_up_count} 次）
+          </h3>
+          <div className="space-y-3">
+            {questions.map((qd) => (
+              <div key={qd.question_id} className="bg-[#F6F8FA] rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="tag tag-flame">第 {qd.question_no} 题</span>
+                    {qd.category !== null && (
+                      <span className="text-xs text-[#8B949E]">{CATEGORY_LABEL[qd.category] ?? ''}</span>
+                    )}
+                    {qd.is_follow_up && (
+                      <span className="text-xs font-semibold text-[#BF8700]">追问</span>
+                    )}
+                  </div>
+                  {qd.ai_score !== null ? (
+                    <Rate disabled value={qd.ai_score} count={5} className="!text-xs" />
+                  ) : (
+                    <span className="text-xs text-[#8B949E]">未评分</span>
+                  )}
+                </div>
+                <p className="text-sm text-[#0D1117] mb-2 font-medium">{qd.question_text}</p>
+                {qd.user_answer && (
+                  <p className="text-xs text-[#5F6B7A] bg-white rounded-lg p-3 mb-2 leading-relaxed whitespace-pre-wrap">
+                    <span className="text-[#8B949E] font-semibold">我的回答：</span>
+                    {qd.user_answer}
+                  </p>
+                )}
+                {qd.ai_comment && (
+                  <p className="text-xs text-[#5F6B7A] bg-white rounded-lg p-3 leading-relaxed">
+                    <span className="text-[#FF6B35] font-semibold">AI 点评：</span>
+                    {qd.ai_comment}
+                  </p>
+                )}
               </div>
-              <p className="text-sm text-[#0D1117] mb-2">{qd.questionText}</p>
-              <p className="text-xs text-[#5F6B7A] bg-white rounded-lg p-3">{qd.aiComment}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-3">
         <button onClick={() => navigate('/dashboard/interview')} className="btn-flame flex-1">再来一次</button>

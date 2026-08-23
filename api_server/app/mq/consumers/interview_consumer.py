@@ -14,13 +14,21 @@ from app.cos import build_cos_url, cos_key_from_url
 from app.db.sync_session import SyncSessionLocal
 from app.llm.schemas.resume import ResumeExtraction
 from app.llm.workflow import parse_resume
-from app.models.message import MESSAGE_TYPE_SYSTEM, RELATED_TYPE_RESUME
+from app.models.message import (
+    MESSAGE_TYPE_INTERVIEW,
+    MESSAGE_TYPE_SYSTEM,
+    RELATED_TYPE_REPORT,
+    RELATED_TYPE_RESUME,
+)
 from app.models.resume import RESUME_STATUS_READY, Resume
 from app.mq.consumer import BaseConsumer, MQMessage
 from app.mq.queues import QueueName
 from app.redis import resume_lock
 from app.redis.async_client import AsyncRedisClient
+from app.redis.sync_client import SyncRedisClient
+from app.repositories.interview_report_repository import interview_report_repository
 from app.repositories.resume_repository import resume_repository
+from app.services.interview_service import interview_service
 from app.services.notification_service import notification_service
 
 logger = logging.getLogger(__name__)
@@ -276,23 +284,132 @@ class InterviewResumeParseConsumer(BaseConsumer):
 
 
 class InterviewReportConsumer(BaseConsumer):
-    """面试报告生成消费者。
+    """面试报告生成消费者（MQ 异步生成，§13.1）。
 
-    消费 interview.report.queue 队列消息，
-    根据负载中的 interview_id 调用 AI 服务生成面试综合报告（后续里程碑接入）。
+    消费 interview.report.generate 事件（由面试最后一题 finish 落库同事务投递，
+    或 regenerate 手动触发）：Worker 内生成报告并落库，完成后通过消息中心通知
+    用户 + SSE 实时推送，用户无需在回答页等待。
     """
 
     queue_name = QueueName.INTERVIEW_REPORT_GENERATE
 
     async def handle_message(self, message: MQMessage) -> None:
-        """处理面试报告生成任务（骨架，待接入AI报告服务）。
+        """处理面试报告生成任务：幂等预检 → 后台生成 → 消息通知。
 
         Args:
-            message: 入站消息对象，payload 含 interview_id。
+            message: 入站消息对象，payload 含 interview_id/user_id/resume_id。
         """
-        interview_id = message.payload.get("interview_id")
+        payload = message.payload
+        interview_id = int(payload["interview_id"])
+        user_id = int(payload.get("user_id") or 0)
+        started_at = time.monotonic()
         logger.info(
-            "开始生成面试报告 interview_id=%s message_id=%s",
-            interview_id,
-            message.message_id,
+            "面试报告生成开始 interview_id=%s user_id=%s message_id=%s",
+            interview_id, user_id, message.message_id,
         )
+
+        # 幂等：报告已存在（重复消费/已生成）→ 跳过
+        if await asyncio.to_thread(self._report_exists, interview_id):
+            logger.info("报告已存在，跳过 interview_id=%s", interview_id)
+            return
+
+        # 生成报告（同步逻辑经 asyncio.to_thread，避免阻塞事件循环）
+        cache = SyncRedisClient.get_client()
+        ok = await asyncio.to_thread(
+            interview_service.generate_report_background, cache, interview_id
+        )
+
+        # 消息通知（成功/失败），对齐简历分析通知模式
+        await self._notify(user_id, interview_id, success=ok)
+
+        logger.info(
+            "面试报告生成完成 interview_id=%s success=%s elapsed_ms=%d",
+            interview_id, ok, (time.monotonic() - started_at) * 1000,
+        )
+
+    @staticmethod
+    def _report_exists(interview_id: int) -> bool:
+        """同步查询面试报告是否已生成（幂等预检）。
+
+        Args:
+            interview_id: 面试会话ID。
+
+        Returns:
+            报告是否已存在。
+        """
+        db = SyncSessionLocal()
+        try:
+            return interview_report_repository.get_by_interview(db, interview_id) is not None
+        finally:
+            db.close()
+
+    async def _notify(self, user_id: int, interview_id: int, *, success: bool) -> None:
+        """创建面试报告系统通知并通过SSE推送（完成/失败）。
+
+        通知携带 related_type=report / related_id=interview_id，消息中心点击跳转报告页。
+
+        Args:
+            user_id: 接收通知的用户ID。
+            interview_id: 面试会话ID。
+            success: 报告是否生成成功。
+        """
+        content = (
+            "面试报告已生成，点击查看详细评估与建议"
+            if success else "面试报告生成失败，请稍后在报告页重试"
+        )
+        message_id = await asyncio.to_thread(
+            self._create_notification_sync, user_id, interview_id, content
+        )
+        if message_id is None:
+            return
+        # SSE实时推送（失败仅记日志，用户重连后走补偿拉取）
+        try:
+            from app.db.async_session import AsyncSessionLocal
+            from app.repositories.message_repository import message_repository
+
+            async with AsyncSessionLocal() as async_db:
+                msg = await message_repository.get_by_id(async_db, user_id, message_id)
+                if msg is None:
+                    return
+                unread_total = await message_repository.get_unread_count(async_db, user_id)
+                message_response = (await notification_service.to_responses(async_db, [msg]))[0]
+                sse_event = {
+                    "kind": "message",
+                    "message": message_response.model_dump(mode="json", by_alias=True),
+                    "unread_total": unread_total,
+                }
+                await notification_service.publish_to_user(user_id, sse_event)
+        except Exception:
+            logger.exception("面试报告通知SSE推送失败 user_id=%s interview_id=%s", user_id, interview_id)
+
+    @staticmethod
+    def _create_notification_sync(user_id: int, interview_id: int, content: str) -> int | None:
+        """同步创建面试报告系统通知消息（新开同步会话独立提交）。
+
+        Args:
+            user_id: 接收用户ID。
+            interview_id: 关联面试/报告ID。
+            content: 通知内容。
+
+        Returns:
+            消息ID，失败返回None。
+        """
+        db = SyncSessionLocal()
+        try:
+            msg = notification_service.create_notification(
+                db=db,
+                recipient_id=user_id,
+                msg_type=MESSAGE_TYPE_INTERVIEW,
+                title="面试报告",
+                content=content,
+                related_id=interview_id,
+                related_type=RELATED_TYPE_REPORT,
+            )
+            db.commit()
+            return msg.id
+        except Exception:
+            db.rollback()
+            logger.exception("创建面试报告通知失败 user_id=%s interview_id=%s", user_id, interview_id)
+            return None
+        finally:
+            db.close()

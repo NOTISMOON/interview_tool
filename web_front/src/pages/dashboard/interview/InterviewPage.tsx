@@ -12,9 +12,8 @@ import {
   LoadingOutlined,
   DeleteOutlined,
   ReloadOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
-import { useAppStore } from '@/store';
-import { mockQuestions } from '@/lib/mocks/data';
 import { FileUpload } from '@/components/upload/FileUpload';
 import {
   getResumes,
@@ -23,10 +22,18 @@ import {
   RESUME_STATUS_LABEL,
 } from '@/lib/api/resume';
 import type { ApiResume } from '@/lib/api/resume';
+import { createInterview, extractConflict } from '@/lib/api/interview';
+import type { InterviewType } from '@/lib/api/interview';
 
 /** 步骤条索引：0=选择简历, 1=AI 分析, 2=设备检测 */
 type StepIndex = 0 | 1 | 2;
 type DeviceState = 'idle' | 'testing' | 'ready' | 'error';
+
+/** 面试类型选项（对齐后端 type：1-完整 15题 / 2-快速 9题，均覆盖四维度） */
+const TYPE_OPTIONS: { value: InterviewType; title: string; desc: string }[] = [
+  { value: 1, title: '完整面试', desc: '15 题 · 约 40-70 分钟' },
+  { value: 2, title: '快速面试', desc: '9 题 · 约 25-40 分钟' },
+];
 
 /** AI 分析的四个子步骤文案 */
 const ANALYSIS_STEPS = [
@@ -48,9 +55,12 @@ const InterviewPage = () => {
   const [analysisStepIdx, setAnalysisStepIdx] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
+  const [interviewType, setInterviewType] = useState<InterviewType>(1);
   const [resumes, setResumes] = useState<ApiResume[]>([]);
   const [resumesLoading, setResumesLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  /** 创建成功的面试ID（设备检测完成后跳转用） */
+  const [createdInterviewId, setCreatedInterviewId] = useState<number | null>(null);
 
   // 设备检测状态
   const [micState, setMicState] = useState<DeviceState>('idle');
@@ -63,7 +73,6 @@ const InterviewPage = () => {
 
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-  const { startInterview } = useAppStore();
 
   // 组件卸载时释放摄像头/麦克风资源
   useEffect(() => {
@@ -158,33 +167,52 @@ const InterviewPage = () => {
 
   const canProceed = !showUpload && selectedResumeId !== null;
 
-  // STEP 1 -> STEP 2: 触发 AI 分析动画（简历已就绪才可进入）
+  // STEP 1: 真实创建面试（后端预生成基础题，真实LLM 5~20秒），
+  // 动画与请求并行推进；成功记录ID进入设备检测，失败回退选择简历
   const handleGenerate = async () => {
     if (!selectedResumeId) {
       message.warning('请先选择一份简历');
       return;
     }
     setGenerating(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setGenerating(false);
     setStep(1);
     setAnalysisStepIdx(0);
+    try {
+      const res = await createInterview(selectedResumeId, interviewType);
+      setCreatedInterviewId(res.interview_id);
+      setGenerating(false);
+    } catch (err) {
+      setGenerating(false);
+      setStep(0);
+      const conflict = extractConflict(err);
+      if (conflict?.code === 'analyzing') {
+        message.warning('简历正在分析中，请稍后再试');
+      } else if (conflict?.code === 'analysis_failed') {
+        message.error('简历分析失败，请重试或重新上传');
+      } else {
+        message.error('面试创建失败（题目生成异常），请稍后重试');
+      }
+    }
   };
 
-  // STEP 2: 分析中动画推进，四个子步骤跑完后直接进入设备检测
+  // STEP 2: 分析中动画推进，四个子步骤跑完且创建已成功后进入设备检测
   useEffect(() => {
     if (step !== 1) return;
     if (analysisStepIdx >= ANALYSIS_STEPS.length) {
-      const t = setTimeout(() => {
-        setStep(2);
-      }, 600);
-      return () => clearTimeout(t);
+      // 等待真实创建完成（LLM可能慢于动画）再进入设备检测
+      if (createdInterviewId !== null && !generating) {
+        const t = setTimeout(() => {
+          setStep(2);
+        }, 600);
+        return () => clearTimeout(t);
+      }
+      return;
     }
     const t = setTimeout(() => {
       setAnalysisStepIdx((i) => i + 1);
     }, 1400);
     return () => clearTimeout(t);
-  }, [step, analysisStepIdx]);
+  }, [step, analysisStepIdx, createdInterviewId, generating]);
 
   // STEP 3: 麦克风检测
   const testMicrophone = async () => {
@@ -234,10 +262,10 @@ const InterviewPage = () => {
 
   const bothReady = micState === 'ready' && camState === 'ready';
 
-  // STEP 3 -> 面试间
+  // STEP 3 -> 面试间：跳转真实面试会话页（session_id 即 interview_id）
   const handleStart = () => {
-    startInterview(selectedResumeId ? String(selectedResumeId) : 'resume_1', mockQuestions);
-    navigate(`/dashboard/interview/session/${Date.now()}`);
+    if (createdInterviewId === null) return;
+    navigate(`/dashboard/interview/session/${createdInterviewId}`);
   };
 
   const deviceCardClass = (s: DeviceState) =>
@@ -398,10 +426,37 @@ const InterviewPage = () => {
               </div>
             )}
 
+            {/* 面试类型选择（对齐后端 type：1-完整 15题 / 2-快速 9题） */}
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              {TYPE_OPTIONS.map((opt) => {
+                const selected = interviewType === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setInterviewType(opt.value)}
+                    className={`text-left px-4 py-3 rounded-xl border-2 transition-all ${
+                      selected
+                        ? 'border-[#FF6B35] bg-[#FFF3ED]'
+                        : 'border-[#E1E4E8] bg-white hover:border-[#D0D7DE]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <ClockCircleOutlined className={selected ? 'text-[#FF6B35]' : 'text-[#8B949E]'} />
+                      <span className={`text-sm font-semibold ${selected ? 'text-[#FF6B35]' : 'text-[#0D1117]'}`}>
+                        {opt.title}
+                      </span>
+                      {selected && <CheckOutlined className="text-[#FF6B35] text-xs ml-auto" />}
+                    </div>
+                    <p className="text-xs text-[#8B949E] mt-1">{opt.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+
             <button
               onClick={handleGenerate}
               disabled={generating || !canProceed}
-              className={`btn-flame btn-flame-lg mt-5 w-full ${!canProceed ? '!opacity-50 !cursor-not-allowed' : ''}`}
+              className={`btn-flame btn-flame-lg mt-4 w-full ${!canProceed ? '!opacity-50 !cursor-not-allowed' : ''}`}
             >
               {generating ? (
                 <span className="inline-flex items-center gap-2">
@@ -414,12 +469,16 @@ const InterviewPage = () => {
           </div>
         )}
 
-        {/* ============ STEP 2: AI 分析中 ============ */}
+        {/* ============ STEP 2: AI 分析中（真实创建：LLM 预生成基础题） ============ */}
         {step === 1 && (
           <div className="bg-white border border-[#E1E4E8] rounded-2xl p-10 text-center">
             <div className="w-16 h-16 mx-auto mb-5 rounded-full border-4 border-[#F0F2F5] border-t-[#FF6B35] animate-spin" />
             <h2 className="text-lg font-bold text-[#0D1117] mb-2">AI 正在分析你的简历...</h2>
-            <p className="text-sm text-[#5F6B7A] mb-6">正在解析简历并生成个性化面试题，请稍候</p>
+            <p className="text-sm text-[#5F6B7A] mb-6">
+              {analysisStepIdx >= ANALYSIS_STEPS.length && generating
+                ? '题目生成中，通常需要 5~20 秒，请稍候'
+                : '正在解析简历并生成个性化面试题，请稍候'}
+            </p>
             <div className="flex flex-col gap-2.5 max-w-sm mx-auto">
               {ANALYSIS_STEPS.map((label, i) => {
                 const isDone = i < analysisStepIdx;

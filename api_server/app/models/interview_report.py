@@ -23,9 +23,13 @@ class InterviewReport(Base):
     interview_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="关联面试ID")
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="用户ID")
     total_score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, comment="总分")
+    dimension_scores: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="各维度得分（技术能力/问题理解/准确性/深度/工程经验/表达能力）"
+    )
     summary: Mapped[str] = mapped_column(Text, nullable=False, comment="总结")
     strengths: Mapped[dict] = mapped_column(JSON, nullable=False, comment="优势列表")
     weaknesses: Mapped[dict] = mapped_column(JSON, nullable=False, comment="不足列表")
+    capability_profile: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="能力画像")
     suggestions: Mapped[dict] = mapped_column(JSON, nullable=False, comment="建议列表")
     question_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0"), comment="题目数量"

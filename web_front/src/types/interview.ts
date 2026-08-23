@@ -1,7 +1,7 @@
 export type QuestionType = 'technical' | 'project' | 'behavioral';
 
-/** 题目维度，用于 AI 分析完成后的维度卡片与面试间标签展示 */
-export type QuestionCategory = '技术基础' | '项目经验' | '综合素质' | '架构设计';
+/** 题目维度，用于 AI 分析完成后的维度卡片与面试间标签展示（对齐后端 category） */
+export type QuestionCategory = '技术八股' | '项目与社会实践' | '综合素养' | '架构设计';
 
 export interface InterviewQuestion {
   id: string;

@@ -12,23 +12,36 @@ import {
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
 import { getResumes } from '@/lib/api/resume';
+import { getInterviewList, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
+import type { ApiInterviewListItem } from '@/lib/api/interview';
 
 const DashboardHome = () => {
   const navigate = useNavigate();
-  const { user, reports } = useAppStore();
+  const { user } = useAppStore();
   /** 简历数量（从后端 GET /resumes 拉取，仅取数量展示） */
   const [resumeCount, setResumeCount] = useState(0);
+  /** 最近面试记录（GET /interviews，工作台统计与最近列表） */
+  const [interviews, setInterviews] = useState<ApiInterviewListItem[]>([]);
 
-  // 进入页面时拉取一次简历数量
+  // 进入页面时拉取一次简历数量与最近面试
   useEffect(() => {
     getResumes(1, 1)
       .then((res) => setResumeCount(res.total))
       .catch(() => {
         /* 加载失败静默，保持默认0 */
       });
+    getInterviewList(1, 100)
+      .then((res) => setInterviews(res.items))
+      .catch(() => {
+        /* 加载失败静默，保留空列表 */
+      });
   }, []);
 
-  const reportList = Object.values(reports);
+  /** 已完成且有成绩的面试（统计与最近列表） */
+  const finished = interviews.filter((it) => it.status === 1 && it.total_score !== null);
+  const avgScore = finished.length > 0
+    ? Math.round(finished.reduce((s, r) => s + (r.total_score ?? 0), 0) / finished.length)
+    : null;
 
   /** 根据当前时间返回问候语 */
   const getGreeting = (): string => {
@@ -56,7 +69,7 @@ const DashboardHome = () => {
     {
       icon: <HistoryOutlined />,
       label: '面试记录',
-      desc: `${reportList.length} 次`,
+      desc: `${interviews.length} 次`,
       onClick: () => navigate('/dashboard/history'),
     },
     {
@@ -98,15 +111,11 @@ const DashboardHome = () => {
             <h3 className="text-sm font-semibold text-[#0D1117] mb-4">本周统计</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <div className="text-2xl font-bold text-[#FF6B35]">{reportList.length}</div>
+                <div className="text-2xl font-bold text-[#FF6B35]">{finished.length}</div>
                 <div className="text-xs text-[#5F6B7A]">完成面试</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-[#0D1117]">
-                  {reportList.length > 0
-                    ? Math.round(reportList.reduce((s, r) => s + r.totalScore, 0) / reportList.length)
-                    : '--'}
-                </div>
+                <div className="text-2xl font-bold text-[#0D1117]">{avgScore ?? '--'}</div>
                 <div className="text-xs text-[#5F6B7A]">平均得分</div>
               </div>
               <div>
@@ -147,7 +156,7 @@ const DashboardHome = () => {
           <BarChartOutlined className="text-[#FF6B35]" />
           最近面试
         </h2>
-        {reportList.length > 0 && (
+        {interviews.length > 0 && (
           <button
             onClick={() => navigate('/dashboard/history')}
             className="text-sm text-[#FF6B35] font-medium hover:text-[#E85D26] transition-colors flex items-center gap-1"
@@ -157,7 +166,7 @@ const DashboardHome = () => {
         )}
       </div>
 
-      {reportList.length === 0 ? (
+      {interviews.length === 0 ? (
         <div className="bg-white border border-[#E1E4E8] rounded-2xl p-12 text-center">
           <FileTextOutlined className="text-4xl text-[#E1E4E8] mb-4" />
           <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无面试记录</h3>
@@ -168,34 +177,50 @@ const DashboardHome = () => {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
-          {reportList
-            .sort((a, b) => new Date(b.interviewTime).getTime() - new Date(a.interviewTime).getTime())
-            .slice(0, 5)
-            .map((report) => {
-              const score = report.totalScore;
-              const scoreColor = score >= 85 ? '#2DA44E' : score >= 70 ? '#FF6B35' : score >= 60 ? '#BF8700' : '#CF222E';
+          {interviews.slice(0, 5)
+            .map((item) => {
+              const score = item.total_score !== null ? Math.round(item.total_score) : null;
+              const scoreColor = score === null ? '#8B949E' : score >= 85 ? '#2DA44E' : score >= 70 ? '#FF6B35' : score >= 60 ? '#BF8700' : '#CF222E';
+              const time = item.interview_time || item.created_at;
               return (
                 <div
-                  key={report.id}
+                  key={item.interview_id}
                   className="bg-white border border-[#E1E4E8] rounded-xl p-4 flex items-center hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
-                  onClick={() => navigate(`/dashboard/report/${report.id}`)}
+                  onClick={() =>
+                    navigate(
+                      item.status === 0
+                        ? `/dashboard/interview/session/${item.interview_id}`
+                        : `/dashboard/report/${item.interview_id}`,
+                    )
+                  }
                 >
                   <div
                     className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0"
                     style={{ backgroundColor: `${scoreColor}15`, color: scoreColor }}
                   >
-                    {score}
+                    {score ?? (item.status === 0 ? '…' : '—')}
                   </div>
                   <div className="flex-1 ml-4 min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-semibold text-[#0D1117] truncate">
-                        {report.resumeName || '面试记录'}
+                        {INTERVIEW_TYPE_LABEL[item.type] ?? '模拟面试'}
                       </h4>
-                      <span className="tag tag-flame">{report.type === 'full' ? '完整面试' : '快速面试'}</span>
+                      <span className="tag tag-flame">{INTERVIEW_TYPE_LABEL[item.type] ?? '面试'}</span>
+                      {item.status === 0 && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#FFF8E6] text-[#BF8700]">
+                          进行中
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 mt-1">
-                      <span className="text-xs text-[#8B949E]">{report.interviewTime}</span>
-                      <span className="text-xs text-[#8B949E]">{report.questionCount} 题</span>
+                      <span className="text-xs text-[#8B949E]">
+                        {time
+                          ? new Date(time).toLocaleString('zh-CN', {
+                              month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+                            })
+                          : ''}
+                      </span>
+                      <span className="text-xs text-[#8B949E]">{item.question_count} 题</span>
                     </div>
                   </div>
                   <RightOutlined className="text-[#E1E4E8] text-xs ml-4" />
