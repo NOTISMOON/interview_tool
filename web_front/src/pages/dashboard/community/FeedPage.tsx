@@ -124,6 +124,7 @@ const FeedPage = () => {
               <div className="flex items-start gap-3">
                 <Avatar
                   size={36}
+                  src={post.author?.avatar}
                   className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
                   onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
                 >

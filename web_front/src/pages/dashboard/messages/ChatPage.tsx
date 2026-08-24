@@ -43,6 +43,7 @@ const ChatPage = () => {
   const { bump: bumpMsgVersion, revision: msgRevision } = useMessageVersion();
 
   const [peerName, setPeerName] = useState('...');
+  const [peerAvatar, setPeerAvatar] = useState<string | undefined>(undefined);
   const [messages, setMessages] = useState<LocalMsg[]>([]);
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -191,9 +192,10 @@ const ChatPage = () => {
       getUserPublicProfile(peerIdRef.current)
         .then((p) => {
           if (p.nickname) setPeerName(p.nickname);
+          if (p.avatar) setPeerAvatar(p.avatar);
         })
         .catch(() => {
-          /* 昵称加载失败静默 */
+          /* 昵称/头像加载失败静默 */
         });
     });
   }, [peerIdRef]);
@@ -319,6 +321,7 @@ const ChatPage = () => {
           <div className="flex items-center gap-3">
             <Avatar
               size={40}
+              src={peerAvatar}
               className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
               onClick={() => navigate(`/dashboard/user/${peerIdRef.current}`)}
             >
@@ -413,7 +416,7 @@ const ChatPage = () => {
                     isActive ? 'bg-[#FFF3ED]' : 'hover:bg-[#FAFBFC]'
                   }`}
                 >
-                  <Avatar size={40} className="!bg-[#0D1117] flex-shrink-0 !text-sm">
+                  <Avatar size={40} src={conv.peer?.avatar} className="!bg-[#0D1117] flex-shrink-0 !text-sm">
                     {(conv.peer?.nickname || '?')[0]}
                   </Avatar>
                   <div className="flex-1 min-w-0">

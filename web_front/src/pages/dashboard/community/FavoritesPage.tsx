@@ -120,7 +120,7 @@ const FavoritesPage = () => {
                 className="flex items-start gap-3 cursor-pointer"
                 onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
               >
-                <Avatar size={36} className="!bg-[#0D1117] flex-shrink-0">
+                <Avatar size={36} src={post.author?.avatar} className="!bg-[#0D1117] flex-shrink-0">
                   {post.author?.nickname?.[0] || '?'}
                 </Avatar>
                 <div className="flex-1 min-w-0">

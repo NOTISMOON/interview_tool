@@ -379,7 +379,7 @@ const PostDetailPage = () => {
           <div className="space-y-4">
             {comments.map((comment) => (
               <div key={comment.id} className="flex gap-3">
-                <Avatar size={32} className="!bg-[#0D1117] flex-shrink-0 !text-xs">
+                <Avatar size={32} src={comment.author?.avatar} className="!bg-[#0D1117] flex-shrink-0 !text-xs">
                   {comment.author?.nickname?.[0] || '?'}
                 </Avatar>
                 <div className="flex-1 min-w-0">
@@ -427,7 +427,7 @@ const PostDetailPage = () => {
                       ) : repliesMap[comment.id]?.length ? (
                         repliesMap[comment.id].map((reply) => (
                           <div key={reply.id} className="flex gap-2">
-                            <Avatar size={24} className="!bg-[#0D1117] flex-shrink-0 !text-[10px]">
+                            <Avatar size={24} src={reply.author?.avatar} className="!bg-[#0D1117] flex-shrink-0 !text-[10px]">
                               {reply.author?.nickname?.[0] || '?'}
                             </Avatar>
                             <div className="flex-1 min-w-0">
@@ -459,7 +459,7 @@ const PostDetailPage = () => {
                       {/* 回复该一级评论的表单 */}
                       {replyingTo?.root.id === comment.id && (
                         <div className="flex gap-2 mt-2">
-                          <Avatar size={24} className="!bg-[#FF6B35] flex-shrink-0 !text-[10px]">
+                          <Avatar size={24} src={user?.avatar} className="!bg-[#FF6B35] flex-shrink-0 !text-[10px]">
                             {user?.nickname?.[0] || 'U'}
                           </Avatar>
                           <div className="flex-1">
@@ -503,7 +503,7 @@ const PostDetailPage = () => {
       <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
         <h3 className="text-sm font-bold text-[#0D1117] mb-4">发表评论</h3>
         <div className="flex gap-3">
-          <Avatar size={32} className="!bg-[#FF6B35] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
+          <Avatar size={32} src={user?.avatar} className="!bg-[#FF6B35] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
           <div className="flex-1">
             <textarea
               value={commentText}
