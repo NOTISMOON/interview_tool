@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -13,7 +13,7 @@ gsap.defaults({
 });
 
 /**
- * 通用入场动画 Hook —— 元素从下方淡入上移
+ * 通用入场动画 Hook —— 子元素从下方淡入上移（使用 fromTo 确保动画终点明确）
  * @param stagger 每个子元素之间的延迟（秒）
  * @param y 初始 Y 偏移量（px）
  * @param duration 动画时长（秒）
@@ -26,13 +26,11 @@ export function useFadeInUp(stagger = 0.1, y = 30, duration = 0.6) {
       const children = containerRef.current?.children;
       if (!children || children.length === 0) return;
 
-      gsap.from(children, {
-        y,
-        opacity: 0,
-        duration,
-        stagger,
-        ease: 'power3.out',
-      });
+      gsap.fromTo(
+        children,
+        { y, opacity: 0 },
+        { y: 0, opacity: 1, duration, stagger, ease: 'power3.out', clearProps: 'transform,opacity' },
+      );
     },
     { scope: containerRef },
   );
@@ -54,18 +52,23 @@ export function useScrollReveal(stagger = 0.1, y = 40, start = 'top 85%') {
       const children = containerRef.current?.children;
       if (!children || children.length === 0) return;
 
-      gsap.from(children, {
-        y,
-        opacity: 0,
-        duration: 0.7,
-        stagger,
-        ease: 'power3.out',
-        scrollTrigger: {
-          trigger: containerRef.current,
-          start,
-          toggleActions: 'play none none none',
+      gsap.fromTo(
+        children,
+        { y, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.7,
+          stagger,
+          ease: 'power3.out',
+          clearProps: 'transform,opacity',
+          scrollTrigger: {
+            trigger: containerRef.current,
+            start,
+            toggleActions: 'play none none none',
+          },
         },
-      });
+      );
     },
     { scope: containerRef },
   );
@@ -83,24 +86,29 @@ export function useScrollRevealSingle(y = 40, start = 'top 85%') {
 
   useGSAP(() => {
     if (!ref.current) return;
-    gsap.from(ref.current, {
-      y,
-      opacity: 0,
-      duration: 0.7,
-      ease: 'power3.out',
-      scrollTrigger: {
-        trigger: ref.current,
-        start,
-        toggleActions: 'play none none none',
+    gsap.fromTo(
+      ref.current,
+      { y, opacity: 0 },
+      {
+        y: 0,
+        opacity: 1,
+        duration: 0.7,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity',
+        scrollTrigger: {
+          trigger: ref.current,
+          start,
+          toggleActions: 'play none none none',
+        },
       },
-    });
+    );
   });
 
   return ref;
 }
 
 /**
- * 英雄区入场动画 Hook —— 标题、描述、按钮依次出现
+ * 英雄区入场动画 Hook —— 标题、描述、按钮、统计依次出现
  */
 export function useHeroEntrance() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -108,13 +116,26 @@ export function useHeroEntrance() {
   useGSAP(() => {
     if (!containerRef.current) return;
     const children = containerRef.current.children;
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    if (children.length === 0) return;
 
-    tl.from(children[0], { y: 40, opacity: 0, duration: 0.7 })
-      .from(children[1], { y: 30, opacity: 0, duration: 0.6 }, '-=0.4')
-      .from(children[2], { y: 30, opacity: 0, duration: 0.6 }, '-=0.4')
-      .from(children[3], { y: 20, opacity: 0, duration: 0.5 }, '-=0.3')
-      .from(children[4], { y: 20, opacity: 0, duration: 0.5 }, '-=0.3');
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out', clearProps: 'transform,opacity' } });
+
+    const targets = Array.from(children).filter((_, i) => i < 5);
+    if (targets.length >= 1) {
+      tl.fromTo(targets[0], { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7 });
+    }
+    if (targets.length >= 2) {
+      tl.fromTo(targets[1], { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, '-=0.4');
+    }
+    if (targets.length >= 3) {
+      tl.fromTo(targets[2], { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, '-=0.4');
+    }
+    if (targets.length >= 4) {
+      tl.fromTo(targets[3], { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5 }, '-=0.3');
+    }
+    if (targets.length >= 5) {
+      tl.fromTo(targets[4], { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5 }, '-=0.3');
+    }
   }, { scope: containerRef });
 
   return containerRef;
@@ -126,11 +147,7 @@ export function useHeroEntrance() {
  * @param duration 动画时长（秒）
  * @param suffix 后缀文本
  */
-export function useCountUp(
-  targetValue: number,
-  duration = 2,
-  suffix = '',
-) {
+export function useCountUp(targetValue: number, duration = 2, suffix = '') {
   const ref = useRef<HTMLDivElement>(null);
   const animatedRef = useRef(false);
 
@@ -162,12 +179,11 @@ export function usePageTransition() {
 
   useGSAP(() => {
     if (!containerRef.current) return;
-    gsap.from(containerRef.current, {
-      y: 20,
-      opacity: 0,
-      duration: 0.5,
-      ease: 'power3.out',
-    });
+    gsap.fromTo(
+      containerRef.current,
+      { y: 20, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out', clearProps: 'transform,opacity' },
+    );
   }, { scope: containerRef });
 
   return containerRef;
@@ -181,27 +197,20 @@ export function useScaleIn(delay = 0) {
 
   useGSAP(() => {
     if (!ref.current) return;
-    gsap.from(ref.current, {
-      scale: 0.9,
-      opacity: 0,
-      duration: 0.5,
-      delay,
-      ease: 'back.out(1.4)',
-    });
+    gsap.fromTo(
+      ref.current,
+      { scale: 0.9, opacity: 0 },
+      { scale: 1, opacity: 1, duration: 0.5, delay, ease: 'back.out(1.4)', clearProps: 'transform,opacity' },
+    );
   });
 
   return ref;
 }
 
 /**
- * 交错入场 Hook —— 类似 useFadeInUp 但支持更多自定义
+ * 交错入场 Hook —— 子元素依次淡入上移
  */
-export function useStaggerEntrance(
-  stagger = 0.08,
-  y = 30,
-  duration = 0.5,
-  delay = 0,
-) {
+export function useStaggerEntrance(stagger = 0.08, y = 30, duration = 0.5, delay = 0) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useGSAP(
@@ -209,14 +218,11 @@ export function useStaggerEntrance(
       const children = containerRef.current?.children;
       if (!children || children.length === 0) return;
 
-      gsap.from(children, {
-        y,
-        opacity: 0,
-        duration,
-        stagger,
-        delay,
-        ease: 'power3.out',
-      });
+      gsap.fromTo(
+        children,
+        { y, opacity: 0 },
+        { y: 0, opacity: 1, duration, stagger, delay, ease: 'power3.out', clearProps: 'transform,opacity' },
+      );
     },
     { scope: containerRef },
   );
@@ -232,13 +238,11 @@ export function useSlideInLeft(delay = 0) {
 
   useGSAP(() => {
     if (!ref.current) return;
-    gsap.from(ref.current, {
-      x: -60,
-      opacity: 0,
-      duration: 0.7,
-      delay,
-      ease: 'power3.out',
-    });
+    gsap.fromTo(
+      ref.current,
+      { x: -60, opacity: 0 },
+      { x: 0, opacity: 1, duration: 0.7, delay, ease: 'power3.out', clearProps: 'transform,opacity' },
+    );
   });
 
   return ref;
@@ -252,13 +256,11 @@ export function useSlideInRight(delay = 0) {
 
   useGSAP(() => {
     if (!ref.current) return;
-    gsap.from(ref.current, {
-      x: 60,
-      opacity: 0,
-      duration: 0.7,
-      delay,
-      ease: 'power3.out',
-    });
+    gsap.fromTo(
+      ref.current,
+      { x: 60, opacity: 0 },
+      { x: 0, opacity: 1, duration: 0.7, delay, ease: 'power3.out', clearProps: 'transform,opacity' },
+    );
   });
 
   return ref;
