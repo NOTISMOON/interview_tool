@@ -288,6 +288,8 @@ async def list_conversation_messages(
 
     # 读取会话（首次打开/首页）时清未读：DB 置已读 + Redis 未读 hash 清空
     if cursor <= 0:
+        # 打开会话即取消隐藏（从用户主页"私信"进入或重新访问时恢复会话显示）
+        await chat_service.unhide_conversation(db, conversation_id, user_id)
         await chat_repository.mark_conversation_read(db, conversation_id, user_id)
         await db.commit()
         from app.redis.sync_client import SyncRedisClient
@@ -333,3 +335,67 @@ async def mark_conversation_read(
     redis_client = SyncRedisClient.get_client()
     redis_client.hdel(f"unread:{user_id}", str(conversation_id))
     return {"ok": True, "count": count}
+
+
+@router.put(
+    "/conversations/{conversation_id}/hide",
+    status_code=status.HTTP_200_OK,
+    summary="隐藏私信会话",
+)
+async def hide_conversation(
+    conversation_id: int = Path(..., ge=1, description="会话ID"),
+    payload: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> dict:
+    """隐藏私信会话（仅对当前用户生效），并清除该会话未读。
+
+    隐藏后会话从列表消失；对方再来新消息或重新打开会话时自动恢复。
+
+    Args:
+        conversation_id: 会话ID。
+        payload: JWT 认证载荷。
+        db: 数据库异步会话。
+
+    Returns:
+        操作结果字典。
+
+    Raises:
+        HTTPException: 会话不存在或非成员时返回404。
+    """
+    user_id = _user_id(payload)
+    ok = await chat_service.hide_conversation(db, conversation_id, user_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_200_OK,
+    summary="删除私信会话",
+)
+async def delete_conversation(
+    conversation_id: int = Path(..., ge=1, description="会话ID"),
+    payload: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> dict:
+    """删除私信会话：软删自己的历史消息 + 隐藏会话（仅影响当前用户）。
+
+    Args:
+        conversation_id: 会话ID。
+        payload: JWT 认证载荷。
+        db: 数据库异步会话。
+
+    Returns:
+        操作结果字典。
+
+    Raises:
+        HTTPException: 会话不存在或非成员时返回404。
+    """
+    user_id = _user_id(payload)
+    ok = await chat_service.delete_conversation(db, conversation_id, user_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    await db.commit()
+    return {"ok": True}

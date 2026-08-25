@@ -40,6 +40,12 @@ class DmMessage(Base):
     is_read: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0"), comment="0-未读 1-已读"
     )
+    deleted_by_user1: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), comment="消息是否被 user1 删除 0-否 1-是"
+    )
+    deleted_by_user2: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), comment="消息是否被 user2 删除 0-否 1-是"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="发送时间"
     )

@@ -10,13 +10,28 @@ import {
   MessageOutlined,
   CheckOutlined,
   FireOutlined,
+  EyeOutlined,
+  DeleteOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons';
-import { getMessages, getUnreadCount, markMessageRead, markAllMessagesRead } from '@/lib/api/messages';
+import {
+  getMessages,
+  getUnreadCount,
+  markMessageRead,
+  markAllMessagesRead,
+  deleteMessage,
+} from '@/lib/api/messages';
 import type { MessageResponse } from '@/lib/api/messages';
-import { getChatConversations, type ChatConversation } from '@/lib/api/chat';
+import {
+  getChatConversations,
+  hideChatConversation,
+  deleteChatConversation,
+  type ChatConversation,
+} from '@/lib/api/chat';
 import type { SystemMessage } from '@/types';
 import { useMessageVersion } from '@/lib/messageVersion';
 import { useAppStore } from '@/store';
+import ContextMenu from '@/components/ContextMenu';
 import {
   getCachedMessages,
   hasFullCache,
@@ -24,6 +39,7 @@ import {
   mergeCachedMessages,
   updateCachedMessage,
   markAllCachedRead,
+  removeCachedMessage,
 } from '@/lib/messageCache';
 
 /** 全量加载每页大小（后端cursor模式上限50） */
@@ -59,7 +75,7 @@ function mapMessage(m: MessageResponse): SystemMessage {
 
 const MessagesPage = () => {
   const navigate = useNavigate();
-  const { message: msg } = App.useApp();
+  const { message: msg, modal } = App.useApp();
   const { user } = useAppStore();
   const { revision: msgRevision } = useMessageVersion();
   const [activeTab, setActiveTab] = useState('all');
@@ -68,6 +84,12 @@ const MessagesPage = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [markingAll, setMarkingAll] = useState(false);
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  /** 右键浮窗状态（通知消息或私信会话） */
+  const [menu, setMenu] = useState<
+    | { kind: 'message'; item: SystemMessage; x: number; y: number }
+    | { kind: 'conversation'; item: ChatConversation; x: number; y: number }
+    | null
+  >(null);
   const conversationsTotalUnread = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
 
   /** 全量加载：循环cursor翻页，直到取完所有历史消息 */
@@ -224,6 +246,56 @@ const MessagesPage = () => {
     }
   };
 
+  /** 右键查看通知消息（与点击一致：标已读并跳转） */
+  const handleMenuViewMessage = (msgItem: SystemMessage) => {
+    void handleMessageClick(msgItem);
+  };
+
+  /** 右键删除通知消息（同步移除缓存与列表） */
+  const handleDeleteMessage = async (msgItem: SystemMessage) => {
+    try {
+      await deleteMessage(Number(msgItem.id));
+      if (user) {
+        removeCachedMessage(user.id, msgItem.id);
+        setMessages(getCachedMessages(user.id));
+      }
+      if (!msgItem.isRead) setUnreadCount((prev) => Math.max(0, prev - 1));
+      msg.success('已删除');
+    } catch {
+      msg.error('删除失败');
+    }
+  };
+
+  /** 右键隐藏私信会话 */
+  const handleHideConversation = async (conv: ChatConversation) => {
+    try {
+      await hideChatConversation(conv.id);
+      setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+      msg.success('已隐藏会话');
+    } catch {
+      msg.error('操作失败');
+    }
+  };
+
+  /** 右键删除私信会话（删除历史消息 + 隐藏，仅对当前用户生效） */
+  const handleDeleteConversation = (conv: ChatConversation) => {
+    modal.confirm({
+      title: '删除会话',
+      content: `将删除与「${conv.peer?.nickname || `用户${conv.peer?.id}`}」的历史消息并隐藏该会话（仅对您本人生效，对方记录不受影响）。确定删除？`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteChatConversation(conv.id);
+          setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+          msg.success('已删除会话');
+        } catch {
+          msg.error('操作失败');
+        }
+      },
+    });
+  };
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'system': return <BellOutlined className="text-[#FF6B35]" />;
@@ -303,6 +375,10 @@ const MessagesPage = () => {
                   key={conv.id}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-[#FAFBFC] transition-colors cursor-pointer"
                   onClick={() => navigate(`/dashboard/messages/chat/${conv.peer?.id}`)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setMenu({ kind: 'conversation', item: conv, x: e.clientX, y: e.clientY });
+                  }}
                 >
                   <Avatar
                     size={40}
@@ -363,6 +439,10 @@ const MessagesPage = () => {
               key={msgItem.id}
               className={`bg-white border rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer ${!msgItem.isRead ? 'border-[#FF6B35]/30 bg-[#FFF3ED]/30' : 'border-[#E1E4E8]'}`}
               onClick={() => handleMessageClick(msgItem)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ kind: 'message', item: msgItem, x: e.clientX, y: e.clientY });
+              }}
             >
               <div className="flex items-start gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${getIconBg(msgItem.type)}`}>
@@ -383,6 +463,54 @@ const MessagesPage = () => {
           ))
         )}
       </div>
+
+      {/* 右键浮窗：通知消息（查看/删除）、私信会话（查看/隐藏/删除） */}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={
+            menu.kind === 'message'
+              ? [
+                  {
+                    key: 'view',
+                    label: '查看',
+                    icon: <EyeOutlined />,
+                    onClick: () => handleMenuViewMessage(menu.item),
+                  },
+                  {
+                    key: 'delete',
+                    label: '删除',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    onClick: () => void handleDeleteMessage(menu.item),
+                  },
+                ]
+              : [
+                  {
+                    key: 'view',
+                    label: '查看',
+                    icon: <EyeOutlined />,
+                    onClick: () => navigate(`/dashboard/messages/chat/${menu.item.peer?.id}`),
+                  },
+                  {
+                    key: 'hide',
+                    label: '隐藏',
+                    icon: <EyeInvisibleOutlined />,
+                    onClick: () => void handleHideConversation(menu.item),
+                  },
+                  {
+                    key: 'delete',
+                    label: '删除',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    onClick: () => handleDeleteConversation(menu.item),
+                  },
+                ]
+          }
+        />
+      )}
     </div>
   );
 };

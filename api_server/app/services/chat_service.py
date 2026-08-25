@@ -121,7 +121,13 @@ class ChatService:
         if conv is None:
             return None
 
-        messages = await chat_repository.list_messages(db, conversation_id, cursor, size)
+        # 当前用户在会话中的软删除列（过滤其已删除的消息，仅对自己不可见）
+        deleted_col = (
+            "deleted_by_user1" if conv.user1_id == user_id else "deleted_by_user2"
+        )
+        messages = await chat_repository.list_messages(
+            db, conversation_id, deleted_col, cursor, size
+        )
         # 游标下一页 = 本页最小 seq（若本页为空则为 None）
         next_cursor = messages[-1].seq if messages else None
         # 本页无更多时（不足 size）标记无下一页
@@ -149,6 +155,78 @@ class ChatService:
             未读消息数量。
         """
         return await chat_repository.count_conversation_unread(db, conversation_id, user_id)
+
+    # ------------------------------------------------------------------
+    # 隐藏 / 删除（仅影响当前用户）
+    # ------------------------------------------------------------------
+
+    async def hide_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: int
+    ) -> bool:
+        """隐藏会话（仅对当前用户生效），并清除该会话未读。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            user_id: 当前用户ID。
+
+        Returns:
+            是否成功（会话不存在或非成员返回 False）。
+        """
+        ok = await chat_repository.hide_conversation(db, conversation_id, user_id)
+        if ok:
+            # 隐藏即视为不再关注：DB 未读置已读 + Redis 未读计数清空
+            await chat_repository.mark_conversation_read(db, conversation_id, user_id)
+            await self._clear_redis_unread(user_id, conversation_id)
+        return ok
+
+    async def unhide_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: int
+    ) -> bool:
+        """取消隐藏会话（打开会话时调用，使会话重新出现在列表）。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            user_id: 当前用户ID。
+
+        Returns:
+            是否成功（会话不存在或非成员返回 False）。
+        """
+        return await chat_repository.unhide_conversation(db, conversation_id, user_id)
+
+    async def delete_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: int
+    ) -> bool:
+        """删除会话（软删自己的历史消息 + 隐藏会话，仅影响当前用户），并清除未读。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            user_id: 当前用户ID。
+
+        Returns:
+            是否成功（会话不存在或非成员返回 False）。
+        """
+        ok = await chat_repository.delete_conversation(db, conversation_id, user_id)
+        if ok:
+            await chat_repository.mark_conversation_read(db, conversation_id, user_id)
+            await self._clear_redis_unread(user_id, conversation_id)
+        return ok
+
+    async def _clear_redis_unread(self, user_id: int, conversation_id: int) -> None:
+        """清除当前用户某会话的 Redis 未读计数。
+
+        Args:
+            user_id: 用户ID。
+            conversation_id: 会话ID。
+        """
+        from app.redis.sync_client import SyncRedisClient
+
+        redis_client = SyncRedisClient.get_client()
+        await asyncio.to_thread(
+            redis_client.hdel, f"{UNREAD_KEY_PREFIX}{user_id}", str(conversation_id)
+        )
 
 
 chat_service = ChatService()

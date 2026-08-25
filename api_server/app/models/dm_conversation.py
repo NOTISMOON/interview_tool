@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, text
+from sqlalchemy import BigInteger, DateTime, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,6 +24,12 @@ class DmConversation(Base):
     last_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="最后一条消息ID")
     last_message: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="最后一条消息摘要")
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="最后消息时间")
+    hidden_by_user1: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), comment="会话是否被 user1 隐藏 0-否 1-是"
+    )
+    hidden_by_user2: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), comment="会话是否被 user2 隐藏 0-否 1-是"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间"
     )

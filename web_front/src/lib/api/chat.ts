@@ -118,6 +118,26 @@ export async function markChatConversationRead(
   return data;
 }
 
+/** 隐藏私信会话（仅对当前用户生效，并清除该会话未读） */
+export async function hideChatConversation(
+  conversationId: number,
+): Promise<{ ok: boolean }> {
+  const { data } = await request.put<{ ok: boolean }>(
+    `/chat/conversations/${conversationId}/hide`,
+  );
+  return data;
+}
+
+/** 删除私信会话（软删自己的历史消息 + 隐藏会话，仅影响当前用户） */
+export async function deleteChatConversation(
+  conversationId: number,
+): Promise<{ ok: boolean }> {
+  const { data } = await request.delete<{ ok: boolean }>(
+    `/chat/conversations/${conversationId}`,
+  );
+  return data;
+}
+
 // ============================================================
 // WebSocket 客户端
 // ============================================================

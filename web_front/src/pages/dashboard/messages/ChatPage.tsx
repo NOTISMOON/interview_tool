@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, App, Spin } from 'antd';
-import { ArrowLeftOutlined, SendOutlined, MessageOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, SendOutlined, MessageOutlined, EyeOutlined, EyeInvisibleOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useAppStore } from '@/store';
 import { useMessageVersion } from '@/lib/messageVersion';
+import ContextMenu from '@/components/ContextMenu';
 import {
   createChatConversation,
   getChatMessages,
@@ -12,6 +13,8 @@ import {
   buildSendPayload,
   genClientMsgId,
   markChatConversationRead,
+  hideChatConversation,
+  deleteChatConversation,
   type ChatMessage,
   type ChatConversation,
 } from '@/lib/api/chat';
@@ -38,9 +41,16 @@ function formatTime(dateStr: string) {
 const ChatPage = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
-  const { message: msgFn } = App.useApp();
+  const { message: msgFn, modal } = App.useApp();
   const user = useAppStore((s) => s.user);
   const { bump: bumpMsgVersion, revision: msgRevision } = useMessageVersion();
+
+  /** 右键浮窗状态（私信会话） */
+  const [convMenu, setConvMenu] = useState<{
+    item: ChatConversation;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const [peerName, setPeerName] = useState('...');
   const [peerAvatar, setPeerAvatar] = useState<string | undefined>(undefined);
@@ -269,6 +279,36 @@ const ChatPage = () => {
     }
   };
 
+  /** 隐藏私信会话 */
+  const handleHideConversation = async (conv: ChatConversation) => {
+    try {
+      await hideChatConversation(conv.id);
+      setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+      msgFn.success('已隐藏会话');
+    } catch {
+      msgFn.error('操作失败');
+    }
+  };
+
+  /** 删除私信会话（删除历史消息 + 隐藏，仅对当前用户生效） */
+  const handleDeleteConversation = (conv: ChatConversation) => {
+    modal.confirm({
+      title: '删除会话',
+      content: `将删除与「${conv.peer?.nickname || `用户${conv.peer?.id}`}」的历史消息并隐藏该会话（仅对您本人生效，对方记录不受影响）。确定删除？`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteChatConversation(conv.id);
+          setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+          msgFn.success('已删除会话');
+        } catch {
+          msgFn.error('操作失败');
+        }
+      },
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -412,6 +452,10 @@ const ChatPage = () => {
                 <div
                   key={conv.id}
                   onClick={() => navigate(`/dashboard/messages/chat/${conv.peer?.id}`)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setConvMenu({ item: conv, x: e.clientX, y: e.clientY });
+                  }}
                   className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-[#F6F8FA] last:border-b-0 ${
                     isActive ? 'bg-[#FFF3ED]' : 'hover:bg-[#FAFBFC]'
                   }`}
@@ -450,6 +494,36 @@ const ChatPage = () => {
           )}
         </div>
       </aside>
+
+      {/* 右键浮窗：私信会话（查看/隐藏/删除） */}
+      {convMenu && (
+        <ContextMenu
+          x={convMenu.x}
+          y={convMenu.y}
+          onClose={() => setConvMenu(null)}
+          items={[
+            {
+              key: 'view',
+              label: '查看',
+              icon: <EyeOutlined />,
+              onClick: () => navigate(`/dashboard/messages/chat/${convMenu.item.peer?.id}`),
+            },
+            {
+              key: 'hide',
+              label: '隐藏',
+              icon: <EyeInvisibleOutlined />,
+              onClick: () => void handleHideConversation(convMenu.item),
+            },
+            {
+              key: 'delete',
+              label: '删除',
+              icon: <DeleteOutlined />,
+              danger: true,
+              onClick: () => handleDeleteConversation(convMenu.item),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 };

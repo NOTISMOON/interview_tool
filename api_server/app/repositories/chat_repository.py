@@ -137,9 +137,10 @@ class ChatRepository:
     # ------------------------------------------------------------------
 
     async def list_conversations(self, db: AsyncSession, user_id: int) -> list[DmConversation]:
-        """查询当前用户的所有会话（按最后消息时间倒序）。
+        """查询当前用户未隐藏的会话（按最后消息时间倒序）。
 
-        会话为双向数据，user_id 可能落在 user1_id 或 user2_id。
+        会话为双向数据，user_id 可能落在 user1_id 或 user2_id；隐藏按用户维度过滤：
+        user1 位置时剔除 hidden_by_user1=1，user2 位置时剔除 hidden_by_user2=1。
 
         Args:
             db: 数据库异步会话。
@@ -150,7 +151,9 @@ class ChatRepository:
         """
         result = await db.execute(
             text(
-                "SELECT * FROM dm_conversation WHERE user1_id = :uid OR user2_id = :uid "
+                "SELECT * FROM dm_conversation "
+                "WHERE (user1_id = :uid AND hidden_by_user1 = 0) "
+                "OR (user2_id = :uid AND hidden_by_user2 = 0) "
                 "ORDER BY COALESCE(last_message_at, updated_at) DESC LIMIT 50"
             ),
             {"uid": user_id},
@@ -207,24 +210,31 @@ class ChatRepository:
         return conv
 
     async def list_messages(
-        self, db: AsyncSession, conversation_id: int, cursor: int, size: int
+        self,
+        db: AsyncSession,
+        conversation_id: int,
+        deleted_col: str,
+        cursor: int,
+        size: int,
     ) -> list[DmMessage]:
-        """按游标分页查询会话消息（按 seq DESC，最新在前）。
+        """按游标分页查询会话消息（按 seq DESC，最新在前），过滤当前用户已删消息。
 
         Args:
             db: 数据库异步会话。
             conversation_id: 会话ID。
+            deleted_col: 当前用户在会话中的软删除列名（deleted_by_user1/user2）。
             cursor: 上一页最后一条消息的 seq，首页传 0（或超大值取最新）。
             size: 每页条数（clamp 到 [1,50]）。
 
         Returns:
-            消息列表（按 seq DESC）。
+            消息列表（按 seq DESC，剔除当前用户已删除的消息）。
         """
         effective = max(1, min(size, 50))
         # cursor<=0 表示取最新一页；否则取 seq < cursor 的历史页
         sql = (
-            "SELECT * FROM dm_message WHERE conversation_id = :cid "
-            "AND (:cur <= 0 OR seq < :cur) ORDER BY seq DESC LIMIT :sz"
+            f"SELECT * FROM dm_message WHERE conversation_id = :cid "
+            f"AND {deleted_col} = 0 "
+            f"AND (:cur <= 0 OR seq < :cur) ORDER BY seq DESC LIMIT :sz"
         )
         result = await db.execute(
             text(sql),
@@ -294,6 +304,142 @@ class ChatRepository:
         )
         row = result.mappings().first()
         return DmConversation(**dict(row)) if row else None
+
+    # ------------------------------------------------------------------
+    # 隐藏 / 删除（仅影响当前用户）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _hidden_col(user_id: int, conv: DmConversation) -> str:
+        """返回当前用户在会话中对应的隐藏列名。
+
+        Args:
+            user_id: 当前用户ID。
+            conv: 会话对象（须为会话成员）。
+
+        Returns:
+            "hidden_by_user1" 或 "hidden_by_user2"。
+        """
+        return "hidden_by_user1" if conv.user1_id == user_id else "hidden_by_user2"
+
+    @staticmethod
+    def _deleted_col(user_id: int, conv: DmConversation) -> str:
+        """返回当前用户在会话中对应的消息软删除列名。
+
+        Args:
+            user_id: 当前用户ID。
+            conv: 会话对象（须为会话成员）。
+
+        Returns:
+            "deleted_by_user1" 或 "deleted_by_user2"。
+        """
+        return "deleted_by_user1" if conv.user1_id == user_id else "deleted_by_user2"
+
+    async def hide_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: int
+    ) -> bool:
+        """隐藏会话（仅对当前用户生效）。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            user_id: 当前用户ID。
+
+        Returns:
+            是否成功（会话不存在或非成员返回 False）。
+        """
+        conv = await self.get_conversation(db, conversation_id, user_id)
+        if conv is None:
+            return False
+        col = self._hidden_col(user_id, conv)
+        await db.execute(
+            text(f"UPDATE dm_conversation SET {col} = 1 WHERE id = :cid"),
+            {"cid": conversation_id},
+        )
+        return True
+
+    async def unhide_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: int
+    ) -> bool:
+        """取消隐藏会话（打开会话时调用，使会话重新出现在列表）。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            user_id: 当前用户ID。
+
+        Returns:
+            是否成功（会话不存在或非成员返回 False）。
+        """
+        conv = await self.get_conversation(db, conversation_id, user_id)
+        if conv is None:
+            return False
+        col = self._hidden_col(user_id, conv)
+        await db.execute(
+            text(f"UPDATE dm_conversation SET {col} = 0 WHERE id = :cid"),
+            {"cid": conversation_id},
+        )
+        return True
+
+    async def delete_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: int
+    ) -> bool:
+        """删除会话（软删自己的历史消息 + 隐藏会话，仅影响当前用户）。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            user_id: 当前用户ID。
+
+        Returns:
+            是否成功（会话不存在或非成员返回 False）。
+        """
+        conv = await self.get_conversation(db, conversation_id, user_id)
+        if conv is None:
+            return False
+        del_col = self._deleted_col(user_id, conv)
+        hid_col = self._hidden_col(user_id, conv)
+        # 软删该会话下自己的全部消息（对方记录不受影响）
+        await db.execute(
+            text(f"UPDATE dm_message SET {del_col} = 1 WHERE conversation_id = :cid"),
+            {"cid": conversation_id},
+        )
+        # 同时隐藏会话
+        await db.execute(
+            text(f"UPDATE dm_conversation SET {hid_col} = 1 WHERE id = :cid"),
+            {"cid": conversation_id},
+        )
+        return True
+
+    async def unhide_on_new_message(
+        self,
+        db: AsyncSession,
+        conversation_id: int,
+        receiver_ids: set[int],
+    ) -> None:
+        """收到新消息时自动恢复隐藏会话：清除接收方在会话中的隐藏标记。
+
+        Args:
+            db: 数据库异步会话。
+            conversation_id: 会话ID。
+            receiver_ids: 本批新消息涉及的接收方用户ID集合。
+        """
+        if not receiver_ids:
+            return
+        # 任取一个接收方定位会话（接收方必为会话成员）
+        conv = await self.get_conversation(db, conversation_id, next(iter(receiver_ids)))
+        if conv is None:
+            return
+        updates: list[str] = []
+        if conv.user1_id in receiver_ids:
+            updates.append("hidden_by_user1 = 0")
+        if conv.user2_id in receiver_ids:
+            updates.append("hidden_by_user2 = 0")
+        if updates:
+            await db.execute(
+                text(f"UPDATE dm_conversation SET {', '.join(updates)} WHERE id = :cid"),
+                {"cid": conversation_id},
+            )
 
 
 chat_repository = ChatRepository()

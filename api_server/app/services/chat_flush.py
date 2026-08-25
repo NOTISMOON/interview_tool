@@ -184,6 +184,12 @@ class ChatFlushWorker:
                 last_message_id=last_msg_id,
             )
 
+            # 收到新消息自动恢复隐藏：清除接收方在会话中的隐藏标记
+            receiver_ids = {m["receiver_id"] for m in messages}
+            await chat_repository.unhide_on_new_message(
+                db, conversation_id, receiver_ids
+            )
+
             # 同事务为每条消息各写一条 Outbox 事件（chat.message.sent），
             # 扇出消费者逐条 HINCRBY，未读数才能按消息数正确累加。
             for msg in messages:
