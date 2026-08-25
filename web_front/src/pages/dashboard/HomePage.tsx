@@ -14,10 +14,14 @@ import { useAppStore } from '@/store';
 import { getResumes } from '@/lib/api/resume';
 import { getInterviewList, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
 import type { ApiInterviewListItem } from '@/lib/api/interview';
+import { useStaggerEntrance } from '@/hooks/useGsapAnimations';
 
 const DashboardHome = () => {
   const navigate = useNavigate();
   const { user } = useAppStore();
+  /** GSAP 动画 refs */
+  const quickActionsRef = useStaggerEntrance(0.08, 30, 0.5, 0.2);
+  const interviewListRef = useStaggerEntrance(0.06, 20, 0.4, 0.3);
   /** 简历数量（从后端 GET /resumes 拉取，仅取数量展示） */
   const [resumeCount, setResumeCount] = useState(0);
   /** 最近面试记录（GET /interviews，工作台统计与最近列表） */
@@ -134,7 +138,7 @@ const DashboardHome = () => {
           <ThunderboltOutlined className="text-[#FF6B35]" />
           快捷操作
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div ref={quickActionsRef} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {quickActions.map((action) => (
             <button
               key={action.label}
@@ -176,7 +180,7 @@ const DashboardHome = () => {
           </button>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
+        <div ref={interviewListRef} className="flex-1 overflow-y-auto min-h-0 space-y-3">
           {interviews.slice(0, 5)
             .map((item) => {
               const score = item.total_score !== null ? Math.round(item.total_score) : null;

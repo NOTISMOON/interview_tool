@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store';
+import { useHeroEntrance, useScrollReveal } from '@/hooks/useGsapAnimations';
 import {
   PlayCircleOutlined,
   FileTextOutlined,
@@ -66,6 +67,12 @@ const LandingPage = () => {
   const navigate = useNavigate();
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
 
+  /** GSAP 动画 refs */
+  const heroRef = useHeroEntrance();
+  const featuresRef = useScrollReveal(0.12, 40, 'top 85%');
+  const stepsRef = useScrollReveal(0.12, 40, 'top 85%');
+  const testimonialsRef = useScrollReveal(0.12, 40, 'top 85%');
+
   const handleStartPractice = () => {
     navigate(isLoggedIn ? '/dashboard' : '/login');
   };
@@ -74,12 +81,12 @@ const LandingPage = () => {
     <div className="bg-[#F6F8FA]">
       <section className="pt-32 pb-20 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-20 left-[10%] w-72 h-72 bg-[#FF6B35]/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-[5%] w-96 h-96 bg-[#FF6B35]/4 rounded-full blur-3xl" />
+          <div className="absolute top-20 left-[10%] w-72 h-72 bg-[#FF6B35]/5 rounded-full blur-3xl animate-float-slow" />
+          <div className="absolute bottom-10 right-[5%] w-96 h-96 bg-[#FF6B35]/4 rounded-full blur-3xl animate-float-slower" />
         </div>
 
         <div className="max-w-[1200px] mx-auto px-8 relative">
-          <div className="max-w-[720px]">
+          <div ref={heroRef} className="max-w-[720px]">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF3ED] text-[#FF6B35] text-sm font-semibold mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B35] animate-pulse" />
               AI 驱动的面试练习平台
@@ -133,9 +140,9 @@ const LandingPage = () => {
               不只是刷题，而是让你真正理解面试的逻辑，建立自信
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div ref={featuresRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((f) => (
-              <div key={f.title} className="card !border-[#F0F2F5] hover:!border-[#FF6B35]/30">
+              <div key={f.title} className="card !border-[#F0F2F5] hover:!border-[#FF6B35]/30 hover:!-translate-y-1 hover:!shadow-lg transition-all duration-300">
                 <div className="w-12 h-12 rounded-xl bg-[#FFF3ED] flex items-center justify-center text-xl text-[#FF6B35] mb-4">
                   {f.icon}
                 </div>
@@ -155,10 +162,10 @@ const LandingPage = () => {
               从上传简历到查看报告，全程不到 30 分钟
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div ref={stepsRef} className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {steps.map((s, i) => (
               <div key={s.step} className="relative text-center">
-                <div className="w-14 h-14 rounded-2xl bg-[#0D1117] text-white flex items-center justify-center text-lg font-bold mx-auto mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-[#0D1117] text-white flex items-center justify-center text-lg font-bold mx-auto mb-4 transition-transform duration-300 hover:scale-110">
                   {s.step}
                 </div>
                 <h3 className="text-base font-bold text-[#0D1117] mb-2">{s.title}</h3>
@@ -182,9 +189,9 @@ const LandingPage = () => {
               来自真实用户的反馈
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div ref={testimonialsRef} className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map((t) => (
-              <div key={t.name} className="card !border-[#F0F2F5]">
+              <div key={t.name} className="card !border-[#F0F2F5] hover:!-translate-y-1 hover:!shadow-lg transition-all duration-300">
                 <div className="flex items-center gap-1 mb-3">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <StarFilled

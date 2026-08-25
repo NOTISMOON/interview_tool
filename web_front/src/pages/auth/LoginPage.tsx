@@ -3,10 +3,15 @@ import { Link } from 'react-router-dom';
 import { Button, App, Divider } from 'antd';
 import { GithubOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { getGithubAuthUrl } from '@/lib/api/auth';
+import { useSlideInLeft, useSlideInRight } from '@/hooks/useGsapAnimations';
 
 const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const { message } = App.useApp();
+
+  /** GSAP 动画 refs */
+  const leftPanelRef = useSlideInLeft(0.2);
+  const rightPanelRef = useSlideInRight(0.2);
 
   const handleGithubLogin = async () => {
     setLoading(true);
@@ -21,7 +26,7 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F6F8FA] flex">
-      <div className="hidden lg:flex flex-1 bg-[#0D1117] items-center justify-center relative overflow-hidden">
+      <div ref={leftPanelRef} className="hidden lg:flex flex-1 bg-[#0D1117] items-center justify-center relative overflow-hidden">
         <div className="absolute top-20 left-20 w-96 h-96 bg-[#FF6B35]/10 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-20 w-80 h-80 bg-[#FF6B35]/5 rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-[#2DA44E]/5 rounded-full blur-3xl" />
@@ -38,7 +43,7 @@ const LoginPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-8">
+      <div ref={rightPanelRef} className="flex-1 flex items-center justify-center px-8">
         <div className="w-full max-w-[420px]">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-[#5F6B7A] hover:text-[#0D1117] mb-10 transition-colors">
             <ArrowLeftOutlined /> 返回首页

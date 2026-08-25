@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store';
+import { useSlideInLeft } from '@/hooks/useGsapAnimations';
 
 const NAV_LINKS = [
   { label: '功能', href: '#features' },
@@ -12,6 +13,9 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
+
+  /** GSAP 入场动画 */
+  const navRef = useSlideInLeft(0);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -25,6 +29,7 @@ const Navbar = () => {
 
   return (
     <nav
+      ref={navRef}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${
         scrolled
           ? 'bg-white/90 backdrop-blur-xl border-b border-[#E1E4E8] shadow-sm'

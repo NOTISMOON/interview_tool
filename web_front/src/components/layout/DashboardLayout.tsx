@@ -14,6 +14,7 @@ import { useAppStore } from '@/store';
 import { getUnreadCount } from '@/lib/api/messages';
 import { useMessageVersion } from '@/lib/messageVersion';
 import { useState, useEffect } from 'react';
+import { useSlideInLeft, usePageTransition } from '@/hooks/useGsapAnimations';
 
 const SIDEBAR_ITEMS = [
   { key: '/dashboard', label: '工作台', icon: <HomeOutlined /> },
@@ -80,9 +81,14 @@ const Sidebar = () => {
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAppStore();
   const { revision: msgRevision } = useMessageVersion();
   const [unreadCount, setUnreadCount] = useState(0);
+
+  /** GSAP 动画 refs */
+  const sidebarRef = useSlideInLeft(0);
+  const contentRef = usePageTransition();
 
   /** 获取未读计数 */
   const fetchUnreadCount = async () => {
@@ -112,7 +118,9 @@ const DashboardLayout = () => {
 
   return (
     <div className="min-h-screen bg-[#F6F8FA]">
-      <Sidebar />
+      <div ref={sidebarRef}>
+        <Sidebar />
+      </div>
 
       <div className="ml-[240px]">
         <header className="h-[60px] bg-white border-b border-[#E1E4E8] flex items-center justify-between px-6 sticky top-0 z-30">
@@ -144,7 +152,7 @@ const DashboardLayout = () => {
         </header>
 
         <main className="p-6 h-[calc(100vh-60px)] overflow-y-auto">
-          <div className="animate-fade-in-up">
+          <div ref={contentRef} className="animate-fade-in-up">
             <Outlet />
           </div>
         </main>
