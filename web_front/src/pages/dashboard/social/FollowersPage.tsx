@@ -85,10 +85,10 @@ const FollowersPage = () => {
 
   const getButtonContent = (user: UserBrief) => {
     if (user.isFollowing && user.isFollowedBy) {
-      return { text: '互相关注', className: 'bg-[#FFF3ED] text-[#FF6B35] border border-[#FF6B35]/20' };
+      return { text: '互相关注', className: 'bg-[#E0F7F4] text-[#00BFA5] border border-[#00BFA5]/20' };
     }
     if (user.isFollowing) {
-      return { text: '已关注', className: 'bg-[#F6F8FA] text-[#5F6B7A] border border-[#E1E4E8] hover:border-[#CF222E] hover:text-[#CF222E] hover:bg-[#FFF0F1]' };
+      return { text: '已关注', className: 'bg-[#F7F8FA] text-[#666666] border border-[#E8E8E8] hover:border-[#F53535] hover:text-[#F53535] hover:bg-[#FDECEC]' };
     }
     if (user.isFollowedBy) {
       return { text: '回关', className: 'btn-flame !py-1.5 !px-4 !text-sm' };
@@ -109,36 +109,36 @@ const FollowersPage = () => {
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate('/dashboard/profile')}
-          className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
         >
           <ArrowLeftOutlined />
         </button>
-        <h1 className="text-xl font-bold text-[#0D1117]">我的粉丝 ({totalCount})</h1>
+        <h1 className="text-xl font-bold text-[#232529]">我的粉丝 ({totalCount})</h1>
       </div>
 
       {followersList.length === 0 ? (
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-4">
-            <TeamOutlined className="text-2xl text-[#8B949E]" />
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-[#F7F8FA] flex items-center justify-center mx-auto mb-4">
+            <TeamOutlined className="text-2xl text-[#999999]" />
           </div>
-          <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无粉丝</h3>
-          <p className="text-sm text-[#5F6B7A] mb-6">积极参与社区互动，吸引更多关注</p>
+          <h3 className="text-base font-semibold text-[#232529] mb-2">暂无粉丝</h3>
+          <p className="text-sm text-[#666666] mb-6">积极参与社区互动，吸引更多关注</p>
           <button onClick={() => navigate('/dashboard/community')} className="btn-flame">
             去社区互动
           </button>
         </div>
       ) : (
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl overflow-hidden">
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl overflow-hidden">
           {followersList.map((user, idx) => {
             const btn = getButtonContent(user);
             return (
               <div key={user.id}>
-                {idx > 0 && <div className="border-t border-[#F0F2F5]" />}
-                <div className="flex items-center gap-4 px-5 py-4 hover:bg-[#F6F8FA] transition-colors">
+                {idx > 0 && <div className="border-t border-[#F2F3F5]" />}
+                <div className="flex items-center gap-4 px-5 py-4 hover:bg-[#F7F8FA] transition-colors">
                   <Avatar
                     size={44}
                     src={user.avatar}
-                    className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
+                    className="!bg-[#232529] flex-shrink-0 !text-sm cursor-pointer"
                     onClick={() => handleUserClick(user.id)}
                   >
                     {user.nickname[0]}
@@ -148,12 +148,12 @@ const FollowersPage = () => {
                     onClick={() => handleUserClick(user.id)}
                   >
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-semibold text-[#0D1117] truncate">{user.nickname}</h4>
+                      <h4 className="text-sm font-semibold text-[#232529] truncate">{user.nickname}</h4>
                       {user.isFollowedBy && (
                         <span className="tag tag-ink text-[10px]">关注了你</span>
                       )}
                     </div>
-                    <p className="text-xs text-[#5F6B7A] truncate mt-0.5">{user.bio}</p>
+                    <p className="text-xs text-[#666666] truncate mt-0.5">{user.bio}</p>
                   </div>
                   <button
                     onClick={() => handleToggleFollow(user.id)}
@@ -166,11 +166,11 @@ const FollowersPage = () => {
             );
           })}
           {nextCursor !== null && (
-            <div className="border-t border-[#F0F2F5] p-4 text-center">
+            <div className="border-t border-[#F2F3F5] p-4 text-center">
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="text-sm text-[#FF6B35] font-medium hover:text-[#E85D26] transition-colors"
+                className="text-sm text-[#00BFA5] font-medium hover:text-[#00A88A] transition-colors"
               >
                 {loadingMore ? '加载中...' : '加载更多'}
               </button>

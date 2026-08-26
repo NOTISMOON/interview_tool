@@ -6,9 +6,11 @@ import { useAppStore } from '@/store';
 import Navbar from '@/components/layout/Navbar';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
-const LandingPage = lazy(() => import('@/pages/LandingPage'));
-const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
-const CallbackPage = lazy(() => import('@/pages/auth/CallbackPage'));
+import LandingPage from '@/pages/LandingPage';
+import LoginPage from '@/pages/auth/LoginPage';
+import CallbackPage from '@/pages/auth/CallbackPage';
+import NotFoundPage from '@/pages/NotFoundPage';
+import PrivacyPage from '@/pages/PrivacyPage';
 
 const DashboardHome = lazy(() => import('@/pages/dashboard/HomePage'));
 const InterviewPage = lazy(() => import('@/pages/dashboard/interview/InterviewPage'));
@@ -28,8 +30,6 @@ const FollowingPage = lazy(() => import('@/pages/dashboard/social/FollowingPage'
 const FollowersPage = lazy(() => import('@/pages/dashboard/social/FollowersPage'));
 const SettingsPage = lazy(() => import('@/pages/dashboard/settings/SettingsPage'));
 const HelpPage = lazy(() => import('@/pages/dashboard/settings/HelpPage'));
-const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
-const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'));
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
@@ -62,59 +62,51 @@ const App = () => {
   }, []);
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-screen">
-          <Spin size="large" />
-        </div>
-      }
-    >
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <PublicLayout>
-              <LandingPage />
-            </PublicLayout>
-          }
-        />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/callback" element={<CallbackPage />} />
-        <Route path="/register" element={<Navigate to="/login" replace />} />
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <PublicLayout>
+            <LandingPage />
+          </PublicLayout>
+        }
+      />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/callback" element={<CallbackPage />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
 
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<DashboardHome />} />
-          <Route path="interview" element={<InterviewPage />} />
-          <Route path="interview/session/:id" element={<InterviewSession />} />
-          <Route path="history" element={<HistoryPage />} />
-          <Route path="report/:id" element={<ReportPage />} />
-          <Route path="feed" element={<FeedPage />} />
-          <Route path="community" element={<CommunityPage />} />
-          <Route path="messages" element={<MessagesPage />} />
-          <Route path="messages/:id" element={<MessageDetailPage />} />
-          <Route path="messages/chat/:userId" element={<ChatPage />} />
-          <Route path="user/:id" element={<UserPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="community/post/:id" element={<PostDetailPage />} />
-          <Route path="following" element={<FollowingPage />} />
-          <Route path="followers" element={<FollowersPage />} />
-          <Route path="favorites" element={<FavoritesPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="help" element={<HelpPage />} />
-        </Route>
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<DashboardHome />} />
+        <Route path="interview" element={<InterviewPage />} />
+        <Route path="interview/session/:id" element={<InterviewSession />} />
+        <Route path="history" element={<HistoryPage />} />
+        <Route path="report/:id" element={<ReportPage />} />
+        <Route path="feed" element={<FeedPage />} />
+        <Route path="community" element={<CommunityPage />} />
+        <Route path="messages" element={<MessagesPage />} />
+        <Route path="messages/:id" element={<MessageDetailPage />} />
+        <Route path="messages/chat/:userId" element={<ChatPage />} />
+        <Route path="user/:id" element={<UserPage />} />
+        <Route path="profile" element={<ProfilePage />} />
+        <Route path="community/post/:id" element={<PostDetailPage />} />
+        <Route path="following" element={<FollowingPage />} />
+        <Route path="followers" element={<FollowersPage />} />
+        <Route path="favorites" element={<FavoritesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="help" element={<HelpPage />} />
+      </Route>
 
-        <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
 
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </Suspense>
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
   );
 };
 

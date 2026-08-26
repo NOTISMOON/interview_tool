@@ -11,7 +11,7 @@ const NotFoundPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0D1117] flex items-center justify-center px-6">
+    <div className="min-h-screen bg-[#232529] flex items-center justify-center px-6">
       <div className="text-center max-w-md">
         <div className="text-[120px] font-extrabold leading-none mb-4">
           <span className="gradient-text">404</span>
@@ -19,7 +19,7 @@ const NotFoundPage = () => {
         <h1 className="text-2xl font-extrabold text-white mb-3">
           页面不见了
         </h1>
-        <p className="text-[#8B949E] text-sm leading-relaxed mb-8">
+        <p className="text-[#999999] text-sm leading-relaxed mb-8">
           你访问的页面可能已被删除、移动或暂时不可用。
           <br />
           请检查网址是否正确，或返回首页继续浏览。

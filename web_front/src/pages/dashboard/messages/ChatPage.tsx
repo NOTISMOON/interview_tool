@@ -323,15 +323,15 @@ const ChatPage = () => {
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => navigate('/dashboard/messages')}
-            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
           >
             <ArrowLeftOutlined />
           </button>
-          <h1 className="text-lg font-bold text-[#0D1117]">私信</h1>
+          <h1 className="text-lg font-bold text-[#232529]">私信</h1>
         </div>
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
-          <h3 className="text-base font-semibold text-[#0D1117] mb-2">会话不可用</h3>
-          <p className="text-sm text-[#5F6B7A] mb-6">无法建立与该用户的私信会话</p>
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-16 text-center">
+          <h3 className="text-base font-semibold text-[#232529] mb-2">会话不可用</h3>
+          <p className="text-sm text-[#666666] mb-6">无法建立与该用户的私信会话</p>
           <button onClick={() => navigate('/dashboard/messages')} className="btn-flame">
             返回消息列表
           </button>
@@ -348,27 +348,27 @@ const ChatPage = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard/messages')}
-            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
           >
             <ArrowLeftOutlined />
           </button>
-          <h1 className="text-lg font-bold text-[#0D1117]">私信</h1>
+          <h1 className="text-lg font-bold text-[#232529]">私信</h1>
         </div>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0F2F5]">
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl flex-1 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F2F3F5]">
           <div className="flex items-center gap-3">
             <Avatar
               size={40}
               src={peerAvatar}
-              className="!bg-[#0D1117] flex-shrink-0 !text-sm cursor-pointer"
+              className="!bg-[#232529] flex-shrink-0 !text-sm cursor-pointer"
               onClick={() => navigate(`/dashboard/user/${peerIdRef.current}`)}
             >
               {peerName[0] || '?'}
             </Avatar>
             <div
-              className="text-sm font-semibold text-[#0D1117] cursor-pointer hover:text-[#FF6B35]"
+              className="text-sm font-semibold text-[#232529] cursor-pointer hover:text-[#00BFA5]"
               onClick={() => navigate(`/dashboard/user/${peerIdRef.current}`)}
             >
               {peerName}
@@ -386,7 +386,7 @@ const ChatPage = () => {
               <div key={msg.client_msg_id || msg.id || `${msg.seq}-${msg.from_user_id}`}>
                 {showSep && (
                   <div className="flex items-center justify-center my-3">
-                    <span className="text-xs text-[#8B949E] bg-[#F6F8FA] px-3 py-1 rounded-full">
+                    <span className="text-xs text-[#999999] bg-[#F7F8FA] px-3 py-1 rounded-full">
                       {formatTime(msg.created_at)}
                     </span>
                   </div>
@@ -395,8 +395,8 @@ const ChatPage = () => {
                   <div
                     className={`max-w-[70%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl break-words ${
                       self
-                        ? 'bg-[#FF6B35] text-white rounded-br-md'
-                        : 'bg-[#F6F8FA] text-[#0D1117] rounded-bl-md'
+                        ? 'bg-[#00BFA5] text-white rounded-br-md'
+                        : 'bg-[#F7F8FA] text-[#232529] rounded-bl-md'
                     }`}
                   >
                     {msg.content}
@@ -414,7 +414,7 @@ const ChatPage = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="px-5 py-4 border-t border-[#F0F2F5]">
+        <div className="px-5 py-4 border-t border-[#F2F3F5]">
           <div className="flex items-end gap-3">
             <textarea
               value={inputValue}
@@ -422,29 +422,29 @@ const ChatPage = () => {
               onKeyDown={handleKeyDown}
               placeholder="输入消息..."
               rows={1}
-              className="flex-1 px-4 py-2.5 border border-[#E1E4E8] rounded-xl text-sm text-[#0D1117] placeholder:text-[#8B949E] resize-none focus:outline-none focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35]/20 transition-all max-h-[120px]"
+              className="flex-1 px-4 py-2.5 border border-[#E8E8E8] rounded-xl text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#00BFA5] focus:ring-1 focus:ring-[#00BFA5]/20 transition-all max-h-[120px]"
             />
             <button
               onClick={handleSend}
               disabled={!inputValue.trim() || sending}
-              className="w-10 h-10 rounded-xl bg-[#FF6B35] text-white flex items-center justify-center hover:bg-[#E85D26] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="w-10 h-10 rounded-xl bg-[#00BFA5] text-white flex items-center justify-center hover:bg-[#00A88A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             >
               <SendOutlined />
             </button>
           </div>
-          <div className="text-xs text-[#8B949E] mt-2">按 Enter 发送，Shift + Enter 换行</div>
+          <div className="text-xs text-[#999999] mt-2">按 Enter 发送，Shift + Enter 换行</div>
         </div>
       </div>
       </div>
       {/* 右栏：私信会话列表（利用右侧空白） */}
       <aside className="w-[320px] flex flex-col flex-shrink-0 min-h-0">
         <div className="flex items-center gap-2 px-1 mb-3">
-          <MessageOutlined className="text-[#FF6B35]" />
-          <h2 className="text-sm font-semibold text-[#0D1117]">会话</h2>
+          <MessageOutlined className="text-[#00BFA5]" />
+          <h2 className="text-sm font-semibold text-[#232529]">会话</h2>
         </div>
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl flex-1 overflow-y-auto min-h-0">
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl flex-1 overflow-y-auto min-h-0">
           {conversations.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#8B949E]">暂无会话</div>
+            <div className="p-8 text-center text-sm text-[#999999]">暂无会话</div>
           ) : (
             conversations.map((conv) => {
               const isActive = conv.peer?.id === peerIdRef.current;
@@ -456,20 +456,20 @@ const ChatPage = () => {
                     e.preventDefault();
                     setConvMenu({ item: conv, x: e.clientX, y: e.clientY });
                   }}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-[#F6F8FA] last:border-b-0 ${
-                    isActive ? 'bg-[#FFF3ED]' : 'hover:bg-[#FAFBFC]'
+                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-[#F7F8FA] last:border-b-0 ${
+                    isActive ? 'bg-[#E0F7F4]' : 'hover:bg-[#F7F8FA]'
                   }`}
                 >
-                  <Avatar size={40} src={conv.peer?.avatar} className="!bg-[#0D1117] flex-shrink-0 !text-sm">
+                  <Avatar size={40} src={conv.peer?.avatar} className="!bg-[#232529] flex-shrink-0 !text-sm">
                     {(conv.peer?.nickname || '?')[0]}
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className={`text-sm truncate ${isActive ? 'font-semibold text-[#FF6B35]' : 'font-medium text-[#0D1117]'}`}>
+                      <span className={`text-sm truncate ${isActive ? 'font-semibold text-[#00BFA5]' : 'font-medium text-[#232529]'}`}>
                         {conv.peer?.nickname || `用户${conv.peer?.id}`}
                       </span>
                       {conv.last_message_at && (
-                        <span className="text-xs text-[#8B949E] flex-shrink-0 ml-2">
+                        <span className="text-xs text-[#999999] flex-shrink-0 ml-2">
                           {new Date(conv.last_message_at).toLocaleTimeString('zh-CN', {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -478,11 +478,11 @@ const ChatPage = () => {
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-xs text-[#5F6B7A] truncate flex-1 mr-2">
+                      <p className="text-xs text-[#666666] truncate flex-1 mr-2">
                         {conv.last_message || '暂无消息'}
                       </p>
                       {conv.unread > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[#FF6B35] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-[#00BFA5] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
                           {conv.unread > 99 ? '99+' : conv.unread}
                         </span>
                       )}

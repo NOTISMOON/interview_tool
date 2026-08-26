@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ThunderboltFilled } from '@ant-design/icons';
 import { useAppStore } from '@/store';
 import { useSlideInLeft } from '@/hooks/useGsapAnimations';
 
@@ -32,15 +33,15 @@ const Navbar = () => {
       ref={navRef}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${
         scrolled
-          ? 'bg-white/90 backdrop-blur-xl border-b border-[#E1E4E8] shadow-sm'
+          ? 'bg-white/90 backdrop-blur-xl border-b border-[#E8E8E8] shadow-sm'
           : 'bg-transparent'
       }`}
     >
       <div className="max-w-[1200px] mx-auto px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-10">
-          <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-[#0D1117]">
-            <span className="w-8 h-8 rounded-lg bg-[#FF6B35] flex items-center justify-center text-white text-sm">
-              AI
+          <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-[#232529]">
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-white text-sm shadow-[0_2px_8px_rgba(0,191,165,0.35)]">
+              <ThunderboltFilled />
             </span>
             面试教练
           </Link>
@@ -49,7 +50,7 @@ const Navbar = () => {
               <a
                 key={link.href}
                 href={link.href}
-                className="px-3 py-2 text-sm font-medium text-[#5F6B7A] hover:text-[#0D1117] rounded-lg hover:bg-[#F6F8FA] transition-colors"
+                className="px-3 py-2 text-sm font-medium text-[#666666] hover:text-[#232529] rounded-lg hover:bg-[#F7F8FA] transition-colors"
               >
                 {link.label}
               </a>

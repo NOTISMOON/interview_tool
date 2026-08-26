@@ -45,9 +45,9 @@ const ANALYSIS_STEPS = [
 
 // 解析状态 → 标签配色（对齐后端 resume.status）
 const STATUS_TAG_CLASS: Record<number, string> = {
-  0: 'bg-[#FFF8E6] text-[#BF8700]',
-  1: 'bg-[#ECFDF3] text-[#2DA44E]',
-  2: 'bg-[#FFF0F1] text-[#CF222E]',
+  0: 'bg-[#FFF7E0] text-[#FFAA00]',
+  1: 'bg-[#E0F7F4] text-[#00B578]',
+  2: 'bg-[#FDECEC] text-[#F53535]',
 };
 
 const InterviewPage = () => {
@@ -269,8 +269,8 @@ const InterviewPage = () => {
   };
 
   const deviceCardClass = (s: DeviceState) =>
-    `bg-[#F6F8FA] border-2 rounded-2xl p-6 text-center transition-all duration-300 ${
-      s === 'ready' ? 'border-[#2DA44E]' : s === 'error' ? 'border-[#CF222E]' : s === 'testing' ? 'border-[#BF8700]' : 'border-[#E1E4E8]'
+    `bg-[#F7F8FA] border-2 rounded-2xl p-6 text-center transition-all duration-300 ${
+      s === 'ready' ? 'border-[#00B578]' : s === 'error' ? 'border-[#F53535]' : s === 'testing' ? 'border-[#FFAA00]' : 'border-[#E8E8E8]'
     }`;
 
   const deviceStatusText = (s: DeviceState, label: { idle: string; testing: string; ready: string; error: string }) =>
@@ -282,14 +282,14 @@ const InterviewPage = () => {
         <div className="flex items-center gap-3 mb-5">
           <button
             onClick={() => navigate('/dashboard')}
-            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
           >
             <ArrowLeftOutlined />
           </button>
-          <h1 className="text-xl font-bold text-[#0D1117]">AI 模拟面试</h1>
+          <h1 className="text-xl font-bold text-[#232529]">AI 模拟面试</h1>
         </div>
 
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-4 mb-5">
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-4 mb-5">
           <Steps
             current={step}
             items={[
@@ -304,45 +304,45 @@ const InterviewPage = () => {
       <div className="flex-1 overflow-y-auto min-h-0">
         {/* ============ STEP 1: 选择简历 ============ */}
         {step === 0 && (
-          <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
+          <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-3">
-              <FileTextOutlined className="text-[#FF6B35]" />
-              <h2 className="text-base font-bold text-[#0D1117]">已有简历</h2>
+              <FileTextOutlined className="text-[#00BFA5]" />
+              <h2 className="text-base font-bold text-[#232529]">已有简历</h2>
               {resumes.length > 0 && (
-                <span className="text-xs text-[#8B949E] ml-auto">{resumes.length} 份</span>
+                <span className="text-xs text-[#999999] ml-auto">{resumes.length} 份</span>
               )}
             </div>
 
             {resumesLoading && resumes.length === 0 ? (
               <div className="flex justify-center py-8">
-                <LoadingOutlined className="text-2xl text-[#D0D7DE]" />
+                <LoadingOutlined className="text-2xl text-[#E5E6EB]" />
               </div>
             ) : resumes.length > 0 ? (
-              <div className="border border-[#E1E4E8] rounded-xl overflow-hidden max-h-[240px] overflow-y-auto">
+              <div className="border border-[#E8E8E8] rounded-xl overflow-hidden max-h-[240px] overflow-y-auto">
                 {resumes.map((resume, idx) => {
                   const selected = selectedResumeId === resume.id && !showUpload;
                   return (
                     <div key={resume.id}>
-                      {idx > 0 && <div className="border-t border-[#F0F2F5]" />}
+                      {idx > 0 && <div className="border-t border-[#F2F3F5]" />}
                       <div
                         onClick={() => resume.status === 1 && handleSelectResume(resume.id)}
                         className={`flex items-center gap-4 px-5 py-4 transition-colors ${
                           resume.status === 1 ? 'cursor-pointer' : 'cursor-default'
-                        } ${selected ? 'bg-[#FFF3ED]' : resume.status === 1 ? 'hover:bg-[#F6F8FA]' : ''}`}
+                        } ${selected ? 'bg-[#E0F7F4]' : resume.status === 1 ? 'hover:bg-[#F7F8FA]' : ''}`}
                       >
                         <div
                           className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                            selected ? 'border-[#FF6B35] bg-[#FF6B35]' : 'border-[#D0D7DE]'
+                            selected ? 'border-[#00BFA5] bg-[#00BFA5]' : 'border-[#E5E6EB]'
                           }`}
                         >
                           {selected && <CheckOutlined className="text-white text-[10px]" />}
                         </div>
-                        <div className="w-9 h-9 rounded-lg bg-[#FFF3ED] flex items-center justify-center flex-shrink-0">
-                          <FileTextOutlined className="text-[#FF6B35] text-base" />
+                        <div className="w-9 h-9 rounded-lg bg-[#E0F7F4] flex items-center justify-center flex-shrink-0">
+                          <FileTextOutlined className="text-[#00BFA5] text-base" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[#0D1117] truncate">{resume.file_name}</p>
-                          <p className="text-xs text-[#8B949E] mt-0.5">
+                          <p className="text-sm font-medium text-[#232529] truncate">{resume.file_name}</p>
+                          <p className="text-xs text-[#999999] mt-0.5">
                             {new Date(resume.created_at).toLocaleDateString('zh-CN', {
                               year: 'numeric',
                               month: '2-digit',
@@ -361,7 +361,7 @@ const InterviewPage = () => {
                           {resume.status === 2 && (
                             <button
                               onClick={() => handleRetryResume(resume)}
-                              className="w-7 h-7 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#BF8700] hover:text-[#BF8700] transition-colors"
+                              className="w-7 h-7 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#FFAA00] hover:text-[#FFAA00] transition-colors"
                               title="重新分析"
                             >
                               <ReloadOutlined className="text-xs" />
@@ -369,7 +369,7 @@ const InterviewPage = () => {
                           )}
                           <button
                             onClick={() => handleDeleteResume(resume)}
-                            className="w-7 h-7 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#CF222E] hover:text-[#CF222E] transition-colors"
+                            className="w-7 h-7 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#F53535] hover:text-[#F53535] transition-colors"
                             title="删除简历"
                           >
                             <DeleteOutlined className="text-xs" />
@@ -382,38 +382,38 @@ const InterviewPage = () => {
               </div>
             ) : (
               <div className="text-center py-5 mb-5">
-                <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-3">
-                  <FileTextOutlined className="text-2xl text-[#D0D7DE]" />
+                <div className="w-16 h-16 rounded-2xl bg-[#F7F8FA] flex items-center justify-center mx-auto mb-3">
+                  <FileTextOutlined className="text-2xl text-[#E5E6EB]" />
                 </div>
-                <p className="text-sm text-[#8B949E]">还没有上传过简历</p>
+                <p className="text-sm text-[#999999]">还没有上传过简历</p>
               </div>
             )}
 
             {!showUpload ? (
               <>
                 <div className="flex items-center gap-3 my-5">
-                  <div className="flex-1 h-px bg-[#E1E4E8]" />
-                  <span className="text-xs text-[#8B949E] flex-shrink-0">或者</span>
-                  <div className="flex-1 h-px bg-[#E1E4E8]" />
+                  <div className="flex-1 h-px bg-[#E8E8E8]" />
+                  <span className="text-xs text-[#999999] flex-shrink-0">或者</span>
+                  <div className="flex-1 h-px bg-[#E8E8E8]" />
                 </div>
                 <div
                   onClick={handleOpenUpload}
-                  className="border-2 border-dashed border-[#E1E4E8] rounded-2xl p-8 text-center cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF3ED]/30 transition-all"
+                  className="border-2 border-dashed border-[#E8E8E8] rounded-2xl p-8 text-center cursor-pointer hover:border-[#00BFA5] hover:bg-[#E0F7F4]/30 transition-all"
                 >
-                  <div className="w-12 h-12 rounded-full bg-[#F6F8FA] flex items-center justify-center mx-auto mb-2">
-                    <PlusOutlined className="text-[#8B949E]" />
+                  <div className="w-12 h-12 rounded-full bg-[#F7F8FA] flex items-center justify-center mx-auto mb-2">
+                    <PlusOutlined className="text-[#999999]" />
                   </div>
-                  <p className="text-sm font-medium text-[#0D1117] mb-1">上传一份新简历</p>
-                  <p className="text-xs text-[#8B949E]">支持 PDF、Word、图片格式，不超过 10MB</p>
+                  <p className="text-sm font-medium text-[#232529] mb-1">上传一份新简历</p>
+                  <p className="text-xs text-[#999999]">支持 PDF、Word、图片格式，不超过 10MB</p>
                 </div>
               </>
             ) : (
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
-                  <h3 className="text-sm font-bold text-[#0D1117]">上传新简历</h3>
+                  <h3 className="text-sm font-bold text-[#232529]">上传新简历</h3>
                   <button
                     onClick={handleCloseUpload}
-                    className="text-xs text-[#8B949E] hover:text-[#FF6B35] ml-auto transition-colors"
+                    className="text-xs text-[#999999] hover:text-[#00BFA5] ml-auto transition-colors"
                   >
                     取消
                   </button>
@@ -436,18 +436,18 @@ const InterviewPage = () => {
                     onClick={() => setInterviewType(opt.value)}
                     className={`text-left px-4 py-3 rounded-xl border-2 transition-all ${
                       selected
-                        ? 'border-[#FF6B35] bg-[#FFF3ED]'
-                        : 'border-[#E1E4E8] bg-white hover:border-[#D0D7DE]'
+                        ? 'border-[#00BFA5] bg-[#E0F7F4]'
+                        : 'border-[#E8E8E8] bg-white hover:border-[#E5E6EB]'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <ClockCircleOutlined className={selected ? 'text-[#FF6B35]' : 'text-[#8B949E]'} />
-                      <span className={`text-sm font-semibold ${selected ? 'text-[#FF6B35]' : 'text-[#0D1117]'}`}>
+                      <ClockCircleOutlined className={selected ? 'text-[#00BFA5]' : 'text-[#999999]'} />
+                      <span className={`text-sm font-semibold ${selected ? 'text-[#00BFA5]' : 'text-[#232529]'}`}>
                         {opt.title}
                       </span>
-                      {selected && <CheckOutlined className="text-[#FF6B35] text-xs ml-auto" />}
+                      {selected && <CheckOutlined className="text-[#00BFA5] text-xs ml-auto" />}
                     </div>
-                    <p className="text-xs text-[#8B949E] mt-1">{opt.desc}</p>
+                    <p className="text-xs text-[#999999] mt-1">{opt.desc}</p>
                   </button>
                 );
               })}
@@ -471,10 +471,10 @@ const InterviewPage = () => {
 
         {/* ============ STEP 2: AI 分析中（真实创建：LLM 预生成基础题） ============ */}
         {step === 1 && (
-          <div className="bg-white border border-[#E1E4E8] rounded-2xl p-10 text-center">
-            <div className="w-16 h-16 mx-auto mb-5 rounded-full border-4 border-[#F0F2F5] border-t-[#FF6B35] animate-spin" />
-            <h2 className="text-lg font-bold text-[#0D1117] mb-2">AI 正在分析你的简历...</h2>
-            <p className="text-sm text-[#5F6B7A] mb-6">
+          <div className="bg-white border border-[#E8E8E8] rounded-2xl p-10 text-center">
+            <div className="w-16 h-16 mx-auto mb-5 rounded-full border-4 border-[#F2F3F5] border-t-[#00BFA5] animate-spin" />
+            <h2 className="text-lg font-bold text-[#232529] mb-2">AI 正在分析你的简历...</h2>
+            <p className="text-sm text-[#666666] mb-6">
               {analysisStepIdx >= ANALYSIS_STEPS.length && generating
                 ? '题目生成中，通常需要 5~20 秒，请稍候'
                 : '正在解析简历并生成个性化面试题，请稍候'}
@@ -486,13 +486,13 @@ const InterviewPage = () => {
                 return (
                   <div
                     key={label}
-                    className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg bg-[#F6F8FA] transition-colors ${
-                      isDone ? 'text-[#2DA44E]' : isCurrent ? 'text-[#FF6B35] font-semibold' : 'text-[#5F6B7A]'
+                    className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg bg-[#F7F8FA] transition-colors ${
+                      isDone ? 'text-[#00B578]' : isCurrent ? 'text-[#00BFA5] font-semibold' : 'text-[#666666]'
                     }`}
                   >
                     <span
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        isDone ? 'bg-[#2DA44E]' : isCurrent ? 'bg-[#FF6B35] animate-pulse' : 'bg-[#E1E4E8]'
+                        isDone ? 'bg-[#00B578]' : isCurrent ? 'bg-[#00BFA5] animate-pulse' : 'bg-[#E8E8E8]'
                       }`}
                     />
                     {label}
@@ -510,13 +510,13 @@ const InterviewPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               {/* 麦克风检测 */}
               <div className={deviceCardClass(micState)}>
-                <div className="text-4xl mb-3 text-[#5F6B7A]">
+                <div className="text-4xl mb-3 text-[#666666]">
                   <AudioOutlined />
                 </div>
-                <div className="text-[15px] font-bold text-[#0D1117] mb-1">麦克风检测</div>
+                <div className="text-[15px] font-bold text-[#232529] mb-1">麦克风检测</div>
                 <div
                   className={`text-[13px] mb-3 ${
-                    micState === 'ready' ? 'text-[#2DA44E]' : micState === 'error' ? 'text-[#CF222E]' : 'text-[#5F6B7A]'
+                    micState === 'ready' ? 'text-[#00B578]' : micState === 'error' ? 'text-[#F53535]' : 'text-[#666666]'
                   }`}
                 >
                   {deviceStatusText(micState, {
@@ -526,7 +526,7 @@ const InterviewPage = () => {
                     error: '❌ 无法访问麦克风，请检查权限',
                   })}
                 </div>
-                <div className="w-full h-[120px] rounded-xl bg-[#1a1a2e] flex items-center justify-center mb-3 overflow-hidden">
+                <div className="w-full h-[120px] rounded-xl bg-[#232529] flex items-center justify-center mb-3 overflow-hidden">
                   <div className="flex items-end justify-center gap-[3px] h-10 w-full px-4">
                     {volumeBars.map((h, i) => (
                       <div
@@ -534,7 +534,7 @@ const InterviewPage = () => {
                         className="w-1 rounded-sm transition-all duration-100"
                         style={{
                           height: `${h}px`,
-                          background: micState === 'ready' ? '#2DA44E' : '#E1E4E8',
+                          background: micState === 'ready' ? '#00B578' : '#E8E8E8',
                         }}
                       />
                     ))}
@@ -551,13 +551,13 @@ const InterviewPage = () => {
 
               {/* 摄像头检测 */}
               <div className={deviceCardClass(camState)}>
-                <div className="text-4xl mb-3 text-[#5F6B7A]">
+                <div className="text-4xl mb-3 text-[#666666]">
                   <VideoCameraOutlined />
                 </div>
-                <div className="text-[15px] font-bold text-[#0D1117] mb-1">摄像头检测</div>
+                <div className="text-[15px] font-bold text-[#232529] mb-1">摄像头检测</div>
                 <div
                   className={`text-[13px] mb-3 ${
-                    camState === 'ready' ? 'text-[#2DA44E]' : camState === 'error' ? 'text-[#CF222E]' : 'text-[#5F6B7A]'
+                    camState === 'ready' ? 'text-[#00B578]' : camState === 'error' ? 'text-[#F53535]' : 'text-[#666666]'
                   }`}
                 >
                   {deviceStatusText(camState, {
@@ -567,7 +567,7 @@ const InterviewPage = () => {
                     error: '❌ 无法访问摄像头，请检查权限',
                   })}
                 </div>
-                <div className="w-full h-[120px] rounded-xl bg-[#1a1a2e] flex items-center justify-center mb-3 overflow-hidden">
+                <div className="w-full h-[120px] rounded-xl bg-[#232529] flex items-center justify-center mb-3 overflow-hidden">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -577,7 +577,7 @@ const InterviewPage = () => {
                     style={{ display: camState === 'ready' ? 'block' : 'none' }}
                   />
                   {camState !== 'ready' && (
-                    <span className="text-[#666] text-xs">摄像头预览</span>
+                    <span className="text-[#8A8F99] text-xs">摄像头预览</span>
                   )}
                 </div>
                 <button
@@ -590,9 +590,9 @@ const InterviewPage = () => {
               </div>
             </div>
 
-            <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 text-center">
-              <p className="text-sm text-[#5F6B7A] mb-3">
-                面试将以<strong className="text-[#0D1117]">语音回答</strong>为主，请确保麦克风正常工作
+            <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 text-center">
+              <p className="text-sm text-[#666666] mb-3">
+                面试将以<strong className="text-[#232529]">语音回答</strong>为主，请确保麦克风正常工作
               </p>
               <button
                 onClick={handleStart}

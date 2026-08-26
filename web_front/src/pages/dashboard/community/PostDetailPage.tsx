@@ -237,8 +237,8 @@ const PostDetailPage = () => {
   if (notFound || !post) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <h2 className="text-lg font-bold text-[#0D1117] mb-2">帖子不存在</h2>
-        <p className="text-sm text-[#5F6B7A] mb-6">该帖子可能已被删除或链接无效</p>
+        <h2 className="text-lg font-bold text-[#232529] mb-2">帖子不存在</h2>
+        <p className="text-sm text-[#666666] mb-6">该帖子可能已被删除或链接无效</p>
         <button onClick={() => navigate('/dashboard/community')} className="btn-flame">
           返回社区
         </button>
@@ -253,41 +253,41 @@ const PostDetailPage = () => {
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate('/dashboard/community')}
-          className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
         >
           <ArrowLeftOutlined />
         </button>
-        <h1 className="text-lg font-bold text-[#0D1117]">帖子详情</h1>
+        <h1 className="text-lg font-bold text-[#232529]">帖子详情</h1>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mb-4">
         <div className="flex items-center gap-2 mb-3">
           {post.is_hot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热门</span>}
         </div>
 
-        <h1 className="text-xl font-extrabold text-[#0D1117] mb-4 leading-snug">
+        <h1 className="text-xl font-extrabold text-[#232529] mb-4 leading-snug">
           {post.title}
         </h1>
 
         <div className="flex items-center gap-3 mb-5">
           <Avatar
             size={40}
-            className="!bg-[#0D1117] flex-shrink-0 !text-base cursor-pointer"
+            className="!bg-[#232529] flex-shrink-0 !text-base cursor-pointer"
             onClick={() => navigate(`/dashboard/user/${post.author?.id}`)}
           >
             {post.author?.nickname?.[0] || '?'}
           </Avatar>
           <div className="flex-1">
             <div
-              className="text-sm font-semibold text-[#0D1117] cursor-pointer hover:text-[#FF6B35]"
+              className="text-sm font-semibold text-[#232529] cursor-pointer hover:text-[#00BFA5]"
               onClick={() => navigate(`/dashboard/user/${post.author?.id}`)}
             >{post.author?.nickname || '未知用户'}</div>
-            <div className="text-xs text-[#8B949E]">{formatTime(post.created_at)}</div>
+            <div className="text-xs text-[#999999]">{formatTime(post.created_at)}</div>
           </div>
           {isAuthor && (
             <button
               onClick={handleDelete}
-              className="text-xs text-[#8B949E] hover:text-[#CF222E] transition-colors flex items-center gap-1"
+              className="text-xs text-[#999999] hover:text-[#F53535] transition-colors flex items-center gap-1"
             >
               <DeleteOutlined /> 删除
             </button>
@@ -300,7 +300,7 @@ const PostDetailPage = () => {
           ))}
         </div>
 
-        <div className="text-sm text-[#0D1117] leading-relaxed whitespace-pre-line mb-6">
+        <div className="text-sm text-[#232529] leading-relaxed whitespace-pre-line mb-6">
           {post.content}
         </div>
 
@@ -311,14 +311,14 @@ const PostDetailPage = () => {
                 key={idx}
                 src={buildCosUrl(img)}
                 alt={`帖子图片-${idx + 1}`}
-                className="w-full rounded-xl object-cover max-h-[400px] border border-[#E1E4E8] cursor-pointer hover:opacity-90 transition-opacity"
+                className="w-full rounded-xl object-cover max-h-[400px] border border-[#E8E8E8] cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(buildCosUrl(img), '_blank')}
               />
             ))}
           </div>
         )}
 
-        <div className="flex items-center gap-4 text-sm text-[#8B949E] pb-5 border-b border-[#F0F2F5]">
+        <div className="flex items-center gap-4 text-sm text-[#999999] pb-5 border-b border-[#F2F3F5]">
           <span className="inline-flex items-center gap-1">
             <LikeOutlined /> {likesCount}
           </span>
@@ -336,8 +336,8 @@ const PostDetailPage = () => {
               onClick={handleLike}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 isLiked
-                  ? 'bg-[#FFF3ED] text-[#FF6B35]'
-                  : 'bg-[#F6F8FA] text-[#5F6B7A] hover:bg-[#FFF3ED] hover:text-[#FF6B35]'
+                  ? 'bg-[#E0F7F4] text-[#00BFA5]'
+                  : 'bg-[#F7F8FA] text-[#666666] hover:bg-[#E0F7F4] hover:text-[#00BFA5]'
               }`}
             >
               {isLiked ? <LikeFilled /> : <LikeOutlined />}
@@ -345,7 +345,7 @@ const PostDetailPage = () => {
             </button>
             <button
               onClick={() => msg.info('分享功能即将上线')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[#F6F8FA] text-[#5F6B7A] hover:bg-[#F0F2F5] transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[#F7F8FA] text-[#666666] hover:bg-[#F2F3F5] transition-all"
             >
               <ShareAltOutlined /> 分享
             </button>
@@ -354,8 +354,8 @@ const PostDetailPage = () => {
             onClick={handleFavorite}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               isFavorited
-                ? 'bg-[#FFF8E6] text-[#BF8700]'
-                : 'bg-[#F6F8FA] text-[#5F6B7A] hover:bg-[#FFF8E6] hover:text-[#BF8700]'
+                ? 'bg-[#FFF7E0] text-[#FFAA00]'
+                : 'bg-[#F7F8FA] text-[#666666] hover:bg-[#FFF7E0] hover:text-[#FFAA00]'
             }`}
           >
             {isFavorited ? <StarFilled /> : <StarOutlined />}
@@ -364,9 +364,9 @@ const PostDetailPage = () => {
         </div>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
-        <h3 className="text-sm font-bold text-[#0D1117] mb-4 flex items-center gap-2">
-          <MessageOutlined className="text-[#FF6B35]" />
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mb-4">
+        <h3 className="text-sm font-bold text-[#232529] mb-4 flex items-center gap-2">
+          <MessageOutlined className="text-[#00BFA5]" />
           评论 ({comments.length})
         </h3>
         {commentsLoading ? (
@@ -379,19 +379,19 @@ const PostDetailPage = () => {
           <div className="space-y-4">
             {comments.map((comment) => (
               <div key={comment.id} className="flex gap-3">
-                <Avatar size={32} src={comment.author?.avatar} className="!bg-[#0D1117] flex-shrink-0 !text-xs">
+                <Avatar size={32} src={comment.author?.avatar} className="!bg-[#232529] flex-shrink-0 !text-xs">
                   {comment.author?.nickname?.[0] || '?'}
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-[#0D1117]">{comment.author?.nickname || '未知用户'}</span>
-                    <span className="text-xs text-[#8B949E]">{formatTime(comment.created_at)}</span>
+                    <span className="text-sm font-semibold text-[#232529]">{comment.author?.nickname || '未知用户'}</span>
+                    <span className="text-xs text-[#999999]">{formatTime(comment.created_at)}</span>
                   </div>
-                  <p className="text-sm text-[#0D1117] leading-relaxed">{comment.content}</p>
+                  <p className="text-sm text-[#232529] leading-relaxed">{comment.content}</p>
                   <div className="flex items-center gap-3 mt-2">
                     <button
                       onClick={() => msg.info('评论点赞功能即将上线')}
-                      className="text-xs text-[#8B949E] hover:text-[#FF6B35] transition-colors inline-flex items-center gap-1"
+                      className="text-xs text-[#999999] hover:text-[#00BFA5] transition-colors inline-flex items-center gap-1"
                     >
                       <LikeOutlined /> {comment.likes_count}
                     </button>
@@ -399,8 +399,8 @@ const PostDetailPage = () => {
                       onClick={() => startReply(comment, comment)}
                       className={`text-xs transition-colors ${
                         replyingTo?.root.id === comment.id
-                          ? 'text-[#FF6B35] font-medium'
-                          : 'text-[#8B949E] hover:text-[#0D1117]'
+                          ? 'text-[#00BFA5] font-medium'
+                          : 'text-[#999999] hover:text-[#232529]'
                       }`}
                     >
                       回复
@@ -408,7 +408,7 @@ const PostDetailPage = () => {
                     {comment.reply_count > 0 && (
                       <button
                         onClick={() => toggleReplies(comment)}
-                        className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors"
+                        className="text-xs text-[#999999] hover:text-[#232529] transition-colors"
                       >
                         {expandedComments[comment.id]
                           ? '收起回复'
@@ -419,7 +419,7 @@ const PostDetailPage = () => {
 
                   {/* 展开的回复列表 */}
                   {expandedComments[comment.id] && (
-                    <div className="mt-3 pl-4 border-l border-[#F0F2F5] space-y-3">
+                    <div className="mt-3 pl-4 border-l border-[#F2F3F5] space-y-3">
                       {repliesLoading[comment.id] ? (
                         <div className="flex justify-center py-2">
                           <Spin size="small" />
@@ -427,25 +427,25 @@ const PostDetailPage = () => {
                       ) : repliesMap[comment.id]?.length ? (
                         repliesMap[comment.id].map((reply) => (
                           <div key={reply.id} className="flex gap-2">
-                            <Avatar size={24} src={reply.author?.avatar} className="!bg-[#0D1117] flex-shrink-0 !text-[10px]">
+                            <Avatar size={24} src={reply.author?.avatar} className="!bg-[#232529] flex-shrink-0 !text-[10px]">
                               {reply.author?.nickname?.[0] || '?'}
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-sm font-medium text-[#0D1117]">
+                                <span className="text-sm font-medium text-[#232529]">
                                   {reply.author?.nickname || '未知用户'}
                                 </span>
                                 {reply.reply_to && (
-                                  <span className="text-xs text-[#FF6B35]">
+                                  <span className="text-xs text-[#00BFA5]">
                                     回复 @{reply.reply_to.nickname}
                                   </span>
                                 )}
-                                <span className="text-xs text-[#8B949E]">{formatTime(reply.created_at)}</span>
+                                <span className="text-xs text-[#999999]">{formatTime(reply.created_at)}</span>
                               </div>
-                              <p className="text-sm text-[#0D1117] leading-relaxed">{reply.content}</p>
+                              <p className="text-sm text-[#232529] leading-relaxed">{reply.content}</p>
                               <button
                                 onClick={() => startReply(comment, reply)}
-                                className="text-xs text-[#8B949E] hover:text-[#0D1117] transition-colors mt-1"
+                                className="text-xs text-[#999999] hover:text-[#232529] transition-colors mt-1"
                               >
                                 回复
                               </button>
@@ -453,17 +453,17 @@ const PostDetailPage = () => {
                           </div>
                         ))
                       ) : (
-                        <div className="text-xs text-[#8B949E]">暂无回复</div>
+                        <div className="text-xs text-[#999999]">暂无回复</div>
                       )}
 
                       {/* 回复该一级评论的表单 */}
                       {replyingTo?.root.id === comment.id && (
                         <div className="flex gap-2 mt-2">
-                          <Avatar size={24} src={user?.avatar} className="!bg-[#FF6B35] flex-shrink-0 !text-[10px]">
+                          <Avatar size={24} src={user?.avatar} className="!bg-[#00BFA5] flex-shrink-0 !text-[10px]">
                             {user?.nickname?.[0] || 'U'}
                           </Avatar>
                           <div className="flex-1">
-                            <div className="text-xs text-[#8B949E] mb-1">
+                            <div className="text-xs text-[#999999] mb-1">
                               回复 @{replyingTo.target.author?.nickname || '用户'}
                             </div>
                             <textarea
@@ -471,19 +471,19 @@ const PostDetailPage = () => {
                               onChange={(e) => setReplyText(e.target.value)}
                               placeholder="写下你的回复..."
                               autoFocus
-                              className="w-full px-3 py-2 border border-[#E1E4E8] rounded-lg text-sm text-[#0D1117] placeholder:text-[#8B949E] resize-none focus:outline-none focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35]/20 transition-all min-h-[60px]"
+                              className="w-full px-3 py-2 border border-[#E8E8E8] rounded-lg text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#00BFA5] focus:ring-1 focus:ring-[#00BFA5]/20 transition-all min-h-[60px]"
                             />
                             <div className="flex justify-end gap-2 mt-2">
                               <button
                                 onClick={() => { setReplyingTo(null); setReplyText(''); }}
-                                className="px-3 py-1 rounded-lg text-xs text-[#5F6B7A] hover:bg-[#F6F8FA] transition-colors"
+                                className="px-3 py-1 rounded-lg text-xs text-[#666666] hover:bg-[#F7F8FA] transition-colors"
                               >
                                 取消
                               </button>
                               <button
                                 onClick={submitReply}
                                 disabled={!replyText.trim() || replySubmitting}
-                                className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF6B35] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                className="px-3 py-1 rounded-lg text-xs font-medium bg-[#00BFA5] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                               >
                                 {replySubmitting ? '回复中...' : '回复'}
                               </button>
@@ -500,16 +500,16 @@ const PostDetailPage = () => {
         )}
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
-        <h3 className="text-sm font-bold text-[#0D1117] mb-4">发表评论</h3>
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-[#232529] mb-4">发表评论</h3>
         <div className="flex gap-3">
-          <Avatar size={32} src={user?.avatar} className="!bg-[#FF6B35] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
+          <Avatar size={32} src={user?.avatar} className="!bg-[#00BFA5] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
           <div className="flex-1">
             <textarea
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="写下你的评论..."
-              className="w-full px-4 py-3 border border-[#E1E4E8] rounded-xl text-sm text-[#0D1117] placeholder:text-[#8B949E] resize-none focus:outline-none focus:border-[#FF6B35] focus:ring-1 focus:ring-[#FF6B35]/20 transition-all min-h-[80px]"
+              className="w-full px-4 py-3 border border-[#E8E8E8] rounded-xl text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#00BFA5] focus:ring-1 focus:ring-[#00BFA5]/20 transition-all min-h-[80px]"
             />
             <div className="flex justify-end mt-3">
               <button

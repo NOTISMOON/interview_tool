@@ -23,9 +23,9 @@ import type { ApiInterviewListItem } from '@/lib/api/interview';
 
 /** 状态标签样式（0-进行中 1-已完成 2-已中断） */
 const STATUS_META: Record<number, { label: string; cls: string }> = {
-  0: { label: '进行中', cls: 'bg-[#FFF8E6] text-[#BF8700]' },
-  1: { label: '已完成', cls: 'bg-[#ECFDF3] text-[#2DA44E]' },
-  2: { label: '已中断', cls: 'bg-[#F6F8FA] text-[#5F6B7A]' },
+  0: { label: '进行中', cls: 'bg-[#FFF7E0] text-[#FFAA00]' },
+  1: { label: '已完成', cls: 'bg-[#E0F7F4] text-[#00BFA5]' },
+  2: { label: '已中断', cls: 'bg-[#FDECEC] text-[#F53535]' },
 };
 
 const PAGE_SIZE = 20;
@@ -84,11 +84,11 @@ const HistoryPage = () => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-shrink-0 flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-[#0D1117]">面试记录</h1>
+        <h1 className="text-xl font-bold text-[#232529]">面试记录</h1>
         <div className="flex items-center gap-3">
           <button
             onClick={() => loadList(page)}
-            className="text-sm text-[#5F6B7A] font-medium hover:text-[#0D1117] transition-colors inline-flex items-center gap-1"
+            className="text-sm text-[#666666] font-medium hover:text-[#232529] transition-colors inline-flex items-center gap-1"
           >
             <ReloadOutlined /> 刷新
           </button>
@@ -99,14 +99,14 @@ const HistoryPage = () => {
       </div>
 
       {loading && items.length === 0 ? (
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 flex justify-center">
-          <LoadingOutlined className="text-2xl text-[#D0D7DE]" />
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-16 flex justify-center">
+          <LoadingOutlined className="text-2xl text-[#E5E6EB]" />
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
-          <FileTextOutlined className="text-5xl text-[#E1E4E8] mb-4" />
-          <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无面试记录</h3>
-          <p className="text-sm text-[#5F6B7A] mb-6">完成一次 AI 模拟面试后，记录将显示在这里</p>
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-16 text-center">
+          <FileTextOutlined className="text-5xl text-[#E8E8E8] mb-4" />
+          <h3 className="text-base font-semibold text-[#232529] mb-2">暂无面试记录</h3>
+          <p className="text-sm text-[#666666] mb-6">完成一次 AI 模拟面试后，记录将显示在这里</p>
           <button onClick={() => navigate('/dashboard/interview')} className="btn-flame">开始首次面试</button>
         </div>
       ) : (
@@ -114,12 +114,12 @@ const HistoryPage = () => {
           {items.map((item) => {
             const meta = STATUS_META[item.status] ?? STATUS_META[2];
             const score = item.total_score;
-            const scoreColor = score === null ? '#8B949E' : score >= 85 ? '#2DA44E' : score >= 70 ? '#FF6B35' : score >= 60 ? '#BF8700' : '#CF222E';
+            const scoreColor = score === null ? '#999999' : score >= 85 ? '#00B578' : score >= 70 ? '#00BFA5' : score >= 60 ? '#FFAA00' : '#F53535';
             return (
               <div
                 key={item.interview_id}
                 onClick={() => handleOpen(item)}
-                className="bg-white border border-[#E1E4E8] rounded-xl p-4 flex items-center hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                className="bg-white border border-[#E8E8E8] rounded-xl p-4 flex items-center hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
               >
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0"
@@ -135,7 +135,7 @@ const HistoryPage = () => {
                 </div>
                 <div className="flex-1 ml-4 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-semibold text-[#0D1117] truncate">
+                    <h4 className="text-sm font-semibold text-[#232529] truncate">
                       {INTERVIEW_TYPE_LABEL[item.type] ?? '模拟面试'}
                     </h4>
                     <span className="tag tag-flame">{INTERVIEW_TYPE_LABEL[item.type] ?? '面试'}</span>
@@ -144,27 +144,27 @@ const HistoryPage = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-4 mt-1 flex-wrap">
-                    <span className="text-xs text-[#8B949E] inline-flex items-center gap-1">
+                    <span className="text-xs text-[#999999] inline-flex items-center gap-1">
                       <CalendarOutlined /> {formatDate(item.interview_time || item.created_at)}
                     </span>
-                    <span className="text-xs text-[#8B949E] inline-flex items-center gap-1">
+                    <span className="text-xs text-[#999999] inline-flex items-center gap-1">
                       <CheckCircleOutlined /> {item.question_count} 题
                       {item.answered_count > 0 && item.status === 0 ? `（已答 ${item.answered_count}）` : ''}
                     </span>
                     {item.follow_up_count > 0 && (
-                      <span className="text-xs text-[#8B949E] inline-flex items-center gap-1">
+                      <span className="text-xs text-[#999999] inline-flex items-center gap-1">
                         <ClockCircleOutlined /> 追问 {item.follow_up_count} 次
                       </span>
                     )}
                     {item.total_duration !== null && (
-                      <span className="text-xs text-[#8B949E]">{formatDuration(item.total_duration)}</span>
+                      <span className="text-xs text-[#999999]">{formatDuration(item.total_duration)}</span>
                     )}
                     {item.status === 1 && !item.report_ready && (
-                      <span className="text-xs text-[#BF8700]">报告生成中…</span>
+                      <span className="text-xs text-[#FFAA00]">报告生成中…</span>
                     )}
                   </div>
                 </div>
-                <RightOutlined className="text-[#E1E4E8] text-xs ml-4" />
+                <RightOutlined className="text-[#E8E8E8] text-xs ml-4" />
               </div>
             );
           })}

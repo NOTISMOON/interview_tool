@@ -51,7 +51,7 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
 
   return (
     <div ref={ref} className="fixed z-[1000]" style={{ left: Math.max(8, left), top: Math.max(8, top) }}>
-      <div className="bg-white border border-[#E1E4E8] rounded-xl shadow-lg py-1.5 min-w-[150px]">
+      <div className="bg-white border border-[#E8E8E8] rounded-xl shadow-lg py-1.5 min-w-[150px]">
         {items.map((item) => (
           <button
             key={item.key}
@@ -60,8 +60,8 @@ const ContextMenu = ({ x, y, items, onClose }: ContextMenuProps) => {
               item.onClick();
               onClose();
             }}
-            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-[#F6F8FA] transition-colors ${
-              item.danger ? 'text-[#CF222E]' : 'text-[#0D1117]'
+            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-[#F7F8FA] transition-colors ${
+              item.danger ? 'text-[#F53535]' : 'text-[#232529]'
             }`}
           >
             {item.icon}

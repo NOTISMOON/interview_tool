@@ -160,11 +160,11 @@ const UserPage = () => {
   if (notFound || !profile) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mb-4">
-          <UserOutlined className="text-2xl text-[#8B949E]" />
+        <div className="w-16 h-16 rounded-2xl bg-[#F7F8FA] flex items-center justify-center mb-4">
+          <UserOutlined className="text-2xl text-[#999999]" />
         </div>
-        <h2 className="text-lg font-bold text-[#0D1117] mb-2">用户不存在</h2>
-        <p className="text-sm text-[#5F6B7A] mb-6">该用户可能已注销或链接无效</p>
+        <h2 className="text-lg font-bold text-[#232529] mb-2">用户不存在</h2>
+        <p className="text-sm text-[#666666] mb-6">该用户可能已注销或链接无效</p>
         <button onClick={() => navigate('/dashboard/community')} className="btn-flame">
           返回社区
         </button>
@@ -177,35 +177,35 @@ const UserPage = () => {
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate(-1)}
-          className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
         >
           <ArrowLeftOutlined />
         </button>
-        <h1 className="text-lg font-bold text-[#0D1117]">用户主页</h1>
+        <h1 className="text-lg font-bold text-[#232529]">用户主页</h1>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mb-4">
         <div className="flex flex-col items-center text-center">
-          <Avatar size={80} src={profile.avatar} className="!bg-[#0D1117] !text-2xl !font-bold mb-4">
+          <Avatar size={80} src={profile.avatar} className="!bg-[#232529] !text-2xl !font-bold mb-4">
             {profile.nickname[0]}
           </Avatar>
 
-          <h2 className="text-xl font-extrabold text-[#0D1117] mb-4">{profile.nickname}</h2>
+          <h2 className="text-xl font-extrabold text-[#232529] mb-4">{profile.nickname}</h2>
 
           {profile.isCard ? (
-            <p className="text-sm text-[#8B949E] mb-5">该用户设置了隐私保护</p>
+            <p className="text-sm text-[#999999] mb-5">该用户设置了隐私保护</p>
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mb-5 px-2">
                 {profile.location && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
-                    <EnvironmentOutlined className="text-[#2DA44E]" />
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[#666666]">
+                    <EnvironmentOutlined className="text-[#00B578]" />
                     {profile.location}
                   </span>
                 )}
                 {profile.bio && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[#5F6B7A]">
-                    <SmileOutlined className="text-[#BF8700]" />
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[#666666]">
+                    <SmileOutlined className="text-[#FFAA00]" />
                     {profile.bio}
                   </span>
                 )}
@@ -215,18 +215,18 @@ const UserPage = () => {
 
           <div className="flex items-center gap-8 mb-5">
             <div className="text-center">
-              <div className="text-lg font-bold text-[#0D1117]">{profile.followingCount}</div>
-              <div className="text-xs text-[#8B949E]">关注</div>
+              <div className="text-lg font-bold text-[#232529]">{profile.followingCount}</div>
+              <div className="text-xs text-[#999999]">关注</div>
             </div>
-            <div className="w-px h-8 bg-[#E1E4E8]" />
+            <div className="w-px h-8 bg-[#E8E8E8]" />
             <div className="text-center">
-              <div className="text-lg font-bold text-[#0D1117]">{profile.followersCount}</div>
-              <div className="text-xs text-[#8B949E]">粉丝</div>
+              <div className="text-lg font-bold text-[#232529]">{profile.followersCount}</div>
+              <div className="text-xs text-[#999999]">粉丝</div>
             </div>
-            <div className="w-px h-8 bg-[#E1E4E8]" />
+            <div className="w-px h-8 bg-[#E8E8E8]" />
             <div className="text-center">
-              <div className="text-lg font-bold text-[#0D1117]">{profile.postsCount}</div>
-              <div className="text-xs text-[#8B949E]">帖子</div>
+              <div className="text-lg font-bold text-[#232529]">{profile.postsCount}</div>
+              <div className="text-xs text-[#999999]">帖子</div>
             </div>
           </div>
 
@@ -247,7 +247,7 @@ const UserPage = () => {
       </div>
 
       {!profile.isCard && (
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
           <Tabs
             activeKey={activeTab}
             onChange={(key) => setActiveTab(key)}
@@ -273,19 +273,19 @@ const UserPage = () => {
                         {posts.map((post) => (
                           <div
                             key={post.id}
-                            className="border border-[#E1E4E8] rounded-xl p-4 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                            className="border border-[#E8E8E8] rounded-xl p-4 hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
                             onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
                           >
                             <div className="flex items-center gap-2 mb-1.5">
-                              <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
+                              <h4 className="text-sm font-semibold text-[#232529] truncate">{post.title}</h4>
                               {post.is_hot && (
                                 <span className="tag tag-flame">
                                   <FireOutlined className="text-[10px]" /> 热
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
-                            <div className="flex items-center gap-4 text-xs text-[#8B949E]">
+                            <p className="text-xs text-[#666666] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
+                            <div className="flex items-center gap-4 text-xs text-[#999999]">
                               <span className="inline-flex items-center gap-1">
                                 <LikeOutlined /> {post.likes_count}
                               </span>
@@ -301,7 +301,7 @@ const UserPage = () => {
                             <button
                               onClick={() => fetchPosts()}
                               disabled={postsLoading}
-                              className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                              className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
                             >
                               {postsLoading ? '加载中...' : '加载更多'}
                             </button>

@@ -92,13 +92,13 @@ export function FileUpload({ fileType, onUploaded, onError }: FileUploadProps) {
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B35]/50 ${
-          dragOver ? 'border-[#FF6B35] bg-[#FFF3ED]' : 'border-[#E1E4E8] hover:border-[#FF6B35] hover:bg-[#FFF3ED]/50'
+        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00BFA5]/50 ${
+          dragOver ? 'border-[#00BFA5] bg-[#E0F7F4]' : 'border-[#E8E8E8] hover:border-[#00BFA5] hover:bg-[#E0F7F4]/50'
         } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
       >
-        <InboxOutlined className={`text-2xl mb-2 ${dragOver ? 'text-[#FF6B35]' : 'text-[#8B949E]'}`} />
-        <p className="text-sm text-[#5F6B7A]">{dragOver ? '松开鼠标开始上传' : '点击选择或拖拽文件到此处'}</p>
-        <p className="text-xs text-[#8B949E] mt-1">支持 PDF、Word、图片格式，不超过 10MB</p>
+        <InboxOutlined className={`text-2xl mb-2 ${dragOver ? 'text-[#00BFA5]' : 'text-[#999999]'}`} />
+        <p className="text-sm text-[#666666]">{dragOver ? '松开鼠标开始上传' : '点击选择或拖拽文件到此处'}</p>
+        <p className="text-xs text-[#999999] mt-1">支持 PDF、Word、图片格式，不超过 10MB</p>
         <input
           ref={inputRef}
           type="file"
@@ -111,23 +111,23 @@ export function FileUpload({ fileType, onUploaded, onError }: FileUploadProps) {
 
       {/* 待上传文件预览 + 确认按钮 */}
       {pendingFile && !uploading && (
-        <div className="mt-3 flex items-center gap-3 bg-[#F6F8FA] rounded-xl p-3">
+        <div className="mt-3 flex items-center gap-3 bg-[#F7F8FA] rounded-xl p-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[#0D1117] truncate">{pendingFile.name}</p>
-            <p className="text-xs text-[#8B949E]">{formatFileSize(pendingFile.size)}</p>
+            <p className="text-sm font-medium text-[#232529] truncate">{pendingFile.name}</p>
+            <p className="text-xs text-[#999999]">{formatFileSize(pendingFile.size)}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPendingFile(null)}
-              className="text-xs text-[#5F6B7A] hover:text-[#0D1117] px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B35]/40 rounded"
+              className="text-xs text-[#666666] hover:text-[#232529] px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00BFA5]/40 rounded"
             >
               移除
             </button>
             <button
               type="button"
               onClick={handleConfirmUpload}
-              className="bg-[#FF6B35] hover:bg-[#E85D26] text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B35]/50"
+              className="bg-[#00BFA5] hover:bg-[#00A88A] text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00BFA5]/50"
             >
               确认上传
             </button>

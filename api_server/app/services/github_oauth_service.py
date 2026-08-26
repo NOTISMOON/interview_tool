@@ -57,7 +57,7 @@ class GitHubOAuthService:
             async with httpx.AsyncClient(trust_env=False, timeout=_GITHUB_TIMEOUT) as client:
                 response = await client.post(
                     self.GITHUB_TOKEN_URL,
-                    json={
+                    data={
                         "client_id": settings.GITHUB_CLIENT_ID,
                         "client_secret": settings.GITHUB_CLIENT_SECRET,
                         "code": code,

@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面试教练 - UI 重构原型</title>
+<style>
+  /* ===== 设计令牌 ===== */
+  :root {
+    --brand: #00BFA5;
+    --brand-hover: #00A88A;
+    --brand-soft: rgba(0,191,165,0.1);
+    --brand-glow: rgba(0,191,165,0.25);
+    --sidebar-bg: #16181C;
+    --sidebar-text: #8B909A;
+    --sidebar-active: #FFFFFF;
+    --sidebar-hover: rgba(255,255,255,0.06);
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --surface-soft: #F7F8FA;
+    --text: #1C1E22;
+    --text-muted: #6B7280;
+    --text-dim: #9CA3AF;
+    --border: #E5E7EB;
+    --border-light: #F0F1F3;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 14px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 28px rgba(0,0,0,0.08);
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font); color: var(--text); background: #E8EAED;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== 浏览器帧 ===== */
+  .browser-frame {
+    max-width: 1280px; margin: 24px auto; background: var(--bg);
+    border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+    position: relative;
+  }
+  .browser-bar {
+    display: flex; align-items: center; gap: 10px; padding: 14px 20px;
+    background: var(--sidebar-bg); position: sticky; top: 0; z-index: 100;
+  }
+  .browser-dots { display: flex; gap: 7px; }
+  .browser-dots span { width: 10px; height: 10px; border-radius: 50%; }
+  .browser-dots span:nth-child(1) { background: #F53535; }
+  .browser-dots span:nth-child(2) { background: #FFAA00; }
+  .browser-dots span:nth-child(3) { background: #00B578; }
+  .browser-title {
+    flex: 1; text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;
+    background: rgba(255,255,255,0.06); padding: 6px 16px; border-radius: 6px; max-width: 400px; margin: 0 auto;
+  }
+
+  /* ===== 页面导航标签 ===== */
+  .page-tabs {
+    display: flex; gap: 0; background: var(--sidebar-bg); padding: 0 20px 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .page-tab {
+    padding: 10px 18px; font-size: 12px; color: rgba(255,255,255,0.4); cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all 0.15s; font-weight: 500;
+  }
+  .page-tab:hover { color: rgba(255,255,255,0.7); }
+  .page-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+  /* ===== 页面容器 ===== */
+  .page-content { display: none; }
+  .page-content.active { display: block; }
+
+  /* ===== 布局 ===== */
+  .layout { display: flex; min-height: calc(100vh - 90px); }
+
+  /* ===== 暗色侧边栏 ===== */
+  .sidebar {
+    width: 220px; background: var(--sidebar-bg); display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-logo {
+    padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sidebar-logo .logo-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, #00BFA5, #26C6DA);
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px;
+  }
+  .sidebar-logo span { color: #fff; font-weight: 700; font-size: 14px; letter-spacing: -0.2px; }
+  .sidebar-nav { flex: 1; padding: 14px 10px; display: flex; flex-direction: column; gap: 1px; }
+  .sidebar-nav a {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+    color: var(--sidebar-text); font-size: 13px; font-weight: 500; text-decoration: none; transition: all 0.12s;
+  }
+  .sidebar-nav a:hover { background: var(--sidebar-hover); color: #D1D5DB; }
+  .sidebar-nav a .nav-icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; }
+  .sidebar-nav a .nav-badge {
+    margin-left: auto; background: var(--brand); color: #fff; font-size: 10px; font-weight: 600;
+    padding: 1px 7px; border-radius: 100px; min-width: 18px; text-align: center;
+  }
+  .sidebar-nav .nav-group-label {
+    padding: 14px 12px 6px; font-size: 10px; color: rgba(255,255,255,0.2);
+    text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600;
+  }
+  .sidebar-footer {
+    padding: 12px 10px; border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .sidebar-footer a {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+    color: var(--sidebar-text); font-size: 13px; text-decoration: none; transition: all 0.12s;
+  }
+  .sidebar-footer a:hover { background: rgba(255,255,255,0.06); color: #F87171; }
+
+  /* ===== 主内容区 ===== */
+  .main-content {
+    flex: 1; padding: 28px 32px; overflow-y: auto; background: var(--bg);
+    min-height: calc(100vh - 90px);
+  }
+
+  /* ===== 顶部导航 ===== */
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px;
+  }
+  .top-bar h1 { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+  .top-bar p { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+  .top-bar-right { display: flex; align-items: center; gap: 14px; }
+  .top-bar-right .notif-btn {
+    width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; transition: all 0.12s;
+  }
+  .top-bar-right .notif-btn:hover { border-color: var(--brand); }
+  .top-bar-right .notif-dot {
+    position: absolute; top: -2px; right: -2px; width: 8px; height: 8px;
+    border-radius: 50%; background: #F53535; border: 2px solid var(--surface);
+  }
+  .top-bar-right .avatar {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--sidebar-bg);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+
+  /* ===== 卡片通用 ===== */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+  .card:hover { border-color: var(--brand); box-shadow: var(--shadow-md); }
+
+  /* ===== 工作台页面 ===== */
+  .hero-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 28px; }
+  .hero-card {
+    background: var(--sidebar-bg); border-radius: var(--radius-lg); padding: 28px 30px;
+    position: relative; overflow: hidden;
+  }
+  .hero-card::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+    background: var(--brand);
+  }
+  .hero-card::after {
+    content: ''; position: absolute; top: -60px; right: -40px; width: 180px; height: 180px;
+    border-radius: 50%; background: rgba(0,191,165,0.06);
+  }
+  .hero-card h2 { color: #fff; font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .hero-card p { color: rgba(255,255,255,0.5); font-size: 13px; line-height: 1.7; margin-bottom: 20px; max-width: 300px; }
+  .hero-card .btn-brand {
+    display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px; border-radius: 8px;
+    background: var(--brand); color: #fff; font-size: 13px; font-weight: 600; border: none; cursor: pointer;
+    transition: all 0.12s;
+  }
+  .hero-card .btn-brand:hover { background: var(--brand-hover); transform: translateY(-1px); }
+
+  .stats-card { padding: 22px 24px; }
+  .stats-card .stats-label {
+    font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 16px;
+  }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .stats-grid .num { font-size: 24px; font-weight: 700; color: var(--text); line-height: 1; }
+  .stats-grid .num-label { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+
+  /* 快捷操作 */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .section-header h3 { font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 7px; }
+  .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .quick-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 18px; cursor: pointer; transition: all 0.15s;
+  }
+  .quick-card:hover { border-color: var(--brand); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .quick-card .icon-box {
+    width: 36px; height: 36px; border-radius: 10px; background: var(--brand-soft);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--brand);
+    margin-bottom: 12px; transition: transform 0.15s;
+  }
+  .quick-card:hover .icon-box { transform: scale(1.1); }
+  .quick-card h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .quick-card p { font-size: 11px; color: var(--text-dim); }
+
+  /* 最近面试列表 */
+  .interview-list { display: flex; flex-direction: column; gap: 8px; }
+  .interview-item {
+    display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .interview-item:hover { border-color: var(--brand); box-shadow: var(--shadow-sm); }
+  .interview-item .score {
+    width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; flex-shrink: 0;
+  }
+  .interview-item .info { flex: 1; min-width: 0; }
+  .interview-item .info h4 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .interview-item .info .meta { font-size: 11px; color: var(--text-dim); display: flex; gap: 10px; margin-top: 3px; }
+  .interview-item .arrow { color: var(--border); font-size: 12px; }
+
+  /* ===== 社区页面 ===== */
+  .community-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .community-header .tabs { display: flex; gap: 0; background: var(--surface); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
+  .community-header .tabs button {
+    padding: 7px 16px; border-radius: 6px; border: none; background: transparent;
+    font-size: 12px; font-weight: 500; color: var(--text-muted); cursor: pointer; transition: all 0.12s;
+  }
+  .community-header .tabs button.active { background: var(--brand); color: #fff; }
+  .community-header .btn-primary {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 8px;
+    background: var(--brand); color: #fff; font-size: 12px; font-weight: 600; border: none; cursor: pointer;
+  }
+  .post-list { display: flex; flex-direction: column; gap: 10px; }
+  .post-card {
+    display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .post-card:hover { border-color: var(--brand); box-shadow: var(--shadow-md); }
+  .post-card .post-avatar {
+    width: 40px; height: 40px; border-radius: 50%; background: var(--sidebar-bg);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; font-weight: 600; flex-shrink: 0;
+  }
+  .post-card .post-body { flex: 1; min-width: 0; }
+  .post-card .post-body .post-title {
+    font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .post-card .post-body .post-meta {
+    font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 6px;
+  }
+  .post-card .post-body .post-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--border); }
+  .post-card .post-body .post-excerpt {
+    font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-top: 8px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .post-card .post-body .post-actions {
+    display: flex; align-items: center; gap: 14px; margin-top: 10px;
+  }
+  .post-card .post-body .post-actions span {
+    font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 4px;
+  }
+
+  /* ===== 消息中心 ===== */
+  .msg-list { display: flex; flex-direction: column; gap: 8px; }
+  .msg-card {
+    display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px;
+    border-radius: var(--radius-lg); cursor: pointer; transition: all 0.15s;
+  }
+  .msg-card.unread { background: var(--surface); border: 1px solid var(--brand); }
+  .msg-card.read { background: var(--surface); border: 1px solid var(--border); }
+  .msg-card:hover { border-color: var(--brand); box-shadow: var(--shadow-sm); }
+  .msg-card .msg-icon {
+    width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center;
+    justify-content: center; font-size: 15px; flex-shrink: 0;
+  }
+  .msg-card .msg-body { flex: 1; min-width: 0; }
+  .msg-card .msg-body .msg-title {
+    font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px;
+  }
+  .msg-card .msg-body .msg-title .unread-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #F53535; display: inline-block;
+  }
+  .msg-card .msg-body .msg-preview { font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+  .msg-card .msg-body .msg-time { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  /* ===== 面试页面 ===== */
+  .step-bar {
+    display: flex; align-items: center; gap: 0; margin-bottom: 24px;
+    background: var(--surface); border-radius: var(--radius-lg); padding: 4px;
+    border: 1px solid var(--border);
+  }
+  .step-bar .step {
+    flex: 1; text-align: center; padding: 10px; border-radius: 10px;
+    font-size: 12px; font-weight: 500; color: var(--text-dim); transition: all 0.15s;
+  }
+  .step-bar .step.active { background: var(--brand); color: #fff; font-weight: 600; }
+  .step-bar .step.done { color: var(--brand); }
+
+  .resume-select {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 22px; margin-bottom: 16px;
+  }
+  .resume-select .resume-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    border-radius: 10px; cursor: pointer; transition: all 0.12s;
+  }
+  .resume-select .resume-item:hover { background: var(--surface-soft); }
+  .resume-select .resume-item.selected { background: var(--brand-soft); }
+  .resume-select .resume-item .radio {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .resume-select .resume-item.selected .radio { border-color: var(--brand); background: var(--brand); }
+  .resume-select .resume-item.selected .radio::after {
+    content: '✓'; color: #fff; font-size: 10px; font-weight: 700;
+  }
+  .resume-select .resume-item .file-icon {
+    width: 36px; height: 36px; border-radius: 9px; background: var(--brand-soft);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--brand); flex-shrink: 0;
+  }
+  .resume-select .resume-item .file-info { flex: 1; min-width: 0; }
+  .resume-select .resume-item .file-info .name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .resume-select .resume-item .file-info .date { font-size: 11px; color: var(--text-dim); }
+  .resume-select .resume-item .status-badge {
+    font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 100px;
+  }
+  .resume-select .resume-item .status-badge.ready { background: var(--brand-soft); color: var(--brand); }
+
+  .type-select { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .type-select button {
+    padding: 14px 18px; border-radius: var(--radius-md); border: 1px solid var(--border);
+    background: var(--surface); cursor: pointer; text-align: left; transition: all 0.12s;
+  }
+  .type-select button:hover { border-color: var(--brand); }
+  .type-select button.selected { border-color: var(--brand); background: var(--brand-soft); }
+  .type-select button .type-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .type-select button .type-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* ===== 个人设置 ===== */
+  .profile-header {
+    background: var(--sidebar-bg); border-radius: var(--radius-lg); padding: 24px 28px; margin-bottom: 20px;
+  }
+  .profile-header .profile-row { display: flex; align-items: center; gap: 16px; }
+  .profile-header .profile-avatar {
+    width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.1);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px; font-weight: 700; flex-shrink: 0;
+  }
+  .profile-header .profile-info h3 { color: #fff; font-size: 16px; font-weight: 700; }
+  .profile-header .profile-info p { color: rgba(255,255,255,0.45); font-size: 12px; margin-top: 2px; }
+  .profile-header .profile-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px;
+  }
+  .profile-header .profile-stats .stat {
+    background: rgba(255,255,255,0.07); border-radius: 10px; padding: 10px; text-align: center;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .profile-header .profile-stats .stat:hover { background: rgba(255,255,255,0.12); }
+  .profile-header .profile-stats .stat .n { color: #fff; font-size: 18px; font-weight: 700; }
+  .profile-header .profile-stats .stat .l { color: rgba(255,255,255,0.35); font-size: 10px; margin-top: 2px; }
+
+  .menu-section { margin-bottom: 4px; }
+  .menu-section .menu-label {
+    font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.5px; padding: 16px 4px 8px;
+  }
+  .menu-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    border-radius: 10px; cursor: pointer; transition: all 0.12s;
+  }
+  .menu-item:hover { background: var(--surface-soft); }
+  .menu-item .menu-icon {
+    width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center;
+    justify-content: center; font-size: 14px; flex-shrink: 0;
+  }
+  .menu-item .menu-label-text { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); }
+  .menu-item .menu-value { font-size: 12px; color: var(--text-dim); }
+  .menu-item .menu-arrow { color: var(--border); font-size: 12px; }
+
+  /* ===== 登录页 ===== */
+  .login-page {
+    min-height: 100vh; display: flex; background: var(--sidebar-bg);
+  }
+  .login-left {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 40px; position: relative; overflow: hidden;
+  }
+  .login-left::before {
+    content: ''; position: absolute; top: -80px; left: -80px; width: 300px; height: 300px;
+    border-radius: 50%; background: rgba(0,191,165,0.08);
+  }
+  .login-left::after {
+    content: ''; position: absolute; bottom: -60px; right: -60px; width: 200px; height: 200px;
+    border-radius: 50%; background: rgba(0,191,165,0.05);
+  }
+  .login-left .logo-big {
+    width: 72px; height: 72px; border-radius: 18px;
+    background: linear-gradient(135deg, #00BFA5, #26C6DA);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; color: #fff; margin-bottom: 24px; position: relative;
+    box-shadow: 0 8px 32px rgba(0,191,165,0.35);
+  }
+  .login-left h2 { color: #fff; font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+  .login-left p { color: rgba(255,255,255,0.4); font-size: 14px; line-height: 1.7; text-align: center; max-width: 320px; }
+  .login-right {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); padding: 40px;
+  }
+  .login-box { width: 100%; max-width: 380px; }
+  .login-box .back-link {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted);
+    text-decoration: none; margin-bottom: 32px;
+  }
+  .login-box .back-link:hover { color: var(--text); }
+  .login-box h1 { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .login-box .sub { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
+  .login-box .btn-github {
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 14px; border-radius: 10px; background: var(--sidebar-bg); color: #fff;
+    font-size: 14px; font-weight: 600; border: none; cursor: pointer; transition: all 0.12s;
+  }
+  .login-box .btn-github:hover { background: #1F2328; transform: translateY(-1px); }
+  .login-box .divider {
+    display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--text-dim);
+    font-size: 11px;
+  }
+  .login-box .divider::before, .login-box .divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .login-box .legal { font-size: 11px; color: var(--text-dim); text-align: center; margin-top: 24px; }
+  .login-box .legal a { color: var(--brand); text-decoration: none; }
+
+  /* ===== 标签 ===== */
+  .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 600; }
+  .tag-hot { background: var(--brand-soft); color: var(--brand); }
+
+  /* ===== 设计说明 ===== */
+  .design-notes {
+    padding: 20px 28px; background: var(--surface); border-top: 1px solid var(--border);
+  }
+  .design-notes h4 { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .design-notes ul { font-size: 12px; color: var(--text-muted); line-height: 1.8; padding-left: 18px; }
+</style>
+</head>
+<body>
+
+<div class="browser-frame">
+  <!-- 浏览器栏 -->
+  <div class="browser-bar">
+    <div class="browser-dots"><span></span><span></span><span></span></div>
+    <div class="browser-title">面试教练 · UI 重构原型</div>
+    <div style="width:60px;"></div>
+  </div>
+
+  <!-- 页面导航 -->
+  <div class="page-tabs">
+    <div class="page-tab active" onclick="switchPage('dashboard')">工作台</div>
+    <div class="page-tab" onclick="switchPage('community')">社区</div>
+    <div class="page-tab" onclick="switchPage('messages')">消息中心</div>
+    <div class="page-tab" onclick="switchPage('interview')">开始面试</div>
+    <div class="page-tab" onclick="switchPage('profile')">个人设置</div>
+    <div class="page-tab" onclick="switchPage('login')">登录页</div>
+  </div>
+
+  <!-- ===== 工作台 ===== -->
+  <div class="page-content active" id="page-dashboard">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="logo-icon">⚡</div>
+          <span>面试教练</span>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-group-label">导航</div>
+          <a href="#" style="background:rgba(0,191,165,0.12);color:var(--brand);font-weight:600;"><span class="nav-icon">◉</span>工作台</a>
+          <a href="#"><span class="nav-icon">▶</span>开始面试</a>
+          <a href="#"><span class="nav-icon">☰</span>面试记录</a>
+          <a href="#"><span class="nav-icon">⚡</span>动态</a>
+          <a href="#"><span class="nav-icon">◎</span>社区</a>
+          <a href="#"><span class="nav-icon">◈</span>消息中心<span class="nav-badge">3</span></a>
+          <div class="nav-group-label">设置</div>
+          <a href="#"><span class="nav-icon">⚙</span>个人设置</a>
+        </nav>
+        <div class="sidebar-footer">
+          <a href="#">↩ 退出登录</a>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="top-bar">
+          <div>
+            <h1>工作台</h1>
+            <p>准备开始今天的面试练习了吗？</p>
+          </div>
+          <div class="top-bar-right">
+            <div class="notif-btn"><span>🔔</span><div class="notif-dot"></div></div>
+            <div class="avatar">张</div>
+          </div>
+        </div>
+
+        <div class="hero-grid">
+          <div class="hero-card">
+            <h2>AI 模拟面试</h2>
+            <p>上传简历，即刻开始 AI 驱动的智能模拟面试，精准定位你的能力短板</p>
+            <button class="btn-brand">▶ 立即开始</button>
+          </div>
+          <div class="card stats-card">
+            <div class="stats-label">本周统计</div>
+            <div class="stats-grid">
+              <div><div class="num" style="color:var(--brand);">3</div><div class="num-label">完成面试</div></div>
+              <div><div class="num">22</div><div class="num-label">平均得分</div></div>
+              <div><div class="num" style="color:#10B981;">1</div><div class="num-label">简历数量</div></div>
+              <div><div class="num">1</div><div class="num-label">练习天数</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-header"><h3>⚡ 快捷操作</h3></div>
+        <div class="quick-grid">
+          <div class="quick-card"><div class="icon-box">▶</div><h4>开始面试</h4><p>上传简历，AI 智能出题</p></div>
+          <div class="quick-card"><div class="icon-box">📄</div><h4>我的简历</h4><p>1 份</p></div>
+          <div class="quick-card"><div class="icon-box">☰</div><h4>面试记录</h4><p>4 次</p></div>
+          <div class="quick-card"><div class="icon-box">📈</div><h4>能力成长</h4><p>追踪进步</p></div>
+        </div>
+
+        <div class="section-header"><h3>📊 最近面试</h3><a href="#" style="font-size:12px;color:var(--brand);text-decoration:none;">查看全部 →</a></div>
+        <div class="interview-list">
+          <div class="interview-item">
+            <div class="score" style="background:rgba(249,80,31,0.1);color:#F53535;">32</div>
+            <div class="info"><h4>快速面试</h4><div class="meta"><span>08/23 09:13</span><span>9 题</span><span>15 分 10 秒</span></div></div>
+            <span class="arrow">→</span>
+          </div>
+          <div class="interview-item">
+            <div class="score" style="background:rgba(0,191,165,0.1);color:var(--brand);">25</div>
+            <div class="info"><h4>快速面试</h4><div class="meta"><span>08/23 15:52</span><span>5 题</span><span>27 分 34 秒</span></div></div>
+            <span class="arrow">→</span>
+          </div>
+          <div class="interview-item">
+            <div class="score" style="background:rgba(0,191,165,0.1);color:var(--brand);">10</div>
+            <div class="info"><h4>完整面试</h4><div class="meta"><span>08/23 14:22</span><span>9 题</span><span>3 分 33 秒</span></div></div>
+            <span class="arrow">→</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 社区 ===== -->
+  <div class="page-content" id="page-community">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="logo-icon">⚡</div>
+          <span>面试教练</span>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-group-label">导航</div>
+          <a href="#"><span class="nav-icon">◉</span>工作台</a>
+          <a href="#"><span class="nav-icon">▶</span>开始面试</a>
+          <a href="#"><span class="nav-icon">☰</span>面试记录</a>
+          <a href="#"><span class="nav-icon">⚡</span>动态</a>
+          <a href="#" style="background:rgba(0,191,165,0.12);color:var(--brand);font-weight:600;"><span class="nav-icon">◎</span>社区</a>
+          <a href="#"><span class="nav-icon">◈</span>消息中心<span class="nav-badge">3</span></a>
+          <div class="nav-group-label">设置</div>
+          <a href="#"><span class="nav-icon">⚙</span>个人设置</a>
+        </nav>
+        <div class="sidebar-footer"><a href="#">↩ 退出登录</a></div>
+      </div>
+      <div class="main-content">
+        <div class="community-header">
+          <h1 style="font-size:20px;font-weight:700;">社区</h1>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="tabs">
+              <button class="active">最新</button>
+              <button>热门</button>
+            </div>
+            <button class="btn-primary">＋ 发帖</button>
+          </div>
+        </div>
+        <div class="post-list">
+          <div class="post-card">
+            <div class="post-avatar">张</div>
+            <div class="post-body">
+              <div class="post-title">前端面试经验分享 <span class="tag tag-hot">热门</span></div>
+              <div class="post-meta"><span>张三</span><span class="dot"></span><span>2 小时前</span></div>
+              <div class="post-excerpt">分享一下最近面试大厂的前端经验，主要包括 React 底层原理、性能优化、项目架构设计等方面的内容，希望对大家有帮助...</div>
+              <div class="post-actions"><span>👍 24</span><span>💬 8</span></div>
+            </div>
+          </div>
+          <div class="post-card">
+            <div class="post-avatar">李</div>
+            <div class="post-body">
+              <div class="post-title">系统设计面试如何准备？</div>
+              <div class="post-meta"><span>李四</span><span class="dot"></span><span>昨天 15:30</span></div>
+              <div class="post-excerpt">想和大家讨论一下系统设计面试的最佳准备路径，除了 DDIA 还有什么推荐资料？</div>
+              <div class="post-actions"><span>👍 16</span><span>💬 5</span></div>
+            </div>
+          </div>
+          <div class="post-card">
+            <div class="post-avatar">王</div>
+            <div class="post-body">
+              <div class="post-title">面试官角度：什么样的候选人最加分</div>
+              <div class="post-meta"><span>王五</span><span class="dot"></span><span>3 天前</span></div>
+              <div class="post-excerpt">作为参与过几十场技术面试的面试官，想从另一个角度分享一些面试中的加分项和常见误区...</div>
+              <div class="post-actions"><span>👍 42</span><span>💬 15</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 消息中心 ===== -->
+  <div class="page-content" id="page-messages">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="logo-icon">⚡</div>
+          <span>面试教练</span>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-group-label">导航</div>
+          <a href="#"><span class="nav-icon">◉</span>工作台</a>
+          <a href="#"><span class="nav-icon">▶</span>开始面试</a>
+          <a href="#"><span class="nav-icon">☰</span>面试记录</a>
+          <a href="#"><span class="nav-icon">⚡</span>动态</a>
+          <a href="#"><span class="nav-icon">◎</span>社区</a>
+          <a href="#" style="background:rgba(0,191,165,0.12);color:var(--brand);font-weight:600;"><span class="nav-icon">◈</span>消息中心<span class="nav-badge">3</span></a>
+          <div class="nav-group-label">设置</div>
+          <a href="#"><span class="nav-icon">⚙</span>个人设置</a>
+        </nav>
+        <div class="sidebar-footer"><a href="#">↩ 退出登录</a></div>
+      </div>
+      <div class="main-content">
+        <div class="top-bar" style="margin-bottom:20px;">
+          <div>
+            <h1>消息中心</h1>
+            <p>3 条未读消息</p>
+          </div>
+          <div class="top-bar-right">
+            <div class="tabs" style="background:var(--surface);border:1px solid var(--border);padding:3px;border-radius:8px;display:flex;">
+              <button style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:12px;font-weight:500;cursor:pointer;">全部</button>
+              <button style="padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;">系统</button>
+              <button style="padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;">点赞</button>
+            </div>
+          </div>
+        </div>
+        <div class="msg-list">
+          <div class="msg-card unread">
+            <div class="msg-icon" style="background:var(--brand-soft);">👍</div>
+            <div class="msg-body">
+              <div class="msg-title">张三 赞了你的帖子 <span class="unread-dot"></span></div>
+              <div class="msg-preview">前端面试经验分享</div>
+              <div class="msg-time">5 分钟前</div>
+            </div>
+          </div>
+          <div class="msg-card unread">
+            <div class="msg-icon" style="background:rgba(255,170,0,0.1);">💬</div>
+            <div class="msg-body">
+              <div class="msg-title">李四 评论了你的帖子 <span class="unread-dot"></span></div>
+              <div class="msg-preview">写得很好，请问 React 18 的新特性有涉及吗？</div>
+              <div class="msg-time">30 分钟前</div>
+            </div>
+          </div>
+          <div class="msg-card read">
+            <div class="msg-icon" style="background:var(--surface-soft);">📢</div>
+            <div class="msg-body">
+              <div class="msg-title" style="font-weight:500;color:var(--text-muted);">系统通知：简历分析完成</div>
+              <div class="msg-preview">你的简历 "前端开发-许威洋.pdf" 已完成 AI 分析</div>
+              <div class="msg-time">昨天 16:20</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 开始面试 ===== -->
+  <div class="page-content" id="page-interview">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="logo-icon">⚡</div>
+          <span>面试教练</span>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-group-label">导航</div>
+          <a href="#"><span class="nav-icon">◉</span>工作台</a>
+          <a href="#" style="background:rgba(0,191,165,0.12);color:var(--brand);font-weight:600;"><span class="nav-icon">▶</span>开始面试</a>
+          <a href="#"><span class="nav-icon">☰</span>面试记录</a>
+          <a href="#"><span class="nav-icon">⚡</span>动态</a>
+          <a href="#"><span class="nav-icon">◎</span>社区</a>
+          <a href="#"><span class="nav-icon">◈</span>消息中心</a>
+          <div class="nav-group-label">设置</div>
+          <a href="#"><span class="nav-icon">⚙</span>个人设置</a>
+        </nav>
+        <div class="sidebar-footer"><a href="#">↩ 退出登录</a></div>
+      </div>
+      <div class="main-content">
+        <div class="top-bar" style="margin-bottom:20px;">
+          <div><h1>AI 模拟面试</h1></div>
+        </div>
+
+        <div class="step-bar">
+          <div class="step active">1 选择简历</div>
+          <div class="step">2 AI 分析</div>
+          <div class="step">3 设备检测</div>
+        </div>
+
+        <div class="resume-select">
+          <div class="resume-item selected">
+            <div class="radio"></div>
+            <div class="file-icon">📄</div>
+            <div class="file-info">
+              <div class="name">前端开发-许威洋.pdf</div>
+              <div class="date">2026/08/22 10:06</div>
+            </div>
+            <span class="status-badge ready">已就绪</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px;"><span style="font-size:12px;color:var(--text-dim);">或者</span></div>
+
+        <div style="border:1.5px dashed var(--border);border-radius:var(--radius-lg);padding:28px;text-align:center;margin-bottom:20px;cursor:pointer;transition:all 0.12s;">
+          <div style="font-size:22px;color:var(--text-dim);margin-bottom:8px;">＋</div>
+          <p style="font-size:13px;color:var(--text-muted);">上传一份新简历</p>
+          <p style="font-size:11px;color:var(--text-dim);margin-top:4px;">支持 PDF、Word，不超过 10MB</p>
+        </div>
+
+        <div style="margin-bottom:16px;"><span style="font-size:12px;color:var(--text-dim);font-weight:500;">选择面试模式</span></div>
+        <div class="type-select">
+          <button class="selected">
+            <div class="type-title">完整面试 <span style="float:right;color:var(--brand);font-size:11px;">✓</span></div>
+            <div class="type-desc">15 题 · 约 40-70 分钟</div>
+          </button>
+          <button>
+            <div class="type-title">快速面试</div>
+            <div class="type-desc">9 题 · 约 25-40 分钟</div>
+          </button>
+        </div>
+
+        <button style="width:100%;padding:13px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">
+          开始生成面试题
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 个人设置 ===== -->
+  <div class="page-content" id="page-profile">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <div class="logo-icon">⚡</div>
+          <span>面试教练</span>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-group-label">导航</div>
+          <a href="#"><span class="nav-icon">◉</span>工作台</a>
+          <a href="#"><span class="nav-icon">▶</span>开始面试</a>
+          <a href="#"><span class="nav-icon">☰</span>面试记录</a>
+          <a href="#"><span class="nav-icon">⚡</span>动态</a>
+          <a href="#"><span class="nav-icon">◎</span>社区</a>
+          <a href="#"><span class="nav-icon">◈</span>消息中心</a>
+          <div class="nav-group-label">设置</div>
+          <a href="#" style="background:rgba(0,191,165,0.12);color:var(--brand);font-weight:600;"><span class="nav-icon">⚙</span>个人设置</a>
+        </nav>
+        <div class="sidebar-footer"><a href="#">↩ 退出登录</a></div>
+      </div>
+      <div class="main-content">
+        <h1 style="font-size:20px;font-weight:700;margin-bottom:20px;">个人设置</h1>
+
+        <div class="profile-header">
+          <div class="profile-row">
+            <div class="profile-avatar">张</div>
+            <div class="profile-info"><h3>张三</h3><p>zhangsan@example.com</p></div>
+          </div>
+          <div class="profile-stats">
+            <div class="stat"><div class="n">1</div><div class="l">关注</div></div>
+            <div class="stat"><div class="n">0</div><div class="l">粉丝</div></div>
+            <div class="stat"><div class="n">1</div><div class="l">简历</div></div>
+            <div class="stat"><div class="n">4</div><div class="l">面试</div></div>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <div class="menu-label">数据</div>
+          <div class="menu-item"><div class="menu-icon" style="background:var(--brand-soft);color:var(--brand);">📄</div><span class="menu-label-text">我的简历</span><span class="menu-value">1</span><span class="menu-arrow">→</span></div>
+          <div class="menu-item"><div class="menu-icon" style="background:var(--brand-soft);color:var(--brand);">☰</div><span class="menu-label-text">面试记录</span><span class="menu-value">4</span><span class="menu-arrow">→</span></div>
+          <div class="menu-item"><div class="menu-icon" style="background:var(--brand-soft);color:var(--brand);">🏆</div><span class="menu-label-text">平均得分</span><span class="menu-value">22 分</span><span class="menu-arrow">→</span></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-label">社交</div>
+          <div class="menu-item"><div class="menu-icon" style="background:var(--surface-soft);color:var(--text-muted);">👥</div><span class="menu-label-text">我的关注</span><span class="menu-value">1</span><span class="menu-arrow">→</span></div>
+          <div class="menu-item"><div class="menu-icon" style="background:var(--surface-soft);color:var(--text-muted);">👤</div><span class="menu-label-text">我的粉丝</span><span class="menu-value">0</span><span class="menu-arrow">→</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 登录页 ===== -->
+  <div class="page-content" id="page-login">
+    <div class="login-page">
+      <div class="login-left">
+        <div class="logo-big">⚡</div>
+        <h2>AI 面试平台</h2>
+        <p>智能模拟面试，精准分析报告。<br>让每一次练习，都离 offer 更近一步。</p>
+      </div>
+      <div class="login-right">
+        <div class="login-box">
+          <a href="#" class="back-link">← 返回首页</a>
+          <h1>欢迎回来</h1>
+          <p class="sub">使用 GitHub 账号快速登录</p>
+          <button class="btn-github">⬡ 使用 GitHub 登录 / 注册</button>
+          <div class="divider">安全便捷的第三方登录</div>
+          <p class="legal">登录即表示你同意我们的 <a href="#">隐私政策</a> 和服务条款</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设计说明 -->
+  <div class="design-notes">
+    <h4>重构设计要点</h4>
+    <ul>
+      <li><strong>暗色侧边栏</strong> (#16181C) — 替代白色侧栏，立刻拉开视觉档次，消除「模板感」</li>
+      <li><strong>深色促销卡片</strong> — 左侧 3px 品牌强调条，替代渐变填色，更克制</li>
+      <li><strong>侧边栏分组</strong> — 导航 / 设置 分组小标题，信息层级更清晰</li>
+      <li><strong>社区卡片</strong> — 左对齐圆形头像 + 更紧凑的信息排版 + 悬停浮现品牌边框</li>
+      <li><strong>消息中心</strong> — 未读消息有品牌色边框 + 红色圆点，已读淡灰色</li>
+      <li><strong>面试步骤条</strong> — 胶囊式分段指示器，当前步骤品牌色填充</li>
+      <li><strong>表单控件</strong> — 自定义选择器，非 Ant Design 默认样式</li>
+      <li><strong>整体克制</strong> — 更少的圆角、更轻的阴影、更节制的品牌色使用</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function switchPage(id) {
+  document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelector(`.page-tab[onclick*="${id}"]`).classList.add('active');
+}
+</script>
+</body>
+</html>

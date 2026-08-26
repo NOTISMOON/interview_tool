@@ -1,4 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Suspense } from 'react';
 import { Badge } from 'antd';
 import {
   HomeOutlined,
@@ -9,12 +10,13 @@ import {
   SettingOutlined,
   LogoutOutlined,
   ThunderboltOutlined,
+  ThunderboltFilled,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store';
 import { getUnreadCount } from '@/lib/api/messages';
 import { useMessageVersion } from '@/lib/messageVersion';
-import { useState, useEffect } from 'react';
-import { useSlideInLeft, usePageTransition } from '@/hooks/useGsapAnimations';
+import { useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 
 const SIDEBAR_ITEMS = [
   { key: '/dashboard', label: '工作台', icon: <HomeOutlined /> },
@@ -31,28 +33,29 @@ const Sidebar = () => {
   const location = useLocation();
 
   return (
-    <aside className="w-[240px] h-screen bg-white border-r border-[#E1E4E8] flex flex-col flex-shrink-0 fixed left-0 top-0">
+    <aside className="w-[240px] h-screen bg-[#16181C] flex flex-col flex-shrink-0 fixed left-0 top-0">
       <div
-        className="h-[60px] flex items-center gap-2.5 px-5 border-b border-[#F0F2F5] cursor-pointer"
+        className="h-[60px] flex items-center gap-2.5 px-5 border-b border-[rgba(255,255,255,0.06)] cursor-pointer"
         onClick={() => navigate('/dashboard')}
       >
-        <span className="w-8 h-8 rounded-lg bg-[#FF6B35] flex items-center justify-center text-white text-sm font-bold">
-          AI
+        <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-white text-sm shadow-[0_2px_8px_rgba(0,191,165,0.35)]">
+          <ThunderboltFilled />
         </span>
-        <span className="font-bold text-[#0D1117]">面试教练</span>
+        <span className="font-bold text-white">面试教练</span>
       </div>
 
       <nav className="flex-1 py-4 px-3 overflow-y-auto">
+        <div className="text-[10px] text-[rgba(255,255,255,0.2)] uppercase tracking-wider font-semibold px-3 pb-2">导航</div>
         {SIDEBAR_ITEMS.map((item) => {
           const isActive = location.pathname === item.key;
           return (
             <button
               key={item.key}
               onClick={() => navigate(item.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-sm font-medium transition-all duration-150 ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-[#FFF3ED] text-[#FF6B35]'
-                  : 'text-[#5F6B7A] hover:bg-[#F6F8FA] hover:text-[#0D1117]'
+                  ? 'bg-[rgba(0,191,165,0.12)] text-[#00BFA5] font-semibold'
+                  : 'text-[#8B909A] hover:bg-[rgba(255,255,255,0.06)] hover:text-[#D1D5DB]'
               }`}
             >
               <span className="text-lg">{item.icon}</span>
@@ -62,14 +65,14 @@ const Sidebar = () => {
         })}
       </nav>
 
-      <div className="p-3 border-t border-[#F0F2F5]">
+      <div className="p-3 border-t border-[rgba(255,255,255,0.06)]">
         <button
           onClick={() => {
             const { logout } = useAppStore.getState();
             logout();
             navigate('/login', { replace: true });
           }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#5F6B7A] hover:bg-[#FEF2F2] hover:text-[#CF222E] transition-all duration-150"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#8B909A] hover:bg-[rgba(255,255,255,0.06)] hover:text-[#F87171] transition-all duration-150"
         >
           <LogoutOutlined className="text-lg" />
           退出登录
@@ -85,10 +88,18 @@ const DashboardLayout = () => {
   const { user } = useAppStore();
   const { revision: msgRevision } = useMessageVersion();
   const [unreadCount, setUnreadCount] = useState(0);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  /** GSAP 动画 refs */
-  const sidebarRef = useSlideInLeft(0);
-  const contentRef = usePageTransition();
+  /** 页面切换动画：每次路由变化都触发淡入 */
+  useEffect(() => {
+    if (contentRef.current) {
+      gsap.fromTo(
+        contentRef.current,
+        { y: 12, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.35, ease: 'power2.out', clearProps: 'transform,opacity' },
+      );
+    }
+  }, [location.pathname]);
 
   /** 获取未读计数 */
   const fetchUnreadCount = async () => {
@@ -117,22 +128,20 @@ const DashboardLayout = () => {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA]">
-      <div ref={sidebarRef}>
-        <Sidebar />
-      </div>
+    <div className="min-h-screen bg-[#F1F2F4]">
+      <Sidebar />
 
       <div className="ml-[240px]">
-        <header className="h-[60px] bg-white border-b border-[#E1E4E8] flex items-center justify-between px-6 sticky top-0 z-30">
+        <header className="h-[60px] bg-[#16181C] border-b border-[rgba(255,255,255,0.06)] flex items-center justify-between px-6 sticky top-0 z-30">
           <div>
-            <span className="text-sm text-[#8B949E]">欢迎回来，</span>
-            <span className="text-sm font-semibold text-[#0D1117]">{user?.nickname || '用户'}</span>
+            <span className="text-sm text-[#8B909A]">欢迎回来，</span>
+            <span className="text-sm font-semibold text-white">{user?.nickname || '用户'}</span>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/dashboard/messages')}
-              className="relative w-9 h-9 rounded-lg flex items-center justify-center text-[#5F6B7A] hover:bg-[#F6F8FA] hover:text-[#0D1117] transition-colors"
+              className="relative w-9 h-9 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.04)] flex items-center justify-center text-[#8B909A] hover:border-[#00BFA5] hover:text-[#00BFA5] transition-all"
             >
               <Badge count={unreadCount} size="small" offset={[2, -2]}>
                 <BellOutlined className="text-lg" />
@@ -140,7 +149,7 @@ const DashboardLayout = () => {
             </button>
             <button
               onClick={() => navigate('/dashboard/profile')}
-              className="w-8 h-8 rounded-full bg-[#0D1117] flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-[#FF6B35]/30 transition-all"
+              className="w-8 h-8 rounded-full bg-[#00BFA5] flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-[#00BFA5]/50 transition-all"
             >
               {user?.avatar ? (
                 <img src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
@@ -151,9 +160,11 @@ const DashboardLayout = () => {
           </div>
         </header>
 
-        <main className="p-6 h-[calc(100vh-60px)] overflow-y-auto">
-          <div ref={contentRef} className="animate-fade-in-up">
-            <Outlet />
+        <main className="p-6 h-[calc(100vh-60px)] overflow-y-auto bg-[#F1F2F4]">
+          <div ref={contentRef}>
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><span className="w-6 h-6 rounded-full border-2 border-[#E8E8E8] border-t-[#00BFA5] animate-spin" /></div>}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

@@ -68,9 +68,9 @@ const FeedPage = () => {
       <div className="flex-shrink-0">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-xl font-bold text-[#0D1117]">动态</h1>
-            <p className="text-sm text-[#5F6B7A] mt-1">
-              关注了 <span className="font-semibold text-[#FF6B35]">{user?.followingCount ?? 0}</span> 人
+            <h1 className="text-xl font-bold text-[#232529]">动态</h1>
+            <p className="text-sm text-[#666666] mt-1">
+              关注了 <span className="font-semibold text-[#00BFA5]">{user?.followingCount ?? 0}</span> 人
             </p>
           </div>
           <button
@@ -89,7 +89,7 @@ const FeedPage = () => {
               { label: '全部动态', value: 'all' },
               { label: '热门', value: 'hot', icon: <FireOutlined /> },
             ]}
-            className="!bg-[#F6F8FA] !p-1 !rounded-xl"
+            className="!bg-[#F7F8FA] !p-1 !rounded-xl"
           />
         </div>
       </div>
@@ -99,12 +99,12 @@ const FeedPage = () => {
           <Spin size="large" />
         </div>
       ) : filteredPosts.length === 0 ? (
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mx-auto mb-4">
-            <ReloadOutlined className="text-2xl text-[#8B949E]" />
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-[#F7F8FA] flex items-center justify-center mx-auto mb-4">
+            <ReloadOutlined className="text-2xl text-[#999999]" />
           </div>
-          <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无动态</h3>
-          <p className="text-sm text-[#5F6B7A] mb-6">
+          <h3 className="text-base font-semibold text-[#232529] mb-2">暂无动态</h3>
+          <p className="text-sm text-[#666666] mb-6">
             {user?.followingCount === 0
               ? '你还没有关注任何人，去社区发现有趣的用户吧'
               : '你关注的人还没有发布新内容'}
@@ -118,38 +118,38 @@ const FeedPage = () => {
           {filteredPosts.map((post) => (
             <div
               key={post.id}
-              className="bg-white border border-[#E1E4E8] rounded-xl p-5 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+              className="bg-white border border-[#E8E8E8] rounded-xl p-5 hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
               onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
             >
               <div className="flex items-start gap-3">
                 <Avatar
                   size={36}
                   src={post.author?.avatar}
-                  className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
+                  className="!bg-[#232529] flex-shrink-0 cursor-pointer"
                   onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
                 >
                   {post.author?.nickname?.[0] || '?'}
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
+                    <h4 className="text-sm font-semibold text-[#232529] truncate">{post.title}</h4>
                     {post.is_hot && (
                       <span className="tag tag-flame">
                         <FireOutlined className="text-[10px]" /> 热
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
+                  <p className="text-xs text-[#666666] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs text-[#8B949E]">
+                    <div className="flex items-center gap-2 text-xs text-[#999999]">
                       <span
-                        className="font-medium text-[#5F6B7A] cursor-pointer hover:text-[#FF6B35]"
+                        className="font-medium text-[#666666] cursor-pointer hover:text-[#00BFA5]"
                         onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
                       >{post.author?.nickname || '未知用户'}</span>
-                      <span className="w-1 h-1 rounded-full bg-[#E1E4E8]" />
+                      <span className="w-1 h-1 rounded-full bg-[#E8E8E8]" />
                       <span>{formatTime(post.created_at)}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-[#8B949E]">
+                    <div className="flex items-center gap-4 text-xs text-[#999999]">
                       <span className="inline-flex items-center gap-1">
                         <LikeOutlined /> {post.likes_count}
                       </span>
@@ -167,7 +167,7 @@ const FeedPage = () => {
               <button
                 onClick={() => fetchFeed()}
                 disabled={loading}
-                className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
               >
                 {loading ? '加载中...' : '加载更多'}
               </button>

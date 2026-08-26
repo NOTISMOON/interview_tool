@@ -10,16 +10,16 @@ import "./styles/index.css";
 
 const theme = {
   token: {
-    colorPrimary: '#FF6B35',
-    colorInfo: '#FF6B35',
-    colorSuccess: '#2DA44E',
-    colorWarning: '#BF8700',
-    colorError: '#CF222E',
+    colorPrimary: '#00BFA5',
+    colorInfo: '#00BFA5',
+    colorSuccess: '#00B578',
+    colorWarning: '#FFAA00',
+    colorError: '#F53535',
     borderRadius: 10,
     borderRadiusLG: 14,
     borderRadiusSM: 6,
     colorBgContainer: '#FFFFFF',
-    colorBorder: '#E1E4E8',
+    colorBorder: '#E8E8E8',
     fontFamily:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
   },

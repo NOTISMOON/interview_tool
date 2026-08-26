@@ -10,6 +10,7 @@ import {
   RightOutlined,
   CheckCircleOutlined,
   StarFilled,
+  ThunderboltFilled,
 } from '@ant-design/icons';
 
 const features = [
@@ -78,25 +79,25 @@ const LandingPage = () => {
   };
 
   return (
-    <div className="bg-[#F6F8FA]">
+    <div className="bg-[#F7F8FA]">
       <section className="pt-32 pb-20 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-20 left-[10%] w-72 h-72 bg-[#FF6B35]/5 rounded-full blur-3xl animate-float-slow" />
-          <div className="absolute bottom-10 right-[5%] w-96 h-96 bg-[#FF6B35]/4 rounded-full blur-3xl animate-float-slower" />
+          <div className="absolute top-20 left-[10%] w-72 h-72 bg-[#00BFA5]/5 rounded-full blur-3xl animate-float-slow" />
+          <div className="absolute bottom-10 right-[5%] w-96 h-96 bg-[#00BFA5]/4 rounded-full blur-3xl animate-float-slower" />
         </div>
 
         <div className="max-w-[1200px] mx-auto px-8 relative">
           <div ref={heroRef} className="max-w-[720px]">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF3ED] text-[#FF6B35] text-sm font-semibold mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B35] animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#E0F7F4] text-[#00BFA5] text-sm font-semibold mb-6">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00BFA5] animate-pulse" />
               AI 驱动的面试练习平台
             </div>
-            <h1 className="text-[56px] font-extrabold leading-[1.1] tracking-[-1px] text-[#0D1117] mb-6">
+            <h1 className="text-[56px] font-extrabold leading-[1.1] tracking-[-1px] text-[#232529] mb-6">
               模拟面试，
               <br />
               <span className="gradient-text">自信上场</span>
             </h1>
-            <p className="text-lg text-[#5F6B7A] leading-relaxed mb-10 max-w-[520px]">
+            <p className="text-lg text-[#666666] leading-relaxed mb-10 max-w-[520px]">
               基于真实简历，AI 为你生成个性化面试题。多轮练习、深度分析，让每一次面试都成为你拿 offer 的底气。
             </p>
             <div className="flex items-center gap-4">
@@ -114,25 +115,25 @@ const LandingPage = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-8 mt-10 pt-8 border-t border-[#E1E4E8]">
+            <div className="flex items-center gap-8 mt-10 pt-8 border-t border-[#E8E8E8]">
               <div>
-                <div className="text-2xl font-bold text-[#0D1117]">10,000+</div>
-                <div className="text-sm text-[#5F6B7A]">注册用户</div>
+                <div className="text-2xl font-bold text-[#232529]">10,000+</div>
+                <div className="text-sm text-[#666666]">注册用户</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-[#0D1117]">50,000+</div>
-                <div className="text-sm text-[#5F6B7A]">完成面试</div>
+                <div className="text-2xl font-bold text-[#232529]">50,000+</div>
+                <div className="text-sm text-[#666666]">完成面试</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-[#0D1117]">92%</div>
-                <div className="text-sm text-[#5F6B7A]">用户好评率</div>
+                <div className="text-2xl font-bold text-[#232529]">92%</div>
+                <div className="text-sm text-[#666666]">用户好评率</div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="features" className="py-20 bg-white border-t border-[#E1E4E8]">
+      <section id="features" className="py-20 bg-white border-t border-[#E8E8E8]">
         <div className="max-w-[1200px] mx-auto px-8">
           <div className="text-center mb-14">
             <h2 className="section-title mb-4">为什么选择面试教练</h2>
@@ -142,12 +143,12 @@ const LandingPage = () => {
           </div>
           <div ref={featuresRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((f) => (
-              <div key={f.title} className="card !border-[#F0F2F5] hover:!border-[#FF6B35]/30 hover:!-translate-y-1 hover:!shadow-lg transition-all duration-300">
-                <div className="w-12 h-12 rounded-xl bg-[#FFF3ED] flex items-center justify-center text-xl text-[#FF6B35] mb-4">
+              <div key={f.title} className="card group !border-[#F2F3F5] hover:!border-[#00BFA5]/30 hover:!-translate-y-1 hover:!shadow-lg transition-all duration-300">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-xl text-white mb-4 shadow-[0_4px_14px_rgba(0,191,165,0.28)] group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300">
                   {f.icon}
                 </div>
-                <h3 className="text-base font-bold text-[#0D1117] mb-2">{f.title}</h3>
-                <p className="text-sm text-[#5F6B7A] leading-relaxed">{f.desc}</p>
+                <h3 className="text-base font-bold text-[#232529] mb-2">{f.title}</h3>
+                <p className="text-sm text-[#666666] leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -165,13 +166,13 @@ const LandingPage = () => {
           <div ref={stepsRef} className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {steps.map((s, i) => (
               <div key={s.step} className="relative text-center">
-                <div className="w-14 h-14 rounded-2xl bg-[#0D1117] text-white flex items-center justify-center text-lg font-bold mx-auto mb-4 transition-transform duration-300 hover:scale-110">
+                <div className="w-14 h-14 rounded-2xl bg-[#232529] text-white flex items-center justify-center text-lg font-bold mx-auto mb-4 transition-transform duration-300 hover:scale-110">
                   {s.step}
                 </div>
-                <h3 className="text-base font-bold text-[#0D1117] mb-2">{s.title}</h3>
-                <p className="text-sm text-[#5F6B7A] leading-relaxed">{s.desc}</p>
+                <h3 className="text-base font-bold text-[#232529] mb-2">{s.title}</h3>
+                <p className="text-sm text-[#666666] leading-relaxed">{s.desc}</p>
                 {i < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-7 -right-3 text-[#E1E4E8]">
+                  <div className="hidden md:block absolute top-7 -right-3 text-[#E8E8E8]">
                     <RightOutlined />
                   </div>
                 )}
@@ -181,7 +182,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section id="testimonials" className="py-20 bg-white border-t border-[#E1E4E8]">
+      <section id="testimonials" className="py-20 bg-white border-t border-[#E8E8E8]">
         <div className="max-w-[1200px] mx-auto px-8">
           <div className="text-center mb-14">
             <h2 className="section-title mb-4">用户怎么说</h2>
@@ -191,24 +192,24 @@ const LandingPage = () => {
           </div>
           <div ref={testimonialsRef} className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map((t) => (
-              <div key={t.name} className="card !border-[#F0F2F5] hover:!-translate-y-1 hover:!shadow-lg transition-all duration-300">
+              <div key={t.name} className="card !border-[#F2F3F5] hover:!-translate-y-1 hover:!shadow-lg transition-all duration-300">
                 <div className="flex items-center gap-1 mb-3">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <StarFilled
                       key={i}
-                      className={i < t.rating ? 'text-[#FF6B35]' : 'text-[#E1E4E8]'}
+                      className={i < t.rating ? 'text-[#00BFA5]' : 'text-[#E8E8E8]'}
                       style={{ fontSize: 14 }}
                     />
                   ))}
                 </div>
-                <p className="text-sm text-[#0D1117] leading-relaxed mb-4">{t.content}</p>
-                <div className="flex items-center gap-3 pt-3 border-t border-[#F0F2F5]">
-                  <div className="w-9 h-9 rounded-full bg-[#FFF3ED] flex items-center justify-center text-[#FF6B35] font-bold text-sm">
+                <p className="text-sm text-[#232529] leading-relaxed mb-4">{t.content}</p>
+                <div className="flex items-center gap-3 pt-3 border-t border-[#F2F3F5]">
+                  <div className="w-9 h-9 rounded-full bg-[#E0F7F4] flex items-center justify-center text-[#00BFA5] font-bold text-sm">
                     {t.name[0]}
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-[#0D1117]">{t.name}</div>
-                    <div className="text-xs text-[#8B949E]">{t.role}</div>
+                    <div className="text-sm font-semibold text-[#232529]">{t.name}</div>
+                    <div className="text-xs text-[#999999]">{t.role}</div>
                   </div>
                 </div>
               </div>
@@ -216,22 +217,22 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
-      <footer className="border-t border-[#E1E4E8] py-12">
+      <footer className="border-t border-[#E8E8E8] py-12">
         <div className="max-w-[1200px] mx-auto px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5 font-bold text-[#0D1117]">
-              <span className="w-7 h-7 rounded-md bg-[#FF6B35] flex items-center justify-center text-white text-xs">
-                AI
+            <div className="flex items-center gap-2.5 font-bold text-[#232529]">
+              <span className="w-7 h-7 rounded-md bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-white text-xs shadow-[0_2px_6px_rgba(0,191,165,0.35)]">
+                <ThunderboltFilled />
               </span>
               面试教练
             </div>
-            <div className="flex items-center gap-6 text-sm text-[#5F6B7A]">
-              <a href="#" className="hover:text-[#0D1117] transition-colors">关于我们</a>
-              <a href="#" className="hover:text-[#0D1117] transition-colors">隐私政策</a>
-              <a href="#" className="hover:text-[#0D1117] transition-colors">服务条款</a>
-              <a href="#" className="hover:text-[#0D1117] transition-colors">联系我们</a>
+            <div className="flex items-center gap-6 text-sm text-[#666666]">
+              <a href="#" className="hover:text-[#232529] transition-colors">关于我们</a>
+              <a href="#" className="hover:text-[#232529] transition-colors">隐私政策</a>
+              <a href="#" className="hover:text-[#232529] transition-colors">服务条款</a>
+              <a href="#" className="hover:text-[#232529] transition-colors">联系我们</a>
             </div>
-            <span className="text-sm text-[#8B949E]">© 2024 面试教练 All rights reserved.</span>
+            <span className="text-sm text-[#999999]">© 2024 面试教练 All rights reserved.</span>
           </div>
         </div>
       </footer>

@@ -3,22 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --color-ink: #0D1117;
-  --color-flame: #FF6B35;
-  --color-flame-hover: #E85D26;
-  --color-flame-light: #FFF3ED;
-  --color-bg: #F6F8FA;
+  /* 品牌主色：BOSS 直聘式青蓝（偏淡偏绿） */
+  --color-brand: #00BFA5;
+  --color-brand-hover: #00A88A;
+  --color-brand-light: #E0F7F4;
+  --color-bg: #F7F8FA;
   --color-surface: #FFFFFF;
-  --color-rock: #5F6B7A;
-  --color-slate: #8B949E;
-  --color-line: #E1E4E8;
-  --color-line-light: #F0F2F5;
-  --color-success: #2DA44E;
-  --color-success-bg: #ECFDF3;
-  --color-error: #CF222E;
-  --color-error-bg: #FFF0F1;
-  --color-warning: #BF8700;
-  --color-warning-bg: #FFF8E6;
+  /* 中性灰文字阶梯 */
+  --color-ink: #232529;
+  --color-rock: #666666;
+  --color-slate: #999999;
+  --color-line: #E8E8E8;
+  --color-line-light: #F2F3F5;
+  /* 语义色 */
+  --color-success: #00B578;
+  --color-success-bg: #E8F8F1;
+  --color-error: #F53535;
+  --color-error-bg: #FDECEC;
+  --color-warning: #FFAA00;
+  --color-warning-bg: #FFF7E0;
 
   --sidebar-width: 240px;
   --header-height: 60px;
@@ -26,15 +29,15 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
-  --shadow-sm: 0 1px 3px rgba(13, 17, 23, 0.04);
-  --shadow-md: 0 4px 16px rgba(13, 17, 23, 0.06);
-  --shadow-lg: 0 8px 32px rgba(13, 17, 23, 0.08);
+  --shadow-sm: 0 1px 3px rgba(35, 37, 41, 0.05);
+  --shadow-md: 0 4px 16px rgba(35, 37, 41, 0.07);
+  --shadow-lg: 0 8px 32px rgba(35, 37, 41, 0.09);
 
-  /* 面试间暗色沉浸主题 */
-  --room-bg: #0D1117;
-  --room-text: #E1E4E8;
-  --room-text-strong: #F6F8FA;
-  --room-muted: #5F6B7A;
+  /* 面试间暗色沉浸主题（原始绿色，不动） */
+  --room-bg: #0E1F19;
+  --room-text: #E3EAE6;
+  --room-text-strong: #F4F7F5;
+  --room-muted: #5C6B65;
   --room-line: rgba(255, 255, 255, 0.06);
   --room-line-strong: rgba(255, 255, 255, 0.12);
   --room-surface: rgba(255, 255, 255, 0.03);
@@ -57,7 +60,7 @@ body {
     'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
     sans-serif;
   color: var(--color-ink);
-  background: var(--color-bg);
+  background: #F1F2F4;
   line-height: 1.6;
 }
 
@@ -78,13 +81,33 @@ textarea {
   font-family: inherit;
 }
 
+/* 选区与滚动条（克制、融入页面） */
+::selection {
+  background: rgba(0, 191, 165, 0.18);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8DBE0;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C0C4CB;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @layer components {
   .btn-flame {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: var(--color-flame);
+    background: linear-gradient(135deg, #00BFA5, #26C6DA);
     color: #fff;
     border: none;
     border-radius: var(--radius-md);
@@ -92,17 +115,19 @@ textarea {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.18s ease;
     white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0, 191, 165, 0.22);
   }
 
   .btn-flame:hover {
-    background: var(--color-flame-hover);
-    box-shadow: 0 4px 16px rgba(255, 107, 53, 0.25);
+    background: linear-gradient(135deg, #00A88A, #00BFA5);
+    box-shadow: 0 6px 22px rgba(0, 191, 165, 0.38);
+    transform: translateY(-1px);
   }
 
   .btn-flame:active {
-    transform: scale(0.98);
+    transform: scale(0.97);
   }
 
   .btn-flame-lg {
@@ -124,7 +149,7 @@ textarea {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.18s ease;
     white-space: nowrap;
   }
 
@@ -148,12 +173,13 @@ textarea {
     border: 1px solid var(--color-line);
     border-radius: var(--radius-lg);
     padding: 24px;
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
   }
 
   .card:hover {
-    border-color: var(--color-slate);
-    box-shadow: var(--shadow-md);
+    border-color: #B2EBE0;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
   }
 
   .tag {
@@ -166,8 +192,8 @@ textarea {
   }
 
   .tag-flame {
-    background: var(--color-flame-light);
-    color: var(--color-flame);
+    background: var(--color-brand-light);
+    color: var(--color-brand);
   }
 
   .tag-success {
@@ -206,10 +232,12 @@ textarea {
   }
 
   .gradient-text {
-    background: linear-gradient(135deg, var(--color-flame), #FF8F65);
+    background: linear-gradient(120deg, #00BFA5, #26C6DA, #00BFA5);
+    background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    animation: gradient-shift 6s linear infinite;
   }
 }
 
@@ -237,6 +265,11 @@ textarea {
   }
 }
 
+/* 渐变文字流光 */
+@keyframes gradient-shift {
+  to { background-position: 200% center; }
+}
+
 /* ===== 面试间：录音波形条 ===== */
 @keyframes room-wave {
   0%, 100% { height: 8px; opacity: 0.4; }
@@ -246,7 +279,7 @@ textarea {
 .room-waveform-bar {
   width: 5px;
   border-radius: 3px;
-  background: rgba(255, 107, 53, 0.5);
+  background: rgba(4, 120, 87, 0.55);
   animation: room-wave 1.2s ease-in-out infinite;
   animation-delay: var(--wave-delay, 0s);
 }

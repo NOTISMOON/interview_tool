@@ -14,6 +14,23 @@ import {
   DeleteOutlined,
   EyeInvisibleOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
+
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
+
+/** 格式化消息时间为相对时间 */
+function formatMsgTime(dateStr: string): string {
+  const d = dayjs(dateStr);
+  if (!d.isValid()) return dateStr;
+  const now = dayjs();
+  if (now.diff(d, 'hour') < 24) return d.fromNow();
+  if (now.diff(d, 'day') < 7) return d.format('dddd HH:mm');
+  return d.format('M/D HH:mm');
+}
+
 import {
   getMessages,
   getUnreadCount,
@@ -298,25 +315,25 @@ const MessagesPage = () => {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'system': return <BellOutlined className="text-[#FF6B35]" />;
-      case 'like': return <LikeOutlined className="text-[#CF222E]" />;
-      case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
-      case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
-      case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
-      case 'follow_post': return <FireOutlined className="text-[#FF6B35]" />;
-      default: return <BellOutlined className="text-[#8B949E]" />;
+      case 'system': return <BellOutlined className="text-[#00BFA5]" />;
+      case 'like': return <LikeOutlined className="text-[#F53535]" />;
+      case 'comment': return <CommentOutlined className="text-[#00B578]" />;
+      case 'follow': return <TeamOutlined className="text-[#232529]" />;
+      case 'dm': return <MessageOutlined className="text-[#00BFA5]" />;
+      case 'follow_post': return <FireOutlined className="text-[#00BFA5]" />;
+      default: return <BellOutlined className="text-[#999999]" />;
     }
   };
 
   const getIconBg = (type: string) => {
     switch (type) {
-      case 'system': return 'bg-[#FFF3ED]';
-      case 'like': return 'bg-[#FFF0F1]';
-      case 'comment': return 'bg-[#ECFDF3]';
-      case 'follow': return 'bg-[#F6F8FA]';
-      case 'dm': return 'bg-[#FFF3ED]';
-      case 'follow_post': return 'bg-[#FFF3ED]';
-      default: return 'bg-[#F6F8FA]';
+      case 'system': return 'bg-[#E0F7F4]';
+      case 'like': return 'bg-[#FDECEC]';
+      case 'comment': return 'bg-[#E0F7F4]';
+      case 'follow': return 'bg-[#F7F8FA]';
+      case 'dm': return 'bg-[#E0F7F4]';
+      case 'follow_post': return 'bg-[#E0F7F4]';
+      default: return 'bg-[#F7F8FA]';
     }
   };
 
@@ -326,18 +343,18 @@ const MessagesPage = () => {
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => navigate('/dashboard')}
-            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
           >
             <ArrowLeftOutlined />
           </button>
-          <h1 className="text-xl font-bold text-[#0D1117]">消息中心</h1>
+          <h1 className="text-xl font-bold text-[#232529]">消息中心</h1>
           {unreadCount > 0 && <span className="tag tag-flame">{unreadCount} 条未读</span>}
           {unreadCount > 0 && (
             <Tooltip title="全部标为已读">
               <button
                 onClick={handleMarkAllRead}
                 disabled={markingAll}
-                className="ml-auto w-8 h-8 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#2DA44E] hover:border-[#2DA44E] transition-colors"
+                className="ml-auto w-8 h-8 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#00B578] hover:border-[#00B578] transition-colors"
               >
                 <CheckOutlined />
               </button>
@@ -363,17 +380,17 @@ const MessagesPage = () => {
         {conversations.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
-              <MessageOutlined className="text-[#FF6B35]" />
-              <span className="text-sm font-semibold text-[#0D1117]">私信</span>
+              <MessageOutlined className="text-[#00BFA5]" />
+              <span className="text-sm font-semibold text-[#232529]">私信</span>
               {conversationsTotalUnread > 0 && (
                 <span className="tag tag-flame text-xs">{conversationsTotalUnread}</span>
               )}
             </div>
-            <div className="bg-white border border-[#E1E4E8] rounded-xl divide-y divide-[#F0F2F5] overflow-hidden">
+            <div className="bg-white border border-[#E8E8E8] rounded-xl divide-y divide-[#F2F3F5] overflow-hidden">
               {conversations.map((conv) => (
                 <div
                   key={conv.id}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-[#FAFBFC] transition-colors cursor-pointer"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-[#F7F8FA] transition-colors cursor-pointer"
                   onClick={() => navigate(`/dashboard/messages/chat/${conv.peer?.id}`)}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -382,17 +399,17 @@ const MessagesPage = () => {
                 >
                   <Avatar
                     size={40}
-                    className="!bg-[#0D1117] flex-shrink-0 !text-sm"
+                    className="!bg-[#232529] flex-shrink-0 !text-sm"
                   >
                     {(conv.peer?.nickname || '?')[0]}
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-[#0D1117] truncate">
+                      <span className="text-sm font-semibold text-[#232529] truncate">
                         {conv.peer?.nickname || `用户${conv.peer?.id}`}
                       </span>
                       {conv.last_message_at && (
-                        <span className="text-xs text-[#8B949E] flex-shrink-0">
+                        <span className="text-xs text-[#999999] flex-shrink-0">
                           {new Date(conv.last_message_at).toLocaleString('zh-CN', {
                             month: 'numeric',
                             day: 'numeric',
@@ -403,11 +420,11 @@ const MessagesPage = () => {
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-xs text-[#5F6B7A] truncate flex-1 mr-2">
+                      <p className="text-xs text-[#666666] truncate flex-1 mr-2">
                         {conv.last_message || '暂无消息'}
                       </p>
                       {conv.unread > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[#FF6B35] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-[#00BFA5] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
                           {conv.unread > 99 ? '99+' : conv.unread}
                         </span>
                       )}
@@ -427,36 +444,37 @@ const MessagesPage = () => {
           </div>
         ) : filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24">
-            <div className="w-16 h-16 rounded-2xl bg-[#F6F8FA] flex items-center justify-center mb-4">
-              <BellOutlined className="text-2xl text-[#8B949E]" />
+            <div className="w-16 h-16 rounded-2xl bg-[#F7F8FA] flex items-center justify-center mb-4">
+              <BellOutlined className="text-2xl text-[#999999]" />
             </div>
-            <h3 className="text-base font-semibold text-[#0D1117] mb-2">暂无消息</h3>
-            <p className="text-sm text-[#5F6B7A]">当你收到通知时，会显示在这里</p>
+            <h3 className="text-base font-semibold text-[#232529] mb-2">暂无消息</h3>
+            <p className="text-sm text-[#666666]">当你收到通知时，会显示在这里</p>
           </div>
         ) : (
           filteredMessages.map((msgItem) => (
             <div
               key={msgItem.id}
-              className={`bg-white border rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer ${!msgItem.isRead ? 'border-[#FF6B35]/30 bg-[#FFF3ED]/30' : 'border-[#E1E4E8]'}`}
+              className={`group bg-white border rounded-xl p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative overflow-hidden ${!msgItem.isRead ? 'border-[#00BFA5]/30 bg-[#E0F7F4]/30' : 'border-[#E8E8E8]'}`}
               onClick={() => handleMessageClick(msgItem)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ kind: 'message', item: msgItem, x: e.clientX, y: e.clientY });
               }}
             >
+              {!msgItem.isRead && <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-[#00BFA5] rounded-full" />}
               <div className="flex items-start gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${getIconBg(msgItem.type)}`}>
                   {getIcon(msgItem.type)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <h4 className={`text-sm ${!msgItem.isRead ? 'font-semibold text-[#0D1117]' : 'font-medium text-[#5F6B7A]'}`}>
+                    <h4 className={`text-sm ${!msgItem.isRead ? 'font-semibold text-[#232529]' : 'font-medium text-[#666666]'}`}>
                       {msgItem.title}
-                      {!msgItem.isRead && <span className="inline-block w-2 h-2 rounded-full bg-[#CF222E] ml-2 align-middle" />}
+                      {!msgItem.isRead && <span className="inline-block w-2 h-2 rounded-full bg-[#F53535] ml-2 align-middle animate-pulse" />}
                     </h4>
-                    <span className="text-xs text-[#8B949E] flex-shrink-0">{msgItem.createdAt}</span>
+                    <span className="text-xs text-[#999999] flex-shrink-0 ml-3">{formatMsgTime(msgItem.createdAt)}</span>
                   </div>
-                  <p className="text-xs text-[#5F6B7A] line-clamp-2">{msgItem.content}</p>
+                  <p className={`text-xs leading-relaxed line-clamp-2 ${!msgItem.isRead ? 'text-[#232529]' : 'text-[#666666]'}`}>{msgItem.content}</p>
                 </div>
               </div>
             </div>

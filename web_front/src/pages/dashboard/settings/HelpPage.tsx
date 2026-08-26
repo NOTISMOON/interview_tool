@@ -60,18 +60,18 @@ const HelpPage = () => {
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate('/dashboard/profile')}
-          className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+          className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
         >
           <ArrowLeftOutlined />
         </button>
-        <h1 className="text-xl font-bold text-[#0D1117]">帮助与反馈</h1>
+        <h1 className="text-xl font-bold text-[#232529]">帮助与反馈</h1>
       </div>
 
-      <div className="bg-gradient-to-br from-[#0D1117] to-[#1A2332] rounded-2xl p-8 text-white mb-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-[#FF6B35]/10 rounded-full blur-3xl" />
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-8 mb-6 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-[#00BFA5]" />
         <div className="relative">
-          <h2 className="text-xl font-bold mb-2">需要帮助？</h2>
-          <p className="text-sm text-white/60 mb-4">我们随时为你提供支持</p>
+          <h2 className="text-xl font-bold text-[#232529] mb-2">需要帮助？</h2>
+          <p className="text-sm text-[#666666] mb-4">我们随时为你提供支持</p>
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => msg.info('在线客服功能即将上线')}
@@ -90,26 +90,26 @@ const HelpPage = () => {
       </div>
 
       <div className="mb-6">
-        <h2 className="text-base font-bold text-[#0D1117] mb-4 flex items-center gap-2">
-          <QuestionCircleOutlined className="text-[#FF6B35]" />
+        <h2 className="text-base font-bold text-[#232529] mb-4 flex items-center gap-2">
+          <QuestionCircleOutlined className="text-[#00BFA5]" />
           常见问题
         </h2>
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl overflow-hidden">
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl overflow-hidden">
           <Collapse
             ghost
             expandIconPosition="end"
             items={FAQ_ITEMS.map((item) => ({
               key: item.key,
-              label: <span className="text-sm font-semibold text-[#0D1117]">{item.label}</span>,
-              children: <p className="text-sm text-[#5F6B7A] leading-relaxed">{item.children}</p>,
+              label: <span className="text-sm font-semibold text-[#232529]">{item.label}</span>,
+              children: <p className="text-sm text-[#666666] leading-relaxed">{item.children}</p>,
             }))}
-            className="!bg-transparent [&_.ant-collapse-item]:!border-b [&_.ant-collapse-item]:!border-[#F0F2F5] [&_.ant-collapse-item:last-child]:!border-b-0 [&_.ant-collapse-header]:!px-6 [&_.ant-collapse-content-box]:!px-6 [&_.ant-collapse-content-box]:!pb-5"
+            className="!bg-transparent [&_.ant-collapse-item]:!border-b [&_.ant-collapse-item]:!border-[#F2F3F5] [&_.ant-collapse-item:last-child]:!border-b-0 [&_.ant-collapse-header]:!px-6 [&_.ant-collapse-content-box]:!px-6 [&_.ant-collapse-content-box]:!pb-5"
           />
         </div>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 text-center">
-        <p className="text-sm text-[#5F6B7A] mb-2">没有找到答案？</p>
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 text-center">
+        <p className="text-sm text-[#666666] mb-2">没有找到答案？</p>
         <button
           onClick={() => msg.info('提交反馈功能即将上线')}
           className="btn-flame"

@@ -157,7 +157,7 @@ const CommunityPage = () => {
     <div className="flex flex-col h-full">
       <div className="flex-shrink-0">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold text-[#0D1117]">社区</h1>
+          <h1 className="text-xl font-bold text-[#232529]">社区</h1>
           <button onClick={() => setCreateModalOpen(true)} className="btn-flame">
             <PlusOutlined /> 发帖
           </button>
@@ -189,33 +189,35 @@ const CommunityPage = () => {
             {posts.map((post) => (
               <div
                 key={post.id}
-                className="bg-white border border-[#E1E4E8] rounded-xl p-5 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                className="group bg-white border border-[#E8E8E8] rounded-xl p-5 hover:border-[#00BFA5]/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative overflow-hidden"
                 onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
               >
+                <div className="absolute left-0 top-3 bottom-3 w-0.5 bg-[#00BFA5] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                 <div className="flex items-start gap-3">
                   <Avatar
                     size={36}
                     src={post.author?.avatar}
-                    className="!bg-[#0D1117] flex-shrink-0 cursor-pointer"
+                    className="!bg-[#232529] flex-shrink-0 cursor-pointer ring-2 ring-transparent hover:ring-[#00BFA5]/30 transition-all"
                     onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
                   >{post.author?.nickname?.[0] || '?'}</Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
-                      <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
-                      {post.is_hot && <span className="tag tag-flame"><FireOutlined className="text-[10px]" /> 热</span>}
+                      <h4 className="text-sm font-semibold text-[#232529] truncate group-hover:text-[#00BFA5] transition-colors">{post.title}</h4>
+                      {post.is_hot && <span className="tag tag-flame shrink-0"><FireOutlined className="text-[10px]" /> 热</span>}
                     </div>
-                    <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-3">{post.content_preview || post.title}</p>
+                    <p className="text-xs text-[#666666] leading-relaxed line-clamp-2 mb-3">{post.content_preview || post.title}</p>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-xs text-[#8B949E]">
+                      <div className="flex items-center gap-3 text-xs text-[#999999]">
                         <span
-                          className="cursor-pointer hover:text-[#FF6B35]"
+                          className="cursor-pointer hover:text-[#00BFA5] transition-colors"
                           onClick={(e) => { e?.stopPropagation(); navigate(`/dashboard/user/${post.author?.id}`); }}
                         >{post.author?.nickname || '未知用户'}</span>
+                        <span className="text-[#D8DBE0]">·</span>
                         <span>{formatTime(post.created_at)}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-[#8B949E]">
-                        <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes_count}</span>
-                        <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments_count}</span>
+                      <div className="flex items-center gap-3 text-xs text-[#999999]">
+                        <span className="inline-flex items-center gap-1 hover:text-[#00BFA5] transition-colors"><LikeOutlined className="text-[11px]" /> {post.likes_count}</span>
+                        <span className="inline-flex items-center gap-1 hover:text-[#00BFA5] transition-colors"><MessageOutlined className="text-[11px]" /> {post.comments_count}</span>
                       </div>
                     </div>
                   </div>
@@ -227,7 +229,7 @@ const CommunityPage = () => {
                 <button
                   onClick={() => fetchPosts(activeTab)}
                   disabled={loading}
-                  className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                  className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
                 >
                   {loading ? '加载中...' : '加载更多'}
                 </button>
@@ -245,13 +247,13 @@ const CommunityPage = () => {
         okText="发布"
         cancelText="取消"
         width={640}
-        okButtonProps={{ className: '!bg-[#FF6B35] !border-[#FF6B35] hover:!bg-[#E85D26]', loading: publishing }}
+        okButtonProps={{ className: '!bg-[#00BFA5] !border-[#00BFA5] hover:!bg-[#00A88A]', loading: publishing }}
         destroyOnClose
         confirmLoading={publishing}
       >
         <div className="py-2 space-y-4">
           <div>
-            <label className="text-sm font-semibold text-[#0D1117] block mb-2">标题</label>
+            <label className="text-sm font-semibold text-[#232529] block mb-2">标题</label>
             <Input
               value={postTitle}
               onChange={(e) => setPostTitle(e.target.value)}
@@ -263,7 +265,7 @@ const CommunityPage = () => {
           </div>
 
           <div>
-            <label className="text-sm font-semibold text-[#0D1117] block mb-2">内容</label>
+            <label className="text-sm font-semibold text-[#232529] block mb-2">内容</label>
             <Input.TextArea
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
@@ -276,14 +278,14 @@ const CommunityPage = () => {
           </div>
 
           <div>
-            <label className="text-sm font-semibold text-[#0D1117] block mb-2">标签</label>
+            <label className="text-sm font-semibold text-[#232529] block mb-2">标签</label>
             <div className="flex flex-wrap gap-2 mb-2">
               {postTags.map((tag) => (
                 <Tag
                   key={tag}
                   closable
                   onClose={() => handleRemoveTag(tag)}
-                  className="!bg-[#FFF3ED] !text-[#FF6B35] !border-[#FF6B35]/20 !rounded-md !py-0.5 !px-2"
+                  className="!bg-[#E0F7F4] !text-[#00BFA5] !border-[#00BFA5]/20 !rounded-md !py-0.5 !px-2"
                 >
                   {tag}
                 </Tag>
@@ -302,7 +304,7 @@ const CommunityPage = () => {
                   <button
                     key={tag}
                     onClick={() => handleAddTag(tag)}
-                    className="text-xs px-3 py-1 rounded-md border border-[#E1E4E8] text-[#5F6B7A] hover:border-[#FF6B35] hover:text-[#FF6B35] transition-colors"
+                    className="text-xs px-3 py-1 rounded-md border border-[#E8E8E8] text-[#666666] hover:border-[#00BFA5] hover:text-[#00BFA5] transition-colors"
                   >
                     {tag}
                   </button>
@@ -312,13 +314,13 @@ const CommunityPage = () => {
           </div>
 
           <div>
-            <label className="text-sm font-semibold text-[#0D1117] block mb-2">
+            <label className="text-sm font-semibold text-[#232529] block mb-2">
               图片
-              <span className="text-xs text-[#8B949E] font-normal ml-1">（最多 4 张）</span>
+              <span className="text-xs text-[#999999] font-normal ml-1">（最多 4 张）</span>
             </label>
             <div className="flex flex-wrap gap-3">
               {postImages.map((img, idx) => (
-                <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-[#E1E4E8]">
+                <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-[#E8E8E8]">
                   <img src={img} alt={`upload-${idx}`} className="w-full h-full object-cover" />
                   <button
                     onClick={() => handleRemoveImage(idx)}
@@ -346,13 +348,13 @@ const CommunityPage = () => {
                     return false;
                   }}
                 >
-                  <div className="w-24 h-24 rounded-lg border-2 border-dashed border-[#E1E4E8] flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#FF6B35] hover:bg-[#FFF3ED]/50 transition-colors">
+                  <div className="w-24 h-24 rounded-lg border-2 border-dashed border-[#E8E8E8] flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#00BFA5] hover:bg-[#E0F7F4]/50 transition-colors">
                     {imageUploading ? (
-                      <LoadingOutlined className="text-[#FF6B35] text-lg" />
+                      <LoadingOutlined className="text-[#00BFA5] text-lg" />
                     ) : (
                       <>
-                        <PictureOutlined className="text-[#8B949E] text-lg" />
-                        <span className="text-[10px] text-[#8B949E]">上传图片</span>
+                        <PictureOutlined className="text-[#999999] text-lg" />
+                        <span className="text-[10px] text-[#999999]">上传图片</span>
                       </>
                     )}
                   </div>

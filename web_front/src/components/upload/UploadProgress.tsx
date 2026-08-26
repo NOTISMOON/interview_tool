@@ -23,17 +23,17 @@ export function UploadProgress({ percent, uploading, onCancel }: UploadProgressP
   return (
     <div className="mt-3" aria-live="polite" role="status">
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs text-[#5F6B7A]">正在上传… {percent}%</span>
+        <span className="text-xs text-[#666666]">正在上传… {percent}%</span>
         <button
           type="button"
           onClick={onCancel}
-          className="text-xs text-[#CF222E] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#CF222E]/40 rounded"
+          className="text-xs text-[#F53535] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F53535]/40 rounded"
         >
           取消上传
         </button>
       </div>
       <div
-        className="h-2 bg-[#EDF0F4] rounded-full overflow-hidden"
+        className="h-2 bg-[#EEEEEE] rounded-full overflow-hidden"
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}
@@ -41,7 +41,7 @@ export function UploadProgress({ percent, uploading, onCancel }: UploadProgressP
         aria-label="上传进度"
       >
         <div
-          className="h-full bg-[#FF6B35] rounded-full transition-[width] duration-200"
+          className="h-full bg-[#00BFA5] rounded-full transition-[width] duration-200"
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -53,7 +53,7 @@ export function UploadProgress({ percent, uploading, onCancel }: UploadProgressP
 export function UploadError({ message }: { message: string }) {
   if (!message) return null;
   return (
-    <p className="mt-2 flex items-center gap-1.5 text-xs text-[#CF222E]" role="alert">
+    <p className="mt-2 flex items-center gap-1.5 text-xs text-[#F53535]" role="alert">
       <CloseCircleFilled />
       {message}
     </p>

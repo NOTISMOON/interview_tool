@@ -33,7 +33,7 @@ const CallbackPage = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center">
+    <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
       <Spin size="large" tip="正在登录..." />
     </div>
   );

@@ -34,27 +34,27 @@ const TYPE_MAP: Record<string, SystemMessage['type']> = {
 
 const getIcon = (type: string) => {
   switch (type) {
-    case 'system': return <BellOutlined className="text-[#FF6B35]" />;
-    case 'like': return <LikeOutlined className="text-[#CF222E]" />;
-    case 'comment': return <CommentOutlined className="text-[#2DA44E]" />;
-    case 'follow': return <TeamOutlined className="text-[#0D1117]" />;
-    case 'dm': return <MessageOutlined className="text-[#FF6B35]" />;
-    case 'interview': return <VideoCameraOutlined className="text-[#0D1117]" />;
-    case 'follow_post': return <FireOutlined className="text-[#FF6B35]" />;
-    default: return <BellOutlined className="text-[#8B949E]" />;
+    case 'system': return <BellOutlined className="text-[#00BFA5]" />;
+    case 'like': return <LikeOutlined className="text-[#F53535]" />;
+    case 'comment': return <CommentOutlined className="text-[#00B578]" />;
+    case 'follow': return <TeamOutlined className="text-[#232529]" />;
+    case 'dm': return <MessageOutlined className="text-[#00BFA5]" />;
+    case 'interview': return <VideoCameraOutlined className="text-[#232529]" />;
+    case 'follow_post': return <FireOutlined className="text-[#00BFA5]" />;
+    default: return <BellOutlined className="text-[#999999]" />;
   }
 };
 
 const getIconBg = (type: string) => {
   switch (type) {
-    case 'system': return 'bg-[#FFF3ED]';
-    case 'like': return 'bg-[#FFF0F1]';
-    case 'comment': return 'bg-[#ECFDF3]';
-    case 'follow': return 'bg-[#F6F8FA]';
-    case 'dm': return 'bg-[#FFF3ED]';
-    case 'interview': return 'bg-[#F6F8FA]';
-    case 'follow_post': return 'bg-[#FFF3ED]';
-    default: return 'bg-[#F6F8FA]';
+    case 'system': return 'bg-[#E0F7F4]';
+    case 'like': return 'bg-[#FDECEC]';
+    case 'comment': return 'bg-[#E0F7F4]';
+    case 'follow': return 'bg-[#F7F8FA]';
+    case 'dm': return 'bg-[#E0F7F4]';
+    case 'interview': return 'bg-[#F7F8FA]';
+    case 'follow_post': return 'bg-[#E0F7F4]';
+    default: return 'bg-[#F7F8FA]';
   }
 };
 
@@ -125,8 +125,8 @@ const MessageDetailPage = () => {
   if (!detail) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <h2 className="text-lg font-bold text-[#0D1117] mb-2">消息不存在</h2>
-        <p className="text-sm text-[#5F6B7A] mb-6">该消息可能已被删除或链接无效</p>
+        <h2 className="text-lg font-bold text-[#232529] mb-2">消息不存在</h2>
+        <p className="text-sm text-[#666666] mb-6">该消息可能已被删除或链接无效</p>
         <button onClick={() => navigate('/dashboard/messages')} className="btn-flame">
           返回消息中心
         </button>
@@ -198,7 +198,7 @@ const MessageDetailPage = () => {
     if (type === 'follow' && detail.from_user) {
       return (
         <div
-          className="bg-white border border-[#E1E4E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#FF6B35]/30 transition-all cursor-pointer"
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#00BFA5]/30 transition-all cursor-pointer"
           onClick={() => userLink && navigate(`/dashboard/user/${userLink}`)}
         >
           <div className="flex items-center gap-3">
@@ -209,13 +209,13 @@ const MessageDetailPage = () => {
                 className="w-12 h-12 rounded-full object-cover flex-shrink-0"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-[#0D1117] flex items-center justify-center text-white text-base font-bold flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-[#232529] flex items-center justify-center text-white text-base font-bold flex-shrink-0">
                 {detail.from_user.nickname[0]}
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-semibold text-[#0D1117]">{detail.from_user.nickname}</h4>
-              <p className="text-xs text-[#5F6B7A] line-clamp-1">点击查看 TA 的主页</p>
+              <h4 className="text-sm font-semibold text-[#232529]">{detail.from_user.nickname}</h4>
+              <p className="text-xs text-[#666666] line-clamp-1">点击查看 TA 的主页</p>
             </div>
           </div>
         </div>
@@ -225,17 +225,17 @@ const MessageDetailPage = () => {
     if ((type === 'comment' || type === 'like' || type === 'follow_post') && post) {
       return (
         <div
-          className="bg-white border border-[#E1E4E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#FF6B35]/30 transition-all cursor-pointer"
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#00BFA5]/30 transition-all cursor-pointer"
           onClick={() => postLink && navigate(`/dashboard/community/post/${postLink}`)}
         >
           <div className="flex items-center gap-3 mb-2">
             <span className="tag tag-flame">帖子</span>
             {post.tags.slice(0, 2).map((t) => (
-              <span key={t} className="text-xs text-[#8B949E]">#{t}</span>
+              <span key={t} className="text-xs text-[#999999]">#{t}</span>
             ))}
           </div>
-          <h4 className="text-sm font-semibold text-[#0D1117] mb-1">{post.title}</h4>
-          <p className="text-xs text-[#5F6B7A] line-clamp-2">
+          <h4 className="text-sm font-semibold text-[#232529] mb-1">{post.title}</h4>
+          <p className="text-xs text-[#666666] line-clamp-2">
             {post.likes_count} 赞 · {post.comments_count} 评论 · {post.views_count} 浏览
           </p>
         </div>
@@ -245,15 +245,15 @@ const MessageDetailPage = () => {
     if (reportLink) {
       return (
         <div
-          className="bg-white border border-[#E1E4E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#FF6B35]/30 transition-all cursor-pointer"
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#00BFA5]/30 transition-all cursor-pointer"
           onClick={() => navigate(`/dashboard/report/${reportLink}`)}
         >
           <div className="flex items-center gap-3 mb-2">
             <span className="tag tag-success">面试报告</span>
-            <span className="text-xs text-[#8B949E]">AI 模拟面试</span>
+            <span className="text-xs text-[#999999]">AI 模拟面试</span>
           </div>
-          <h4 className="text-sm font-semibold text-[#0D1117] mb-1">面试报告已生成</h4>
-          <p className="text-xs text-[#5F6B7A] line-clamp-2">点击查看详细分析和建议</p>
+          <h4 className="text-sm font-semibold text-[#232529] mb-1">面试报告已生成</h4>
+          <p className="text-xs text-[#666666] line-clamp-2">点击查看详细分析和建议</p>
         </div>
       );
     }
@@ -267,11 +267,11 @@ const MessageDetailPage = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard/messages')}
-            className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
           >
             <ArrowLeftOutlined />
           </button>
-          <h1 className="text-lg font-bold text-[#0D1117]">消息详情</h1>
+          <h1 className="text-lg font-bold text-[#232529]">消息详情</h1>
         </div>
 
         <Dropdown
@@ -290,13 +290,13 @@ const MessageDetailPage = () => {
           trigger={['click']}
           placement="bottomRight"
         >
-          <button className="w-9 h-9 rounded-lg border border-[#E1E4E8] flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors">
+          <button className="w-9 h-9 rounded-lg border border-[#E8E8E8] flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors">
             <MoreOutlined />
           </button>
         </Dropdown>
       </div>
 
-      <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-4">
+      <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mb-4">
         <div className="flex items-center gap-3 mb-4">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${getIconBg(type)}`}>
             {getIcon(type)}
@@ -304,23 +304,23 @@ const MessageDetailPage = () => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="tag tag-flame">{MESSAGE_TYPE_LABEL[type]}</span>
-              <span className="text-xs text-[#8B949E]">{formatTime(detail.created_at)}</span>
+              <span className="text-xs text-[#999999]">{formatTime(detail.created_at)}</span>
             </div>
           </div>
         </div>
 
-        <h2 className="text-lg font-extrabold text-[#0D1117] mb-4 leading-snug">
+        <h2 className="text-lg font-extrabold text-[#232529] mb-4 leading-snug">
           {detail.title}
         </h2>
 
-        <div className="text-sm text-[#0D1117] leading-relaxed whitespace-pre-line">
+        <div className="text-sm text-[#232529] leading-relaxed whitespace-pre-line">
           {detail.content}
         </div>
       </div>
 
       {getRelatedCard() && (
         <div className="mb-4">
-          <h3 className="text-xs font-semibold text-[#8B949E] mb-3 uppercase tracking-wide">关联内容</h3>
+          <h3 className="text-xs font-semibold text-[#999999] mb-3 uppercase tracking-wide">关联内容</h3>
           {getRelatedCard()}
         </div>
       )}

@@ -267,41 +267,41 @@ const ProfilePage = () => {
     {
       title: '数据',
       items: [
-        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#FF6B35', bg: '#FFF3ED', onClick: () => setResumeModalOpen(true) },
-        { icon: <HistoryOutlined />, label: '面试记录', count: interviewCount, color: '#2DA44E', bg: '#ECFDF3', onClick: () => navigate('/dashboard/history') },
-        { icon: <TrophyOutlined />, label: '平均得分', count: avgScore !== null ? `${avgScore} 分` : '--', color: '#BF8700', bg: '#FFF8E6', onClick: () => navigate('/dashboard/history') },
+        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#00BFA5', bg: '#E0F7F4', onClick: () => setResumeModalOpen(true) },
+        { icon: <HistoryOutlined />, label: '面试记录', count: interviewCount, color: '#00B578', bg: '#E0F7F4', onClick: () => navigate('/dashboard/history') },
+        { icon: <TrophyOutlined />, label: '平均得分', count: avgScore !== null ? `${avgScore} 分` : '--', color: '#FFAA00', bg: '#FFF7E0', onClick: () => navigate('/dashboard/history') },
       ],
     },
     {
       title: '社交',
       items: [
-        { icon: <TeamOutlined />, label: '我的关注', count: user?.followingCount ?? 0, color: '#FF6B35', bg: '#FFF3ED', onClick: () => navigate('/dashboard/following') },
-        { icon: <UserAddOutlined />, label: '我的粉丝', count: user?.followersCount ?? 0, color: '#2DA44E', bg: '#ECFDF3', onClick: () => navigate('/dashboard/followers') },
+        { icon: <TeamOutlined />, label: '我的关注', count: user?.followingCount ?? 0, color: '#00BFA5', bg: '#E0F7F4', onClick: () => navigate('/dashboard/following') },
+        { icon: <UserAddOutlined />, label: '我的粉丝', count: user?.followersCount ?? 0, color: '#00B578', bg: '#E0F7F4', onClick: () => navigate('/dashboard/followers') },
       ],
     },
     {
       title: '功能',
       items: [
-        { icon: <BellOutlined />, label: '消息中心', color: '#FF6B35', bg: '#FFF3ED', onClick: () => navigate('/dashboard/messages') },
-        { icon: <StarOutlined />, label: '我的收藏', color: '#BF8700', bg: '#FFF8E6', onClick: () => navigate('/dashboard/favorites') },
-        { icon: <ShareAltOutlined />, label: '邀请好友', color: '#2DA44E', bg: '#ECFDF3', onClick: () => message.info('功能开发中') },
+        { icon: <BellOutlined />, label: '消息中心', color: '#00BFA5', bg: '#E0F7F4', onClick: () => navigate('/dashboard/messages') },
+        { icon: <StarOutlined />, label: '我的收藏', color: '#FFAA00', bg: '#FFF7E0', onClick: () => navigate('/dashboard/favorites') },
+        { icon: <ShareAltOutlined />, label: '邀请好友', color: '#00B578', bg: '#E0F7F4', onClick: () => message.info('功能开发中') },
       ],
     },
     {
       title: '其他',
       items: [
-        { icon: <SettingOutlined />, label: '设置', color: '#5F6B7A', bg: '#F6F8FA', onClick: () => navigate('/dashboard/settings') },
-        { icon: <SafetyOutlined />, label: '隐私政策', color: '#5F6B7A', bg: '#F6F8FA', onClick: () => navigate('/privacy') },
-        { icon: <QuestionCircleOutlined />, label: '帮助与反馈', color: '#5F6B7A', bg: '#F6F8FA', onClick: () => navigate('/dashboard/help') },
+        { icon: <SettingOutlined />, label: '设置', color: '#666666', bg: '#F7F8FA', onClick: () => navigate('/dashboard/settings') },
+        { icon: <SafetyOutlined />, label: '隐私政策', color: '#666666', bg: '#F7F8FA', onClick: () => navigate('/privacy') },
+        { icon: <QuestionCircleOutlined />, label: '帮助与反馈', color: '#666666', bg: '#F7F8FA', onClick: () => navigate('/dashboard/help') },
       ],
     },
   ];
 
   return (
     <div className="max-w-[900px]">
-      <h1 className="text-xl font-bold text-[#0D1117] mb-6">个人设置</h1>
+      <h1 className="text-xl font-bold text-[#232529] mb-6">个人设置</h1>
 
-      <div className="bg-[#0D1117] rounded-2xl p-6 mb-6">
+      <div className="bg-[#232529] rounded-2xl p-6 mb-6">
         <div className="flex items-center gap-4">
           <Avatar size={56} src={user?.avatar} className="!bg-white/20 !text-white !font-bold !text-lg ring-4 ring-white/20">
             {user?.nickname?.[0] || 'U'}
@@ -350,7 +350,7 @@ const ProfilePage = () => {
       </div>
 
       {/* 我的发帖 */}
-      <div className="bg-white border border-[#E1E4E8] rounded-xl mb-5 overflow-hidden">
+      <div className="bg-white border border-[#E8E8E8] rounded-xl mb-5 overflow-hidden">
         <button
           onClick={() => {
             if (!showPosts) {
@@ -360,17 +360,17 @@ const ProfilePage = () => {
               setShowPosts(false);
             }
           }}
-          className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#F6F8FA] transition-colors text-left"
+          className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#F7F8FA] transition-colors text-left"
         >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: '#FF6B35', backgroundColor: '#FFF3ED' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: '#00BFA5', backgroundColor: '#E0F7F4' }}>
             <FileTextOutlined />
           </div>
-          <span className="flex-1 text-sm font-medium text-[#0D1117]">我的发帖</span>
-          {posts.length > 0 && <span className="text-xs text-[#8B949E] mr-1">{posts.length}</span>}
-          <RightOutlined className={`text-[#E1E4E8] text-xs transition-transform ${showPosts ? 'rotate-90' : ''}`} />
+          <span className="flex-1 text-sm font-medium text-[#232529]">我的发帖</span>
+          {posts.length > 0 && <span className="text-xs text-[#999999] mr-1">{posts.length}</span>}
+          <RightOutlined className={`text-[#E8E8E8] text-xs transition-transform ${showPosts ? 'rotate-90' : ''}`} />
         </button>
         {showPosts && (
-          <div className="border-t border-[#E1E4E8] px-4 py-3">
+          <div className="border-t border-[#E8E8E8] px-4 py-3">
             {postsLoading && posts.length === 0 ? (
               <div className="flex justify-center py-8">
                 <Spin size="small" />
@@ -382,19 +382,19 @@ const ProfilePage = () => {
                 {posts.map((post) => (
                   <div
                     key={post.id}
-                    className="border border-[#E1E4E8] rounded-xl p-3 hover:border-[#FF6B35]/30 hover:shadow-sm transition-all cursor-pointer"
+                    className="border border-[#E8E8E8] rounded-xl p-3 hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
                     onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <h4 className="text-sm font-semibold text-[#0D1117] truncate">{post.title}</h4>
+                      <h4 className="text-sm font-semibold text-[#232529] truncate">{post.title}</h4>
                       {post.is_hot && (
                         <span className="tag tag-flame text-[10px] px-1.5 py-0.5">
                           <FireOutlined /> 热
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-[#5F6B7A] line-clamp-2 mb-2">{post.content_preview || post.title}</p>
-                    <div className="flex items-center gap-4 text-xs text-[#8B949E]">
+                    <p className="text-xs text-[#666666] line-clamp-2 mb-2">{post.content_preview || post.title}</p>
+                    <div className="flex items-center gap-4 text-xs text-[#999999]">
                       <span className="inline-flex items-center gap-1"><LikeOutlined /> {post.likes_count}</span>
                       <span className="inline-flex items-center gap-1"><MessageOutlined /> {post.comments_count}</span>
                       <span>{formatTime(post.created_at)}</span>
@@ -406,7 +406,7 @@ const ProfilePage = () => {
                     <button
                       onClick={() => fetchPosts()}
                       disabled={postsLoading}
-                      className="text-sm text-[#FF6B35] hover:text-[#E85D26] disabled:opacity-50"
+                      className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
                     >
                       {postsLoading ? '加载中...' : '加载更多'}
                     </button>
@@ -420,20 +420,20 @@ const ProfilePage = () => {
 
       {menuGroups.map((group) => (
         <div key={group.title} className="mb-5">
-          <h3 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-2 px-1">{group.title}</h3>
+          <h3 className="text-xs font-semibold text-[#999999] uppercase tracking-wider mb-2 px-1">{group.title}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {group.items.map((item) => (
               <button
                 key={item.label}
                 onClick={item.onClick}
-                className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-[#E1E4E8] rounded-xl hover:bg-[#F6F8FA] hover:border-[#E1E4E8] transition-colors text-left"
+                className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-[#E8E8E8] rounded-xl hover:bg-[#F7F8FA] hover:border-[#E8E8E8] transition-colors text-left"
               >
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ color: item.color, backgroundColor: item.bg }}>
                   {item.icon}
                 </div>
-                <span className="flex-1 text-sm font-medium text-[#0D1117]">{item.label}</span>
-                {'count' in item && item.count !== undefined && <span className="text-xs text-[#8B949E] mr-1">{item.count}</span>}
-                <RightOutlined className="text-[#E1E4E8] text-xs" />
+                <span className="flex-1 text-sm font-medium text-[#232529]">{item.label}</span>
+                {'count' in item && item.count !== undefined && <span className="text-xs text-[#999999] mr-1">{item.count}</span>}
+                <RightOutlined className="text-[#E8E8E8] text-xs" />
               </button>
             ))}
           </div>
@@ -442,18 +442,18 @@ const ProfilePage = () => {
 
       <button
         onClick={handleLogout}
-        className="w-full bg-white border border-[#E1E4E8] rounded-xl p-4 flex items-center justify-center gap-2 text-sm font-medium text-[#CF222E] hover:bg-[#FFF0F1] hover:border-[#CF222E]/30 transition-colors"
+        className="w-full bg-white border border-[#E8E8E8] rounded-xl p-4 flex items-center justify-center gap-2 text-sm font-medium text-[#F53535] hover:bg-[#FDECEC] hover:border-[#F53535]/30 transition-colors"
       >
         <LogoutOutlined /> 退出登录
       </button>
 
-      <p className="text-center text-xs text-[#8B949E] mt-8">面试教练 v1.0.0</p>
+      <p className="text-center text-xs text-[#999999] mt-8">面试教练 v1.0.0</p>
 
       <Modal
         title={
           <div className="flex items-center gap-2">
-            <EditOutlined className="text-[#FF6B35]" />
-            <span className="text-lg font-bold text-[#0D1117]">编辑个人资料</span>
+            <EditOutlined className="text-[#00BFA5]" />
+            <span className="text-lg font-bold text-[#232529]">编辑个人资料</span>
           </div>
         }
         open={editModalOpen}
@@ -461,7 +461,7 @@ const ProfilePage = () => {
         onOk={handleSaveProfile}
         okText="保存"
         cancelText="取消"
-        okButtonProps={{ className: '!bg-[#FF6B35] !border-[#FF6B35] hover:!bg-[#E85D26] !rounded-lg !px-6' }}
+        okButtonProps={{ className: '!bg-[#00BFA5] !border-[#00BFA5] hover:!bg-[#00A88A] !rounded-lg !px-6' }}
         cancelButtonProps={{ className: '!rounded-lg !px-6' }}
         width={520}
         destroyOnClose
@@ -485,7 +485,7 @@ const ProfilePage = () => {
                 <Avatar
                   size={80}
                   src={editForm.avatar}
-                  className="!bg-[#0D1117] !text-white !font-bold !text-2xl ring-4 ring-[#F6F8FA]"
+                  className="!bg-[#232529] !text-white !font-bold !text-2xl ring-4 ring-[#F7F8FA]"
                 >
                   {avatarUploading ? '...' : (editForm.nickname[0] || 'U')}
                 </Avatar>
@@ -498,14 +498,14 @@ const ProfilePage = () => {
                 </div>
               </div>
             </Upload>
-            <p className="text-xs text-[#8B949E] mt-2">点击头像更换图片</p>
+            <p className="text-xs text-[#999999] mt-2">点击头像更换图片</p>
           </div>
 
           <div className="space-y-5">
-            <div className="bg-[#F6F8FA] rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-3">基础信息</h4>
+            <div className="bg-[#F7F8FA] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-[#999999] uppercase tracking-wider mb-3">基础信息</h4>
               <div>
-                <label className="text-sm font-medium text-[#0D1117] block mb-1.5">昵称</label>
+                <label className="text-sm font-medium text-[#232529] block mb-1.5">昵称</label>
                 <Input
                   value={editForm.nickname}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, nickname: e.target.value }))}
@@ -517,13 +517,13 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            <div className="bg-[#F6F8FA] rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-3">个人信息</h4>
+            <div className="bg-[#F7F8FA] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-[#999999] uppercase tracking-wider mb-3">个人信息</h4>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-sm font-medium text-[#0D1117]">
+                      <label className="text-sm font-medium text-[#232529]">
                         <WomanOutlined className="mr-1" />性别
                       </label>
                       <Switch
@@ -553,7 +553,7 @@ const ProfilePage = () => {
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-sm font-medium text-[#0D1117]">
+                      <label className="text-sm font-medium text-[#232529]">
                         <CalendarOutlined className="mr-1" />生日
                       </label>
                       <Switch
@@ -575,7 +575,7 @@ const ProfilePage = () => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-sm font-medium text-[#0D1117]">
+                    <label className="text-sm font-medium text-[#232529]">
                       <SmileOutlined className="mr-1" />个人签名
                     </label>
                     <Switch
@@ -600,12 +600,12 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            <div className="bg-[#F6F8FA] rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-3">联系方式</h4>
+            <div className="bg-[#F7F8FA] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-[#999999] uppercase tracking-wider mb-3">联系方式</h4>
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-sm font-medium text-[#0D1117]">
+                    <label className="text-sm font-medium text-[#232529]">
                       <PhoneOutlined className="mr-1" />手机号
                     </label>
                     <Switch
@@ -627,7 +627,7 @@ const ProfilePage = () => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-sm font-medium text-[#0D1117]">
+                    <label className="text-sm font-medium text-[#232529]">
                       <EnvironmentOutlined className="mr-1" />所在地
                     </label>
                     <Switch
@@ -656,8 +656,8 @@ const ProfilePage = () => {
       <Modal
         title={
           <div className="flex items-center gap-2">
-            <FileTextOutlined className="text-[#FF6B35]" />
-            <span className="text-lg font-bold text-[#0D1117]">我的简历</span>
+            <FileTextOutlined className="text-[#00BFA5]" />
+            <span className="text-lg font-bold text-[#232529]">我的简历</span>
           </div>
         }
         open={resumeModalOpen}
@@ -682,27 +682,27 @@ const ProfilePage = () => {
               {resumes.map((resume) => (
                 <div
                   key={resume.id}
-                  className="flex items-center gap-3 bg-[#F6F8FA] rounded-xl p-3 hover:bg-[#EDF0F4] transition-colors group"
+                  className="flex items-center gap-3 bg-[#F7F8FA] rounded-xl p-3 hover:bg-[#EEEEEE] transition-colors group"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-[#FFF3ED] flex items-center justify-center flex-shrink-0">
-                    <FileTextOutlined className="text-[#FF6B35] text-lg" />
+                  <div className="w-10 h-10 rounded-lg bg-[#E0F7F4] flex items-center justify-center flex-shrink-0">
+                    <FileTextOutlined className="text-[#00BFA5] text-lg" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-[#0D1117] truncate">{resume.file_name}</p>
+                      <p className="text-sm font-medium text-[#232529] truncate">{resume.file_name}</p>
                       <span
                         className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                           resume.status === 1
-                            ? 'bg-[#ECFDF3] text-[#2DA44E]'
+                            ? 'bg-[#E0F7F4] text-[#00B578]'
                             : resume.status === 2
-                              ? 'bg-[#FFF0F1] text-[#CF222E]'
-                              : 'bg-[#FFF8E6] text-[#BF8700]'
+                              ? 'bg-[#FDECEC] text-[#F53535]'
+                              : 'bg-[#FFF7E0] text-[#FFAA00]'
                         }`}
                       >
                         {RESUME_STATUS_LABEL[resume.status] ?? '未知'}
                       </span>
                     </div>
-                    <p className="text-xs text-[#8B949E] mt-0.5">
+                    <p className="text-xs text-[#999999] mt-0.5">
                       {new Date(resume.created_at).toLocaleDateString('zh-CN', {
                         year: 'numeric',
                         month: '2-digit',
@@ -716,7 +716,7 @@ const ProfilePage = () => {
                     {resume.status === 2 && (
                       <button
                         onClick={() => handleRetryResume(resume)}
-                        className="w-8 h-8 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#BF8700] hover:text-[#BF8700] transition-colors"
+                        className="w-8 h-8 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#FFAA00] hover:text-[#FFAA00] transition-colors"
                         title="重新分析"
                       >
                         <ReloadOutlined className="text-sm" />
@@ -726,8 +726,8 @@ const ProfilePage = () => {
                       onClick={() => handleStartInterview(resume.id)}
                       className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                         resume.status === 1
-                          ? 'bg-[#FF6B35] hover:bg-[#E85D26]'
-                          : 'bg-[#E1E4E8] cursor-not-allowed'
+                          ? 'bg-[#00BFA5] hover:bg-[#00A88A]'
+                          : 'bg-[#E8E8E8] cursor-not-allowed'
                       }`}
                       title={resume.status === 1 ? '使用此简历去面试' : '简历尚未就绪'}
                     >
@@ -741,7 +741,7 @@ const ProfilePage = () => {
                       okButtonProps={{ danger: true }}
                     >
                       <button
-                        className="w-8 h-8 rounded-lg bg-white border border-[#E1E4E8] flex items-center justify-center hover:border-[#CF222E] hover:text-[#CF222E] transition-colors"
+                        className="w-8 h-8 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#F53535] hover:text-[#F53535] transition-colors"
                         title="删除简历"
                       >
                         <DeleteOutlined className="text-sm" />
@@ -753,9 +753,9 @@ const ProfilePage = () => {
             </div>
           )}
 
-          <div className="border-t border-[#E1E4E8] pt-4">
-            <p className="text-sm font-medium text-[#0D1117] mb-3 flex items-center gap-1.5">
-              <PlusOutlined className="text-[#FF6B35]" />上传新简历
+          <div className="border-t border-[#E8E8E8] pt-4">
+            <p className="text-sm font-medium text-[#232529] mb-3 flex items-center gap-1.5">
+              <PlusOutlined className="text-[#00BFA5]" />上传新简历
             </p>
             <FileUpload
               fileType="resume"

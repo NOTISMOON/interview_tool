@@ -44,44 +44,44 @@ const PrivacyPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA]">
+    <div className="min-h-screen bg-[#F7F8FA]">
       <div className="max-w-[800px] mx-auto px-6 py-8">
         <nav className="flex items-center gap-4 mb-8">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-lg border border-[#E1E4E8] bg-white flex items-center justify-center text-[#5F6B7A] hover:text-[#0D1117] hover:border-[#0D1117] transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#E8E8E8] bg-white flex items-center justify-center text-[#666666] hover:text-[#232529] hover:border-[#232529] transition-colors"
           >
             <ArrowLeftOutlined />
           </button>
-          <h1 className="text-xl font-bold text-[#0D1117]">隐私政策</h1>
+          <h1 className="text-xl font-bold text-[#232529]">隐私政策</h1>
         </nav>
 
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mb-8">
-          <p className="text-sm text-[#5F6B7A] leading-relaxed mb-4">
-            <strong className="text-[#0D1117]">最后更新日期：2026 年 8 月 10 日</strong>
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mb-8">
+          <p className="text-sm text-[#666666] leading-relaxed mb-4">
+            <strong className="text-[#232529]">最后更新日期：2026 年 8 月 10 日</strong>
           </p>
-          <p className="text-sm text-[#5F6B7A] leading-relaxed">
+          <p className="text-sm text-[#666666] leading-relaxed">
             面试教练（"我们"）非常重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的服务即表示您同意本政策中描述的做法。
           </p>
         </div>
 
         <div className="space-y-4">
           {SECTIONS.map((section) => (
-            <div key={section.title} className="bg-white border border-[#E1E4E8] rounded-2xl p-6">
-              <h2 className="text-base font-bold text-[#0D1117] mb-3">{section.title}</h2>
-              <p className="text-sm text-[#5F6B7A] leading-relaxed">{section.content}</p>
+            <div key={section.title} className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
+              <h2 className="text-base font-bold text-[#232529] mb-3">{section.title}</h2>
+              <p className="text-sm text-[#666666] leading-relaxed">{section.content}</p>
             </div>
           ))}
         </div>
 
-        <div className="bg-white border border-[#E1E4E8] rounded-2xl p-6 mt-4 text-center">
-          <p className="text-sm text-[#5F6B7A]">
+        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mt-4 text-center">
+          <p className="text-sm text-[#666666]">
             如有疑问，请联系{' '}
-            <span className="text-[#FF6B35] font-medium">interview-coach@example.com</span>
+            <span className="text-[#00BFA5] font-medium">interview-coach@example.com</span>
           </p>
         </div>
 
-        <p className="text-center text-xs text-[#8B949E] mt-8">面试教练 v1.0.0</p>
+        <p className="text-center text-xs text-[#999999] mt-8">面试教练 v1.0.0</p>
       </div>
     </div>
   );
