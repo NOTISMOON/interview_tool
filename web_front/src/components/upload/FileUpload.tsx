@@ -1,4 +1,4 @@
-/**
+﻿/**
  * FileUpload 文件上传组件：点击/拖拽选择文件，直传腾讯云 COS。
  *
  * 完整链路: 前置校验（类型/大小）→ 后端STS临时密钥 → SDK直传（进度）→
@@ -7,7 +7,7 @@
 
 import { useRef, useState } from 'react';
 import type { DragEvent, ChangeEvent } from 'react';
-import { InboxOutlined } from '@ant-design/icons';
+import { InboxOutlined } from '@/components/icons';
 import { useUpload } from '@/hooks/useUpload';
 import { ACCEPT_EXTENSIONS, formatFileSize, validateFile } from '@/types/upload';
 import type { FileType, UploadCallbackResponse } from '@/types/upload';
@@ -92,11 +92,11 @@ export function FileUpload({ fileType, onUploaded, onError }: FileUploadProps) {
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00BFA5]/50 ${
-          dragOver ? 'border-[#00BFA5] bg-[#E0F7F4]' : 'border-[#E8E8E8] hover:border-[#00BFA5] hover:bg-[#E0F7F4]/50'
+        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D9A441]/50 ${
+          dragOver ? 'border-[#D9A441] bg-[#F7EBD3]' : 'border-[#E8E8E8] hover:border-[#D9A441] hover:bg-[#F7EBD3]/50'
         } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
       >
-        <InboxOutlined className={`text-2xl mb-2 ${dragOver ? 'text-[#00BFA5]' : 'text-[#999999]'}`} />
+        <InboxOutlined className={`text-2xl mb-2 ${dragOver ? 'text-[#D9A441]' : 'text-[#999999]'}`} />
         <p className="text-sm text-[#666666]">{dragOver ? '松开鼠标开始上传' : '点击选择或拖拽文件到此处'}</p>
         <p className="text-xs text-[#999999] mt-1">支持 PDF、Word、图片格式，不超过 10MB</p>
         <input
@@ -120,14 +120,14 @@ export function FileUpload({ fileType, onUploaded, onError }: FileUploadProps) {
             <button
               type="button"
               onClick={() => setPendingFile(null)}
-              className="text-xs text-[#666666] hover:text-[#232529] px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00BFA5]/40 rounded"
+              className="text-xs text-[#666666] hover:text-[#232529] px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D9A441]/40 rounded"
             >
               移除
             </button>
             <button
               type="button"
               onClick={handleConfirmUpload}
-              className="bg-[#00BFA5] hover:bg-[#00A88A] text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00BFA5]/50"
+              className="bg-[#D9A441] hover:bg-[#A97E24] text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D9A441]/50"
             >
               确认上传
             </button>

@@ -1,13 +1,12 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ThunderboltFilled } from '@ant-design/icons';
+import { ThunderboltFilled } from '@/components/icons';
 import { useAppStore } from '@/store';
 import { useSlideInLeft } from '@/hooks/useGsapAnimations';
 
 const NAV_LINKS = [
   { label: '功能', href: '#features' },
   { label: '运作方式', href: '#how-it-works' },
-  { label: '用户反馈', href: '#testimonials' },
 ];
 
 const Navbar = () => {
@@ -33,24 +32,24 @@ const Navbar = () => {
       ref={navRef}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${
         scrolled
-          ? 'bg-white/90 backdrop-blur-xl border-b border-[#E8E8E8] shadow-sm'
+          ? 'bg-[var(--color-bg)]/90 backdrop-blur-xl border-b border-[var(--color-line)] shadow-sm'
           : 'bg-transparent'
       }`}
     >
       <div className="max-w-[1200px] mx-auto px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-10">
-          <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-[#232529]">
-            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-white text-sm shadow-[0_2px_8px_rgba(0,191,165,0.35)]">
+          <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-[var(--color-ink)]">
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D9A441] to-[#E6AF4E] flex items-center justify-center text-white text-sm shadow-[0_2px_8px_rgba(217,164,65,0.35)]">
               <ThunderboltFilled />
             </span>
-            面试教练
+            AI 超级面试
           </Link>
           <div className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="px-3 py-2 text-sm font-medium text-[#666666] hover:text-[#232529] rounded-lg hover:bg-[#F7F8FA] transition-colors"
+                className="px-3 py-2 text-sm font-medium text-[var(--color-rock)] hover:text-[var(--color-ink)] rounded-lg hover:bg-[var(--color-surface-2)] transition-colors"
               >
                 {link.label}
               </a>

@@ -4,13 +4,15 @@ import Spin from 'antd/es/spin';
 import { useAppStore } from '@/store';
 
 import Navbar from '@/components/layout/Navbar';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 
 import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
 import CallbackPage from '@/pages/auth/CallbackPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import PrivacyPage from '@/pages/PrivacyPage';
+
+// DashboardLayout 懒加载：其依赖的 gsap/antd 布局代码不进首屏入口包
+const DashboardLayout = lazy(() => import('@/components/layout/DashboardLayout'));
 
 const DashboardHome = lazy(() => import('@/pages/dashboard/HomePage'));
 const InterviewPage = lazy(() => import('@/pages/dashboard/interview/InterviewPage'));
@@ -79,7 +81,9 @@ const App = () => {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardLayout />
+            <Suspense fallback={<div className="flex items-center justify-center h-screen"><Spin size="large" /></div>}>
+              <DashboardLayout />
+            </Suspense>
           </ProtectedRoute>
         }
       >

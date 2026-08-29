@@ -1,8 +1,8 @@
-/**
+﻿/**
  * 上传进度条组件：展示上传百分比 + 取消按钮。
  */
 
-import { CloseCircleFilled } from '@ant-design/icons';
+import { CloseCircleFilled } from '@/components/icons';
 
 /** UploadProgress 组件属性 */
 interface UploadProgressProps {
@@ -41,7 +41,7 @@ export function UploadProgress({ percent, uploading, onCancel }: UploadProgressP
         aria-label="上传进度"
       >
         <div
-          className="h-full bg-[#00BFA5] rounded-full transition-[width] duration-200"
+          className="h-full bg-[#D9A441] rounded-full transition-[width] duration-200"
           style={{ width: `${percent}%` }}
         />
       </div>

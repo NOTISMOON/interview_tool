@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import ConfigProvider from 'antd/es/config-provider';
@@ -10,8 +10,8 @@ import "./styles/index.css";
 
 const theme = {
   token: {
-    colorPrimary: '#00BFA5',
-    colorInfo: '#00BFA5',
+    colorPrimary: '#D9A441',
+    colorInfo: '#D9A441',
     colorSuccess: '#00B578',
     colorWarning: '#FFAA00',
     colorError: '#F53535',

@@ -1,6 +1,7 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+﻿﻿﻿import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Suspense } from 'react';
-import { Badge } from 'antd';
+import Badge from 'antd/es/badge';
+import Modal from 'antd/es/modal';
 import {
   HomeOutlined,
   PlayCircleOutlined,
@@ -11,10 +12,11 @@ import {
   LogoutOutlined,
   ThunderboltOutlined,
   ThunderboltFilled,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { useAppStore } from '@/store';
 import { getUnreadCount } from '@/lib/api/messages';
 import { useMessageVersion } from '@/lib/messageVersion';
+import { subscribeSSE } from '@/lib/sseBus';
 import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 
@@ -28,51 +30,73 @@ const SIDEBAR_ITEMS = [
   { key: '/dashboard/profile', label: '个人设置', icon: <SettingOutlined /> },
 ];
 
+/** 主题存储 key */
+const THEME_STORAGE_KEY = 'app_theme';
+
+/** 读取并应用初始主题（默认炭黑暗色） */
+function applyInitialTheme() {
+  let theme: string | null = null;
+  try {
+    theme = localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    /* localStorage 不可用忽略 */
+  }
+  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+}
+
+/** 侧边栏（与原型 glass-admin-prototype.html 一比一） */
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
   return (
-    <aside className="w-[240px] h-screen bg-[#16181C] flex flex-col flex-shrink-0 fixed left-0 top-0">
+    <aside
+      className="w-[232px] h-screen bg-[var(--color-surface)] flex flex-col flex-shrink-0"
+      style={{ borderRight: '1px solid var(--color-line)' }}
+    >
       <div
-        className="h-[60px] flex items-center gap-2.5 px-5 border-b border-[rgba(255,255,255,0.06)] cursor-pointer"
+        className="h-[56px] flex items-center gap-2.5 px-[18px] cursor-pointer flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--color-line)' }}
         onClick={() => navigate('/dashboard')}
       >
-        <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-white text-sm shadow-[0_2px_8px_rgba(0,191,165,0.35)]">
+        <span className="w-[26px] h-[26px] rounded-[8px] bg-[#D9A441] flex items-center justify-center text-[#0B0B0C]">
           <ThunderboltFilled />
         </span>
-        <span className="font-bold text-white">面试教练</span>
+        <span className="font-bold text-[15px] text-[var(--color-ink)] tracking-[0.3px]">AI 超级面试</span>
       </div>
 
-      <nav className="flex-1 py-4 px-3 overflow-y-auto">
-        <div className="text-[10px] text-[rgba(255,255,255,0.2)] uppercase tracking-wider font-semibold px-3 pb-2">导航</div>
+      <nav className="flex-1 py-3 px-3 overflow-y-auto">
+        <div className="text-[10px] text-[var(--color-slate)] uppercase tracking-[1.6px] font-semibold px-2.5 pb-2.5">导航</div>
         {SIDEBAR_ITEMS.map((item) => {
           const isActive = location.pathname === item.key;
           return (
             <button
               key={item.key}
               onClick={() => navigate(item.key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-all duration-150 ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] mb-1 text-[13.5px] font-medium transition-colors duration-150 ${
                 isActive
-                  ? 'bg-[rgba(0,191,165,0.12)] text-[#00BFA5] font-semibold'
-                  : 'text-[#8B909A] hover:bg-[rgba(255,255,255,0.06)] hover:text-[#D1D5DB]'
+                  ? 'bg-[rgba(217,164,65,0.12)] text-[var(--color-ink)] font-semibold shadow-[inset_0_0_0_1px_rgba(217,164,65,0.35)]'
+                  : 'text-[var(--color-rock)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-ink)]'
               }`}
             >
-              <span className="text-lg">{item.icon}</span>
+              <span className={`text-lg ${isActive ? 'text-[#D9A441]' : 'opacity-85'}`}>{item.icon}</span>
               {item.label}
             </button>
           );
         })}
       </nav>
 
-      <div className="p-3 border-t border-[rgba(255,255,255,0.06)]">
+      <div
+        className="px-3 py-3 flex-shrink-0"
+        style={{ borderTop: '1px solid var(--color-line)' }}
+      >
         <button
           onClick={() => {
             const { logout } = useAppStore.getState();
             logout();
             navigate('/login', { replace: true });
           }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#8B909A] hover:bg-[rgba(255,255,255,0.06)] hover:text-[#F87171] transition-all duration-150"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-medium text-[var(--color-rock)] hover:bg-[var(--color-surface-hover)] hover:text-[#E07A6A] transition-colors duration-150"
         >
           <LogoutOutlined className="text-lg" />
           退出登录
@@ -86,9 +110,28 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAppStore();
-  const { revision: msgRevision } = useMessageVersion();
+  const { revision: msgRevision, bump: bumpRevision } = useMessageVersion();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const contentRef = useRef<HTMLDivElement>(null);
+
+  /** 挂载时应用初始主题 */
+  useEffect(() => {
+    applyInitialTheme();
+    setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+  }, []);
+
+  /** 切换主题（深色炭黑/浅色米白，localStorage 记忆） */
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch {
+      /* localStorage 不可用忽略 */
+    }
+  };
 
   /** 页面切换动画：每次路由变化都触发淡入 */
   useEffect(() => {
@@ -127,29 +170,84 @@ const DashboardLayout = () => {
     fetchUnreadCount();
   }, [location.pathname]);
 
+  /** SSE: 统一处理所有事件；版本号递增 + session_kicked 下线处理 */
+  useEffect(() => {
+    const unsub = subscribeSSE((data) => {
+      const kind = (data.kind as string) || 'message';
+      // 所有事件都 bump 版本号，触发未读数刷新
+      bumpRevision(kind);
+
+      if (kind === 'session_kicked') {
+        // 检查 jti：如果 jti 与当前设备相同，说明是自己刚登录发的，跳过
+        const myJti = localStorage.getItem('auth_jti');
+        if (myJti && data.jti === myJti) {
+          return;
+        }
+        // 清除本地登录状态
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_jti');
+        // 弹出下线提示框
+        Modal.confirm({
+          title: '账号已在其他设备登录',
+          icon: null,
+          content: '您的账号已在其他设备登录，请重新登录。',
+          okText: '确定',
+          cancelText: null,
+          cancelButtonProps: { style: { display: 'none' } },
+          centered: true,
+          maskClosable: false,
+          keyboard: false,
+          onOk: () => {
+            window.location.href = '/login';
+          },
+        });
+      }
+    });
+    return unsub;
+  }, [bumpRevision]);
+
   return (
-    <div className="min-h-screen bg-[#F1F2F4]">
+    <div className="h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-ink)] flex">
       <Sidebar />
 
-      <div className="ml-[240px]">
-        <header className="h-[60px] bg-[#16181C] border-b border-[rgba(255,255,255,0.06)] flex items-center justify-between px-6 sticky top-0 z-30">
-          <div>
-            <span className="text-sm text-[#8B909A]">欢迎回来，</span>
-            <span className="text-sm font-semibold text-white">{user?.nickname || '用户'}</span>
+      {/* 主区 */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* 顶栏 */}
+        <header
+          className="h-[56px] bg-[var(--color-surface)] flex items-center justify-between px-[22px] flex-shrink-0 z-30"
+          style={{ borderBottom: '1px solid var(--color-line)' }}
+        >
+          <div className="text-[13.5px] text-[var(--color-rock)]">
+            欢迎回来，<b className="font-semibold text-[var(--color-ink)]">{user?.nickname || '用户'}</b>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-[10px]">
+            {/* 主题切换 */}
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
+              className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border border-[var(--color-line)] bg-transparent text-[12px] text-[var(--color-rock)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            >
+              {theme === 'dark' ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8Z" /></svg>
+              )}
+              主题
+            </button>
+            {/* 通知铃铛 */}
             <button
               onClick={() => navigate('/dashboard/messages')}
-              className="relative w-9 h-9 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.04)] flex items-center justify-center text-[#8B909A] hover:border-[#00BFA5] hover:text-[#00BFA5] transition-all"
+              className="relative w-[34px] h-[34px] rounded-[10px] border border-[var(--color-line)] bg-transparent flex items-center justify-center text-[var(--color-ink)] hover:border-[#D9A441]/50 hover:text-[#D9A441] hover:bg-[rgba(217,164,65,0.08)] transition-colors"
             >
               <Badge count={unreadCount} size="small" offset={[2, -2]}>
-                <BellOutlined className="text-lg" />
+                <BellOutlined className="text-lg !text-[var(--color-ink)]" />
               </Badge>
             </button>
+            {/* 头像 */}
             <button
               onClick={() => navigate('/dashboard/profile')}
-              className="w-8 h-8 rounded-full bg-[#00BFA5] flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-[#00BFA5]/50 transition-all"
+              className="w-[34px] h-[34px] rounded-full bg-[#D9A441] text-[#0B0B0C] flex items-center justify-center text-[13px] font-bold"
             >
               {user?.avatar ? (
                 <img src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
@@ -160,9 +258,10 @@ const DashboardLayout = () => {
           </div>
         </header>
 
-        <main className="p-6 h-[calc(100vh-60px)] overflow-y-auto bg-[#F1F2F4]">
+        {/* 内容区 */}
+        <main className="flex-1 min-h-0 overflow-y-auto bg-[var(--color-bg)] p-[22px]">
           <div ref={contentRef}>
-            <Suspense fallback={<div className="flex items-center justify-center py-20"><span className="w-6 h-6 rounded-full border-2 border-[#E8E8E8] border-t-[#00BFA5] animate-spin" /></div>}>
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><span className="w-6 h-6 rounded-full border-2 border-[var(--color-line)] border-t-[#D9A441] animate-spin" /></div>}>
               <Outlet />
             </Suspense>
           </div>

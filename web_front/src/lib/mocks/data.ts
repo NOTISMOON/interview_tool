@@ -1,4 +1,4 @@
-import type { InterviewQuestion, InterviewReport, UserBrief, SystemMessage, DmConversation } from '@/types';
+﻿import type { InterviewQuestion, InterviewReport, UserBrief, SystemMessage, DmConversation } from '@/types';
 
 export const mockFollowingList: UserBrief[] = [
   { id: 'u2', nickname: '上岸的鱼', avatar: '', bio: '已拿到大厂 offer，分享面试经验', isFollowing: true },
@@ -132,7 +132,7 @@ export const mockMessages: SystemMessage[] = [
   {
     id: 'msg1',
     type: 'system',
-    title: '欢迎加入面试教练',
+    title: '欢迎加入AI 超级面试',
     content: '上传你的简历，AI 将为你生成个性化面试题，帮助你快速提升面试能力。',
     isRead: false,
     createdAt: '刚刚',
