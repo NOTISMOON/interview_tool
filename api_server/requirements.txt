@@ -21,3 +21,4 @@ pypdf>=4.0.0
 docx2txt>=0.8
 tencentcloud-sdk-python>=3.1.0
 apscheduler>=3.11.0
+alembic>=1.13.0

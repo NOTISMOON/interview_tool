@@ -57,3 +57,4 @@ alembic/
 # 面试模块 LangGraph SQLite checkpointer（运行时自动生成）
 interview_graph_checkpoints.db
 interview_graph_checkpoints.db-*
+ssl/

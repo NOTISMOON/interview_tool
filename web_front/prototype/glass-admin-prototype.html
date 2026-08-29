@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面试教练 - 后台原型（炭黑高级实心版）</title>
+<style>
+  /* ===== 设计令牌（炭黑 + 翡翠青 · 实心层次 · 无线毛玻璃） ===== */
+  :root {
+    --brand: #D9A441;
+    --bg: #0B0B0C;            /* 纯中性炭黑（RGB 相等，零色相） */
+    --surface: #141416;       /* 卡片基面（中性灰，无冷暖偏色） */
+    --surface-2: #101012;     /* 卡片次级/列表行 */
+    --surface-hover: #1C1C1F;
+    --border: rgba(255,255,255,0.07);
+    --border-strong: rgba(255,255,255,0.12);
+    --text-1: #E9E9EB;
+    --text-2: rgba(233,233,235,0.6);
+    --text-3: rgba(233,233,235,0.36);
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 9px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.25);
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  body.light {
+    --bg: #F0EFEC;
+    --surface: #FFFFFF;
+    --surface-2: #F6F5F2;
+    --surface-hover: #FAF9F6;
+    --border: rgba(20,25,26,0.08);
+    --border-strong: rgba(20,25,26,0.14);
+    --text-1: #232427;
+    --text-2: rgba(35,36,39,0.62);
+    --text-3: rgba(35,36,39,0.4);
+    --shadow: 0 1px 2px rgba(20,25,26,0.04), 0 10px 28px rgba(20,25,26,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font);
+    color: var(--text-1);
+    overflow: hidden;
+    height: 100vh;
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app { display: flex; height: 100vh; }
+  .brand {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: #D9A441; color: #0B0B0C;
+    display: grid; place-items: center;
+  }
+  .brand svg { width: 15px; height: 15px; }
+
+  /* ===== 侧边栏（实心） ===== */
+  .sidebar {
+    width: 232px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+  }
+  .sb-logo {
+    height: 56px; display: flex; align-items: center; gap: 10px;
+    padding: 0 18px; cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .sb-logo .name { font-weight: 700; font-size: 15px; letter-spacing: 0.3px; }
+  .sb-nav { flex: 1; padding: 12px; overflow-y: auto; }
+  .sb-label { font-size: 10px; letter-spacing: 1.6px; color: var(--text-3); padding: 4px 10px 10px; }
+  .sb-item {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; margin-bottom: 4px; border: none; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-2); font-size: 13.5px; font-weight: 500;
+    cursor: pointer; font-family: inherit; text-align: left;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .sb-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.85; }
+  .sb-item:hover { background: var(--surface-hover); color: var(--text-1); }
+  .sb-item.active {
+    background: rgba(217,164,65,0.12);
+    color: var(--text-1);
+    box-shadow: inset 0 0 0 1px rgba(217,164,65,0.35);
+  }
+  .sb-item.active svg { opacity: 1; color: #D9A441; }
+  .sb-foot { padding: 12px; border-top: 1px solid var(--border); }
+  .sb-item.logout:hover { color: #E07A6A; background: rgba(224,122,106,0.08); }
+
+  /* ===== 主区 ===== */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .topbar {
+    height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 22px; flex-shrink: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar .hello { font-size: 13.5px; color: var(--text-2); }
+  .topbar .hello b { color: var(--text-1); font-weight: 600; }
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .theme-switch {
+    height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px;
+    border-radius: 999px; border: 1px solid var(--border-strong);
+    background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer;
+    font-family: inherit; transition: background 0.15s ease;
+  }
+  .theme-switch:hover { background: var(--surface-hover); color: var(--text-1); }
+  .icon-btn {
+    position: relative; width: 34px; height: 34px; border-radius: 10px;
+    border: 1px solid var(--border-strong); background: transparent;
+    display: grid; place-items: center; color: var(--text-1); cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .icon-btn:hover { border-color: rgba(217,164,65,0.5); color: #D9A441; background: rgba(217,164,65,0.08); }
+  .icon-btn svg { width: 17px; height: 17px; }
+  .icon-btn .dot { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: #D9A441; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    background: #D9A441; color: #0B0B0C;
+    display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.08);
+  }
+  body.light .avatar { box-shadow: 0 0 0 2px rgba(255,255,255,0.9); }
+
+  .content { flex: 1; overflow-y: auto; padding: 22px; }
+  .content::-webkit-scrollbar { width: 5px; }
+  .content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 4px; }
+  .content::-webkit-scrollbar-track { background: transparent; }
+  body.light .content::-webkit-scrollbar-thumb { background: rgba(27,33,31,0.18); }
+
+  /* ===== 卡片基元（实心 + 细分隔） ===== */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+  }
+  .card-pad { padding: 20px 22px; }
+
+  /* ===== 工作台 ===== */
+  .page-head { margin-bottom: 20px; }
+  .page-head h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.2px; }
+  .page-head p { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+
+  .row-a { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+  .banner { padding: 26px 28px; min-height: 158px; display: flex; flex-direction: column; justify-content: center; }
+  .banner h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .banner p { font-size: 13px; color: var(--text-2); max-width: 360px; margin-bottom: 18px; line-height: 1.6; }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: var(--radius-sm); border: none;
+    background: #D9A441; color: #0B0B0C;
+    font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .btn-primary:hover { background: #E6AF4E; }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary svg { width: 15px; height: 15px; }
+
+  .stat-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 14px; letter-spacing: 0.3px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-item { text-align: left; }
+  .stat-num { font-size: 21px; font-weight: 800; color: #D9A441; line-height: 1; margin-bottom: 4px; }
+  .stat-item.dark .stat-num { color: var(--text-1); }
+  .stat-label { font-size: 11px; color: var(--text-3); }
+  .checkin-btn {
+    width: 100%; padding: 10px; border-radius: var(--radius-sm); border: none;
+    background: #D9A441; color: #0B0B0C;
+    font-family: inherit; font-weight: 700; cursor: pointer; text-align: center;
+    transition: background 0.15s ease;
+  }
+  .checkin-btn:hover { background: #E6AF4E; }
+  .checkin-num { font-size: 17px; font-weight: 800; }
+  .checkin-label { font-size: 10.5px; opacity: 0.8; margin-top: 2px; }
+  .checkin-btn.done { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); cursor: default; }
+  .checkin-btn.done:hover { background: var(--surface-2); }
+  body.light .checkin-btn.done { background: #F2F0EA; }
+
+  .sec-title { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; margin: 22px 0 12px; }
+  .sec-title svg { width: 17px; height: 17px; color: #D9A441; }
+  .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  .quick-card { padding: 16px; border-radius: var(--radius-md); text-align: left; cursor: pointer; transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease; }
+  .quick-card:hover { transform: translateY(-2px); border-color: rgba(217,164,65,0.4); background: var(--surface-hover); }
+  .quick-icon {
+    width: 38px; height: 38px; border-radius: 12px; margin-bottom: 12px;
+    display: grid; place-items: center; color: #D9A441;
+    background: rgba(217,164,65,0.12);
+  }
+  .quick-icon svg { width: 18px; height: 18px; }
+  .quick-card h3 { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
+  .quick-card p { font-size: 11.5px; color: var(--text-3); }
+
+  .list-card { padding: 6px; border-radius: var(--radius-md); }
+  .list-item {
+    display: flex; align-items: center; gap: 14px; padding: 12px;
+    border-radius: var(--radius-sm); cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .list-item:hover { background: var(--surface-2); }
+  .score {
+    width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 15px; font-weight: 800;
+  }
+  .list-meta { flex: 1; min-width: 0; }
+  .list-meta .row { display: flex; align-items: center; gap: 8px; }
+  .list-meta h4 { font-size: 13.5px; font-weight: 600; }
+  .chip { font-size: 10.5px; padding: 3px 8px; border-radius: 999px; background: rgba(217,164,65,0.12); color: #D9A441; }
+  body.light .chip { color: #A97E24; }
+  .chip.warn { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+  .list-meta .sub { font-size: 11.5px; color: var(--text-3); margin-top: 5px; display: flex; gap: 14px; }
+  .list-arrow { color: var(--text-3); }
+  .list-arrow svg { width: 14px; height: 14px; }
+
+  /* ===== 入场动画（纯位移淡入） ===== */
+  [data-reveal] { opacity: 0; transform: translateY(12px); }
+  .anim-in [data-reveal] { animation: rise 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ===== 侧边栏 ===== -->
+    <aside class="sidebar">
+      <div class="sb-logo">
+        <span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 2 4 13.5h6L8.5 22l11-12.5H13Z"/></svg></span>
+        <span class="name">面试教练</span>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-label">导航</div>
+        <button class="sb-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.8 12 4l8 6.8"/><path d="M6 9.7V20h12V9.7"/><path d="M10 20v-5.5h4V20"/></svg>工作台</button>
+        <button class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.7"/><path d="M10.2 8.9 15.4 12l-5.2 3.1Z"/></svg>开始面试</button>
+        <button class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 1.9-5.6L3 8.3"/><path d="M3 3.5v4.8h4.8"/><path d="M12 7.5v4.8l3.4 1.9"/></svg>面试记录</button>
+        <button class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2 4 13.5h6L8.5 22l11-12.5H13Z"/></svg>动态</button>
+        <button class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 11.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M2.5 21a7 7 0 0 1 14 0"/><path d="M17.5 13.1a3.6 3.6 0 1 0-1.3-7"/><path d="M21.5 21a6.5 6.5 0 0 0-4.8-6.2"/></svg>社区</button>
+        <button class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.2 1.6 5.8 1.6 5.8H4.4S6 13.7 6 9.5Z"/><path d="M10 18.8a2 2 0 0 0 4 0"/><circle cx="18.3" cy="5.2" r="1.7" fill="#D9A441" stroke="none"/></svg>消息中心</button>
+        <button class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="7" cy="18" r="2.1"/></svg>个人设置</button>
+      </nav>
+      <div class="sb-foot">
+        <button class="sb-item logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5H7a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h7.5"/><path d="m18 8 4 4-4 4"/><path d="M22 12H10.5"/></svg>退出登录</button>
+      </div>
+    </aside>
+
+    <!-- ===== 主区 ===== -->
+    <div class="main">
+      <header class="topbar">
+        <div class="hello">欢迎回来，<b>张同学</b></div>
+        <div class="top-actions">
+          <button class="theme-switch" id="themeSwitch" title="切换主题">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
+            主题
+          </button>
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.2 1.6 5.8 1.6 5.8H4.4S6 13.7 6 9.5Z"/><path d="M10 18.8a2 2 0 0 0 4 0"/></svg><span class="dot"></span></button>
+          <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-4.5 4V5a2 2 0 0 1 2-2h13.5a2 2 0 0 1 2 2Z"/></svg></button>
+          <div class="avatar">张</div>
+        </div>
+      </header>
+
+      <div class="content">
+        <div class="page-head" data-reveal data-delay="0">
+          <h1>张同学，下午好</h1>
+          <p>准备开始今天的面试练习了吗？</p>
+        </div>
+
+        <div class="row-a">
+          <div class="card card-pad banner" data-reveal data-delay="60">
+            <h2>AI 模拟面试</h2>
+            <p>上传简历，即刻开始 AI 驱动的智能模拟面试，精准定位你的能力短板</p>
+            <div><button class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.7"/><path d="M10.2 8.9 15.4 12l-5.2 3.1Z"/></svg>立即开始</button></div>
+          </div>
+          <div class="card card-pad" data-reveal data-delay="120">
+            <div class="stat-title">本周统计</div>
+            <div class="stat-grid">
+              <div class="stat-item"><div class="stat-num">3</div><div class="stat-label">完成面试</div></div>
+              <div class="stat-item dark"><div class="stat-num">82</div><div class="stat-label">平均得分</div></div>
+              <div class="stat-item"><div class="stat-num">2</div><div class="stat-label">简历数量</div></div>
+              <button class="checkin-btn done"><div class="checkin-num">5</div><div class="checkin-label">已连续签到</div></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec-title" data-reveal data-delay="160"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2 4 13.5h6L8.5 22l11-12.5H13Z"/></svg>快捷操作</div>
+        <div class="quick-grid" data-reveal data-delay="200">
+          <div class="quick-card card">
+            <div class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.7"/><path d="M10.2 8.9 15.4 12l-5.2 3.1Z"/></svg></div>
+            <h3>开始面试</h3><p>上传简历，AI 智能出题</p>
+          </div>
+          <div class="quick-card card">
+            <div class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h7l4 4V21h-11Z"/><path d="M13.5 2.5v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg></div>
+            <h3>我的简历</h3><p>2 份</p>
+          </div>
+          <div class="quick-card card">
+            <div class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 1.9-5.6L3 8.3"/><path d="M3 3.5v4.8h4.8"/><path d="M12 7.5v4.8l3.4 1.9"/></svg></div>
+            <h3>面试记录</h3><p>5 次</p>
+          </div>
+          <div class="quick-card card">
+            <div class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 21 15H3Z"/><path d="M12 9.2 16.6 14.7H7.4Z"/></svg></div>
+            <h3>能力画像</h3><p>查看多维报告</p>
+          </div>
+        </div>
+
+        <div class="sec-title" data-reveal data-delay="240"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v17h17"/><path d="M8 17.5v-6M12.5 17.5V8M17 17.5v-4.5"/></svg>最近面试</div>
+        <div class="card list-card" data-reveal data-delay="280">
+          <div class="list-item">
+            <div class="score" style="background: rgba(217,164,65,0.12); color: #D9A441;">88</div>
+            <div class="list-meta">
+              <div class="row"><h4>技术八股面试</h4><span class="chip">快速面试</span></div>
+              <div class="sub"><span>08月28日 14:20</span><span>9 题</span></div>
+            </div>
+            <span class="list-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+          </div>
+          <div class="list-item">
+            <div class="score" style="background: var(--surface-2); color: var(--text-2);">74</div>
+            <div class="list-meta">
+              <div class="row"><h4>前端全栈面试</h4><span class="chip">完整面试</span></div>
+              <div class="sub"><span>08月27日 09:05</span><span>15 题</span></div>
+            </div>
+            <span class="list-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+          </div>
+          <div class="list-item">
+            <div class="score" style="background: rgba(217,164,65,0.10); color: var(--text-3);">· · ·</div>
+            <div class="list-meta">
+              <div class="row"><h4>项目实践面试</h4><span class="chip warn">进行中</span></div>
+              <div class="sub"><span>08月26日 20:41</span><span>已答 7/15 题</span></div>
+            </div>
+            <span class="list-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../node_modules/gsap/dist/gsap.min.js"></script>
+  <script>
+    // ===== 主题切换 =====
+    document.getElementById('themeSwitch').addEventListener('click', () => {
+      document.body.classList.toggle('light');
+    });
+
+    // ===== 入场动画（纯位移淡入） =====
+    function playEntrance() {
+      if (typeof gsap === 'undefined') {
+        document.body.classList.add('anim-in');
+        document.querySelectorAll('[data-reveal]').forEach((el, i) => {
+          el.style.animationDelay = (i * 60) + 'ms';
+        });
+        return;
+      }
+      gsap.fromTo('[data-reveal]',
+        { y: 14, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.6, stagger: 0.06, ease: 'power2.out', delay: 0.1 }
+      );
+      gsap.fromTo('.sidebar', { x: -16, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: 'power2.out' });
+      gsap.fromTo('.topbar', { y: -10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, delay: 0.06, ease: 'power2.out' });
+    }
+
+    window.addEventListener('load', playEntrance);
+  </script>
+</body>
+</html>

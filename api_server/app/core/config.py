@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     COOKIE_DOMAIN: str | None = None  # Cookie作用域名，None表示当前域
     COOKIE_ACCESS_PATH: str = "/"  # access_token Cookie路径（全部API可用）
     COOKIE_REFRESH_PATH: str = "/api/v1/auth"  # refresh_token Cookie路径（仅认证端点发送，缩小暴露面）
-    CORS_ORIGINS: list[str] = ["http://localhost:5645", "http://localhost:5646", "http://localhost:5173"]  # 前端跨域白名单，credentials=True时禁止通配符
+    CORS_ORIGINS: list[str] = ["http://localhost:5645", "http://localhost:5646", "http://localhost:5173", "http://xg-2.frp.one:31431"]  # 前端跨域白名单，credentials=True时禁止通配符
 
     # ---- SSE 配置 ----
     SSE_KEEPALIVE_INTERVAL: int = 15  # 心跳注释帧间隔（秒），防Nginx/CDN超时断
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     # GitHub OAuth配置
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
-    GITHUB_REDIRECT_URI: str = "http://localhost:5645/callback"
+    GITHUB_REDIRECT_URI: str = "http://xg-2.frp.one:31431/callback"
 
     # ---- 腾讯云 COS 配置（前端直传 + 后端校验） ----
     COS_SECRET_ID: str = ""  # 腾讯云永久SecretId（仅后端使用）
