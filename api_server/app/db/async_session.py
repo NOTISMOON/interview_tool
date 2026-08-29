@@ -5,6 +5,7 @@
 
 from typing import AsyncGenerator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -19,6 +20,25 @@ async_engine = create_async_engine(
         "charset": "utf8mb4",
     },
 )
+
+
+@event.listens_for(async_engine.sync_engine, "connect")
+def _set_async_session_timezone(dbapi_connection, connection_record) -> None:
+    """连接建立时将会话时区设为北京时间（UTC+8）。
+
+    与同步引擎保持一致，保证 CURRENT_TIMESTAMP 与 Python datetime.now()
+    均按北京时间生成，避免前后端 8 小时偏差。
+
+    Args:
+        dbapi_connection: 原始 DBAPI 连接对象。
+        connection_record: 连接池记录。
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("SET time_zone = '+08:00'")
+    finally:
+        cursor.close()
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,

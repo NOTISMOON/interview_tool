@@ -5,7 +5,7 @@
 
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
@@ -16,6 +16,25 @@ engine = create_engine(
     max_overflow=20,
     pool_pre_ping=True,
 )
+
+
+@event.listens_for(engine, "connect")
+def _set_sync_session_timezone(dbapi_connection, connection_record) -> None:
+    """连接建立时将会话时区设为北京时间（UTC+8）。
+
+    MySQL 服务器时区可能为 UTC，而业务统一按北京时间写入/读取
+    （CURRENT_TIMESTAMP 由 MySQL 生成），必须设置会话时区保证一致。
+
+    Args:
+        dbapi_connection: 原始 DBAPI 连接对象。
+        connection_record: 连接池记录。
+    """
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("SET time_zone = '+08:00'")
+    finally:
+        cursor.close()
+
 
 SyncSessionLocal = sessionmaker(
     bind=engine,
