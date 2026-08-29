@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.controllers.auth import router as auth_router
 from app.api.v1.controllers.chat import router as chat_router
+from app.api.v1.controllers.checkin import router as checkin_router
 from app.api.v1.controllers.comments import router as comments_router
 from app.api.v1.controllers.feed import router as feed_router
 from app.api.v1.controllers.interviews import router as interviews_router
@@ -17,6 +18,7 @@ from app.api.v1.controllers.users import router as users_router
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(chat_router)
+api_v1_router.include_router(checkin_router)
 api_v1_router.include_router(comments_router)
 api_v1_router.include_router(feed_router)
 api_v1_router.include_router(interactions_router)
