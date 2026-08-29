@@ -16,14 +16,12 @@
 import React, {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
   useCallback,
   type ReactNode,
 } from 'react';
-import { subscribeSSE } from '@/lib/sseBus';
 
 /** 版本号 Context 值 */
 interface MessageVersionContextValue {
@@ -64,14 +62,8 @@ export const MessageVersionProvider: React.FC<{ children: ReactNode }> = ({ chil
     }
   }, []);
 
-  // 订阅全局 SSE：任何事件到达即 bump
-  useEffect(() => {
-    const unsubscribe = subscribeSSE((data) => {
-      const kind = (data.kind as string) || 'message';
-      bump(kind);
-    });
-    return unsubscribe;
-  }, [bump]);
+  // 不再订阅 SSE（连接由 DashboardLayout 建立），仅提供 bump 机制供下游调用
+  // DashboardLayout 的 subscribeSSE handler 中会调用 bump() 来触发版本号更新
 
   const value = useMemo<MessageVersionContextValue>(
     () => ({ revision, bump, lastKind }),

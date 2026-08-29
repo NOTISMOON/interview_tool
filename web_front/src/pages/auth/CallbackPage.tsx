@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Spin, App } from 'antd';
+import Spin from 'antd/es/spin';
+import App from 'antd/es/app';
 import { useAppStore } from '@/store';
 
 const CallbackPage = () => {

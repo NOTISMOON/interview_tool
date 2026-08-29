@@ -58,9 +58,15 @@ function dispatchRaw(eventName: string, rawData: string | null): void {
   });
 }
 
-/** 确保共享连接已建立（幂等） */
+/** 确保共享连接已建立（若现有连接已断开则重建） */
 function ensureConnection(): void {
-  if (source) return;
+  // 连接已打开 → 复用
+  if (source && source.readyState === EventSource.OPEN) return;
+  // 连接存在但未打开（CONNECTING / CLOSED）→ 关闭重建，确保用最新 Cookie
+  if (source) {
+    source.close();
+    source = null;
+  }
   try {
     // 跨域（前端5645 → 后端8000）必须携带HttpOnly Cookie，否则认证401
     source = new EventSource(buildSSEUrl(), { withCredentials: true });

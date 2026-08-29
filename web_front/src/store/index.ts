@@ -34,6 +34,15 @@ function mapGender(gender: number): 'male' | 'female' | 'other' {
   return 'other';
 }
 
+/** 优化头像 URL：GitHub 头像追加 s=80 尺寸参数，避免下载 460x460 大图（显示仅几十像素） */
+function optimizeAvatar(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (url.includes('avatars.githubusercontent.com')) {
+    return `${url}${url.includes('?') ? '&' : '?'}s=80`;
+  }
+  return url;
+}
+
 /** 将后端user_settings可见性字段映射为前端可见性对象 */
 function mapProfileVisibility(profile: UserProfileResponse): User['profileVisibility'] {
   return {
@@ -51,7 +60,7 @@ function mapUserProfile(profile: UserProfileResponse): User {
     id: String(profile.id),
     email: profile.email || '',
     nickname: profile.nickname,
-    avatar: profile.avatar || undefined,
+    avatar: optimizeAvatar(profile.avatar),
     gender: mapGender(profile.gender),
     birthday: profile.birthday || '',
     bio: profile.bio,
@@ -69,7 +78,7 @@ function mapGithubUser(githubUser: GithubUser): User {
     id: String(githubUser.id),
     email: githubUser.email || '',
     nickname: githubUser.name || githubUser.login,
-    avatar: githubUser.avatar_url,
+    avatar: optimizeAvatar(githubUser.avatar_url),
     gender: 'other',
     birthday: '',
     bio: '',
@@ -151,6 +160,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const res = await githubCallback({ code });
     const user = mapGithubUser(res.user);
     localStorage.setItem('auth_user', JSON.stringify(user));
+    if (res.jti) {
+      localStorage.setItem('auth_jti', res.jti);
+    }
     set({ user, isLoggedIn: true });
   },
 
@@ -165,14 +177,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().refreshUser();
       } catch {
         localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_jti');
         set({ authLoading: false });
       }
       return;
     }
 
-    // 登录页和回调页不向后端发认证请求，避免 401 触发 axios 拦截器跳转，
+    // 登录页、回调页、首页不向后端发认证请求，避免 401 触发 axios 拦截器跳转，
     // 打断 GitHub OAuth 回调流程（回调页 /callback 并发 initAuth 与 handleGithubCallback 存在竞态）
-    const authPaths = ['/login', '/callback'];
+    const authPaths = ['/login', '/callback', '/'];
     if (authPaths.some((p) => window.location.pathname.includes(p))) {
       set({ authLoading: false });
       return;
@@ -209,6 +222,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // 服务端已失效时忽略，继续清理本地
     }
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('auth_jti');
     set({
       user: null,
       isLoggedIn: false,
@@ -253,6 +267,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteAccount: async () => {
     await deleteAccountApi();
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('auth_jti');
     set({
       user: null,
       isLoggedIn: false,

@@ -20,6 +20,7 @@ export interface GithubUser {
 
 export interface GithubCallbackResponse {
   user: GithubUser;
+  jti?: string;  // 当前会话的JTI，用于过滤自身session_kicked事件
 }
 
 export async function getGithubAuthUrl(): Promise<GithubLoginResponse> {
@@ -28,7 +29,9 @@ export async function getGithubAuthUrl(): Promise<GithubLoginResponse> {
 }
 
 export async function githubCallback(params: GithubCallbackRequest): Promise<GithubCallbackResponse> {
-  const { data } = await request.post<GithubCallbackResponse>('/auth/github/callback', params);
+  const { data } = await request.post<GithubCallbackResponse>('/auth/github/callback', params, {
+    timeout: 30000, // GitHub OAuth 涉及外部 API 调用，超时设为 30 秒
+  });
   return data;
 }
 

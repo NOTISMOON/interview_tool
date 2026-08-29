@@ -45,8 +45,9 @@ request.interceptors.response.use(
         // 刷新也失败（会话彻底过期），清除本地用户信息并跳转登录页
         // 注意：/callback 是 GitHub OAuth 回调页，不能在此处跳转登录，否则会打断 OAuth 流程
         localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_jti');
         const pathname = window.location.pathname;
-        if (!pathname.includes('/login') && !pathname.includes('/callback')) {
+        if (!pathname.includes('/login') && !pathname.includes('/callback') && pathname !== '/') {
           window.location.href = '/login';
         }
       }
