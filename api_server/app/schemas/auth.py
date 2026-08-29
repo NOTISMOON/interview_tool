@@ -15,9 +15,10 @@ class GitHubUserInfo(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    """登录令牌响应模型（双Token通过HttpOnly Cookie下发，响应体仅返回user）。"""
+    """登录令牌响应模型（双Token通过HttpOnly Cookie下发，响应体仅返回user和jti）。"""
 
     user: GitHubUserInfo = Field(..., description="用户信息")
+    jti: str | None = Field(default=None, description="当前会话的JTI，用于前端过滤自身session_kicked事件")
 
 
 class RefreshResponse(BaseModel):

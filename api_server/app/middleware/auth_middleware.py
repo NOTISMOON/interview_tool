@@ -11,7 +11,9 @@
        自动跟随到无CORS头的HTML页面导致请求失败）。
 """
 
+import hashlib
 import logging
+from datetime import timedelta
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -38,6 +40,7 @@ WHITELIST_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/github/callback",
         "/api/v1/auth/refresh",
         "/api/v1/auth/logout",
+        "/api/v1/auth/dev-login",
     }
 )
 
@@ -90,9 +93,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
         access_token = request.cookies.get("access_token")
         refresh_token = request.cookies.get("refresh_token")
 
-        # 1. access_token有效 → 直接放行
-        if access_token and decode_access_token(access_token) is not None:
-            return await call_next(request)
+        # 1. access_token有效 → 校验 jti 后放行
+        if access_token:
+            payload = decode_access_token(access_token)
+            if payload is not None:
+                # 单设备登录校验：检查 jti 是否与 Redis 中一致
+                if not await self._verify_jti(payload):
+                    logger.info(
+                        "jti不匹配，账号已在其他设备登录: path=%s",
+                        request.url.path,
+                    )
+                    return self._build_unauthorized_response()
+                return await call_next(request)
 
         # 2. access_token失效，尝试用refresh_token续签
         if refresh_token:
@@ -123,6 +135,44 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.url.path,
         )
         return self._build_unauthorized_response()
+
+    @staticmethod
+    async def _verify_jti(payload: dict) -> bool:
+        """校验 JWT 中的 jti 是否与 Redis 中存储的一致（单设备登录校验）。
+
+        Args:
+            payload: 解码后的 JWT payload。
+
+        Returns:
+            True 表示 jti 匹配或无需校验（无 jti 字段），False 表示账号已在其他设备登录。
+        """
+        jti = payload.get("jti")
+        user_id = payload.get("sub")
+        if not user_id:
+            return True  # 无 user_id 无法校验，放行
+        try:
+            redis = await AsyncRedisClient.get_client()
+            active_jti = await redis.get(f"auth:active_jti:{user_id}")
+            # 无 jti：Redis 中有记录 → 账号已在其他设备登录过，旧 token 失效
+            #          Redis 中无记录 → 旧 token 首次出现，兼容放行并写入当前 jti
+            if not jti:
+                if active_jti is not None:
+                    return False
+                # 首次部署兼容：将当前 token 的 hash 写入 Redis 作为 jti 占位
+                # 下次登录时会被真实 jti 覆盖
+                placeholder = hashlib.sha256(payload.get("sub", "").encode()).hexdigest()[:16]
+                await redis.set(
+                    f"auth:active_jti:{user_id}",
+                    placeholder,
+                    ex=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+                )
+                return True
+            # 有 jti：必须与 Redis 一致
+            if active_jti is None or active_jti != jti:
+                return False
+        except Exception:
+            logger.exception("jti校验时Redis异常，放行以避免误杀")
+        return True
 
     @staticmethod
     def _build_unauthorized_response() -> JSONResponse:

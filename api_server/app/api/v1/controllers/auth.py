@@ -1,11 +1,13 @@
 """认证相关API端点，处理GitHub OAuth登录、双Token签发（HttpOnly Cookie）、刷新与退出。"""
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_async_db, get_async_redis, get_refresh_token_from_cookie
 from app.core.config import settings
+from app.models.user import User
 from app.schemas.auth import (
     GitHubCallbackRequest,
     RefreshResponse,
@@ -60,6 +62,54 @@ async def github_login() -> dict:
     return {"authorize_url": url}
 
 
+@router.get("/dev-login", summary="开发环境免密登录（仅DEBUG模式可用）")
+async def dev_login(
+    response: Response,
+    user_id: int = 22,
+    db: AsyncSession = Depends(get_async_db),
+    redis: Redis = Depends(get_async_redis),
+) -> dict:
+    """开发环境专用登录：按 user_id 直接签发双Token并写入Cookie，绕过OAuth流程。
+
+    仅当 settings.DEBUG=True（本地开发）时可用；生产环境（DEBUG=False）返回404。
+    通过数据库直查用户，不校验任何密码，专供本地联调与UI测试。
+
+    Args:
+        response: FastAPI响应对象，用于设置Cookie。
+        user_id: 欲登录的用户ID，默认22（本地测试用户）。
+        db: 数据库异步会话。
+        redis: 异步Redis客户端。
+
+    Returns:
+        dict: 包含用户ID、昵称与会话jti的提示信息。
+
+    Raises:
+        HTTPException: 非DEBUG环境返回404；用户不存在返回404。
+    """
+    # 生产环境禁用开发登录端点
+    if not settings.DEBUG:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+    # 根据user_id从数据库直查用户
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    # 签发双Token并写Cookie（不推送下线事件，避免干扰本地测试）
+    login = user.nickname or f"user{user.id}"
+    tokens = await auth_service.create_auth_tokens(redis, user.id, login, publish_kick_event=False)
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+
+    return {
+        "user_id": user.id,
+        "nickname": user.nickname,
+        "jti": tokens.jti,
+        "message": "开发环境免密登录成功",
+    }
+
+
 @router.post("/github/callback", response_model=TokenResponse, summary="GitHub OAuth回调处理")
 async def github_callback(
     request: GitHubCallbackRequest,
@@ -90,7 +140,7 @@ async def github_callback(
     # 双token写入HttpOnly Cookie，前端JS不可读
     _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
 
-    return TokenResponse(user=user_info)
+    return TokenResponse(user=user_info, jti=tokens.jti)
 
 
 @router.post("/refresh", response_model=RefreshResponse, summary="刷新Token")

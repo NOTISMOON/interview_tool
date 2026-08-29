@@ -4,12 +4,16 @@
 认证方案：HttpOnly Cookie，token不下发给前端JS，无法被XSS窃取。
 """
 
+import hashlib
+from datetime import timedelta
+
 from fastapi import HTTPException, Request, status
 
+from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.sync_session import get_db  # noqa: F401
 from app.db.async_session import get_async_db  # noqa: F401
-from app.redis.sync_client import get_redis  # noqa: F401
+from app.redis.sync_client import SyncRedisClient, get_redis  # noqa: F401
 from app.redis.async_client import get_async_redis  # noqa: F401
 
 
@@ -34,6 +38,36 @@ def get_current_user(request: Request) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="访问令牌已过期",
         )
+
+    # 单设备登录校验：检查 jti 是否与 Redis 中一致
+    jti = payload.get("jti")
+    user_id = payload.get("sub")
+    if jti and user_id:
+        redis = SyncRedisClient.get_client()
+        active_jti = redis.get(f"auth:active_jti:{user_id}")
+        if active_jti is None or active_jti != jti:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="账号已在其他设备登录，请重新登录",
+            )
+    elif not jti and user_id:
+        # 旧 token 无 jti 时的兼容处理
+        redis = SyncRedisClient.get_client()
+        active_jti = redis.get(f"auth:active_jti:{user_id}")
+        if active_jti is not None:
+            # Redis 中有记录 → 已在其他设备登录过，拒绝
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="账号已在其他设备登录，请重新登录",
+            )
+        # 首次部署兼容：写入占位 jti
+        placeholder = hashlib.sha256(user_id.encode()).hexdigest()[:16]
+        redis.setex(
+            f"auth:active_jti:{user_id}",
+            timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+            placeholder,
+        )
+
     return payload
 
 

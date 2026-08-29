@@ -166,7 +166,10 @@ class SSEManager:
 
         # 系统广播：推送到所有本地队列
         if channel_str == self.broadcast_channel:
-            await self._broadcast_to_all(data)
+            try:
+                await self._broadcast_to_all(data)
+            except Exception:
+                logger.exception("SSE系统广播处理异常 channel=%s", channel_str)
             return
 
         # 用户推送：从通道名解析 user_id
@@ -178,7 +181,18 @@ class SSEManager:
                 logger.warning("无法解析Pub/Sub通道用户ID channel=%s", channel_str)
                 return
 
-            await self._push_to_user(user_id, data)
+            # session_kicked 事件记录 INFO 日志以便排查
+            payload_preview = self._decode(data)
+            if isinstance(payload_preview, dict) and payload_preview.get("kind") == "session_kicked":
+                logger.info(
+                    "SSE Pub/Sub 收到 session_kicked user_id=%s channel=%s",
+                    user_id, channel_str,
+                )
+
+            try:
+                await self._push_to_user(user_id, data)
+            except Exception:
+                logger.exception("SSE用户推送处理异常 user_id=%s channel=%s", user_id, channel_str)
 
     @staticmethod
     def _decode(data: Any) -> Any:
@@ -228,18 +242,28 @@ class SSEManager:
         queues = self._queues.get(user_id)
         if not queues:
             # 关键排查点：用户不在本实例属正常（多实例下由持有连接的实例投递），
-            # debug 级记录以便区分“不在本实例”与“在本实例但未收到”
-            logger.debug("SSE推送目标用户不在本实例，跳过 user_id=%s local_users=%s", user_id, len(self._queues))
+            # 但 session_kicked 事件需要 INFO 级以便排查
+            payload = self._decode(data)
+            kind = payload.get("kind") if isinstance(payload, dict) else None
+            if kind == "session_kicked":
+                logger.info("SSE推送 session_kicked 目标用户不在本实例，跳过 user_id=%s", user_id)
+            else:
+                logger.debug("SSE推送目标用户不在本实例，跳过 user_id=%s local_users=%s", user_id, len(self._queues))
             return
 
         payload = self._decode(data)
+        kind = payload.get("kind") if isinstance(payload, dict) else None
         logger.debug(
             "SSE推送分发到本地队列 user_id=%s local_queues=%s kind=%s message_id=%s",
             user_id,
             len(queues),
-            payload.get("kind") if isinstance(payload, dict) else type(payload).__name__,
-            payload.get("message", {}).get("id") if isinstance(payload, dict) else None,
+            kind,
+            payload.get("message", {}).get("id")
+            if isinstance(payload, dict) and isinstance(payload.get("message"), dict)
+            else None,
         )
+        if kind == "session_kicked":
+            logger.info("SSE推送 session_kicked 已分发到本地队列 user_id=%s queues=%s", user_id, len(queues))
         for queue in queues:
             self._enqueue(queue, user_id, payload)
 

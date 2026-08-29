@@ -11,7 +11,7 @@ from app.core.config import settings
 
 
 def create_access_token(data: dict[str, Any], expires_minutes: int | None = None) -> str:
-    """创建JWT访问令牌。
+    """创建JWT访问令牌，包含 jti（JWT ID）用于服务端会话校验。
 
     Args:
         data: 要编码到令牌中的数据载荷（如 user_id、login 等）。
@@ -21,6 +21,8 @@ def create_access_token(data: dict[str, Any], expires_minutes: int | None = None
         编码后的JWT字符串。
     """
     to_encode = data.copy()
+    # 生成 jti（JWT ID），用于单设备登录校验
+    to_encode.setdefault("jti", secrets.token_hex(16))
     expire_minutes = expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
     expire = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
     to_encode.update({"exp": expire})

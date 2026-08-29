@@ -14,7 +14,7 @@ from fastapi import HTTPException, status
 from redis.asyncio import Redis
 
 from app.core.config import settings
-from app.core.security import create_access_token, create_refresh_token, hash_token
+from app.core.security import create_access_token, create_refresh_token, decode_access_token, hash_token
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class TokenPair(NamedTuple):
 
     access_token: str
     refresh_token: str
+    jti: str = ""
 
 
 class AuthService:
@@ -46,19 +47,61 @@ class AuthService:
         """
         return REFRESH_TOKEN_PREFIX + hash_token(refresh_token)
 
-    async def create_auth_tokens(self, redis: Redis, user_id: int, login: str) -> TokenPair:
+    async def create_auth_tokens(
+        self, redis: Redis, user_id: int, login: str, publish_kick_event: bool = True
+    ) -> TokenPair:
         """签发双token：access_token (JWT) + refresh_token（存Redis）。
 
         Args:
             redis: 异步Redis客户端。
             user_id: 本地用户唯一标识。
             login: 用户登录名（GitHub登录时为GitHub用户名）。
+            publish_kick_event: 是否在旧 jti 存在时推送 session_kicked 事件。
+                登录时 True，token 刷新时 False（避免刷新触发重复通知）。
 
         Returns:
             TokenPair，包含access_token与refresh_token。
         """
-        # 短期JWT访问令牌（30分钟）
+        # 短期JWT访问令牌（30分钟），内含 jti 用于服务端会话校验
         access_token = create_access_token({"sub": str(user_id), "login": login})
+
+        # 解码获取 jti
+        payload = decode_access_token(access_token)
+        jti = payload.get("jti") if payload else ""
+
+        # 单设备登录校验：先检查是否有旧 jti（另一设备已登录），有则推送下线通知
+        jti_key = f"auth:active_jti:{user_id}"
+        old_jti = await redis.get(jti_key)
+        if jti:
+            await redis.set(
+                jti_key,
+                jti,
+                ex=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+            )
+            # 仅在初次登录时推送下线通知，不做 token 刷新（避免循环通知）
+            if old_jti is not None and publish_kick_event:
+                try:
+                    channel = f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}"
+                    receivers = await redis.publish(
+                        channel,
+                        json.dumps({
+                            "kind": "session_kicked",
+                            "message": "账号已在其他设备登录",
+                            "jti": jti,  # 新设备的 jti，前端用来判断是否自己
+                        }),
+                    )
+                    if receivers == 0:
+                        logger.warning(
+                            "session_kicked 推送无实例接收 user_id=%s channel=%s old_jti=%s",
+                            user_id, channel, old_jti,
+                        )
+                    else:
+                        logger.info(
+                            "session_kicked 已推送 user_id=%s receivers=%s",
+                            user_id, receivers,
+                        )
+                except Exception:
+                    logger.warning("推送下线通知失败: user_id=%s", user_id)
 
         # 长期不透明刷新令牌（7天），Redis中只存SHA256哈希
         refresh_token = create_refresh_token()
@@ -74,7 +117,7 @@ class AuthService:
             value,
             ex=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
-        return TokenPair(access_token=access_token, refresh_token=refresh_token)
+        return TokenPair(access_token=access_token, refresh_token=refresh_token, jti=jti)
 
     async def refresh_tokens(self, redis: Redis, refresh_token: str) -> TokenPair:
         """验证refresh token，轮转签发新token对（旧token立即失效）。
@@ -110,7 +153,7 @@ class AuthService:
         await redis.delete(key)
 
         logger.info("刷新token: user_id=%s", data.get("user_id"))
-        return await self.create_auth_tokens(redis, data["user_id"], data["login"])
+        return await self.create_auth_tokens(redis, data["user_id"], data["login"], publish_kick_event=False)
 
     async def revoke_refresh_token(self, redis: Redis, refresh_token: str) -> None:
         """删除Redis中的refresh token（幂等，不存在也不报错）。

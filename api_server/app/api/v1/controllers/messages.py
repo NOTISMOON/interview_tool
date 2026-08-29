@@ -164,12 +164,18 @@ async def message_stream(
                             event="unread_count",
                             data=json.dumps(payload, ensure_ascii=False, default=str),
                         )
+                    elif kind == "session_kicked":
+                        # 账号下线事件：透传整个 event_data，保持 kind 字段供前端判断
+                        yield _format_sse_event(
+                            event="message",
+                            data=json.dumps(event_data, ensure_ascii=False, default=str),
+                        )
                     else:
                         # message / system_broadcast 及未知类型统一按消息体透传
                         msg_data = event_data.get("message", event_data)
                         yield _format_sse_event(
                             event=kind if kind in ("message", "system_broadcast") else "message",
-                            event_id=msg_data.get("id"),
+                            event_id=msg_data.get("id") if isinstance(msg_data, dict) else None,
                             data=json.dumps(msg_data, ensure_ascii=False, default=str),
                         )
 
