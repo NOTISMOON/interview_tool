@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, sta
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_redis
+from app.repositories.comment_like_repository import comment_like_repository
 from app.schemas.comment import CommentCreate, CommentListResponse, CommentResponse
 from app.services.comment_service import CommentNotFoundError, PostNotFoundError, comment_service
 
@@ -52,6 +53,7 @@ def create_comment(
     data: CommentCreate = ...,
     payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
+    cache_client: redis.Redis = Depends(get_redis),
 ) -> CommentResponse:
     """创建评论或回复（Transactional Outbox：写评论、计数、事件与通知同事务）。
 
@@ -63,6 +65,7 @@ def create_comment(
         data: 评论创建请求体。
         payload: JWT认证载荷。
         db: 数据库同步会话。
+        cache_client: 同步Redis客户端。
 
     Returns:
         CommentResponse: 创建成功的评论。
@@ -77,6 +80,11 @@ def create_comment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="帖子不存在")
     except Exception:
         raise HTTPException(status_code=500, detail="评论失败")
+
+    # 评论热度分累加（评论权重）
+    from app.services.hot_post_service import COMMENT_WEIGHT, hot_post_service
+
+    hot_post_service.increment_hot_score(cache_client, post_id, COMMENT_WEIGHT)
 
     # 组装为响应模型
     return comment_service._assemble_comment_responses(db, [comment])[0]
@@ -177,3 +185,50 @@ def delete_comment(
         comment_service.delete_comment(db, comment_id, _get_user_id(payload))
     except CommentNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="评论不存在")
+
+
+@router.post(
+    "/comments/{comment_id}/like",
+    summary="切换评论点赞状态",
+)
+def toggle_comment_like(
+    comment_id: int = Path(..., ge=1, description="评论ID"),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    cache_client: redis.Redis = Depends(get_redis),
+) -> dict:
+    """切换评论点赞状态：已点赞→取消，未点赞→点赞。
+
+    Args:
+        comment_id: 评论ID。
+        payload: JWT认证载荷。
+        db: 数据库同步会话。
+        cache_client: 同步Redis客户端。
+
+    Returns:
+        {"is_liked": bool, "likes_count": int}。
+    """
+    user_id = _get_user_id(payload)
+    from app.models.comment import Comment
+
+    comment = db.get(Comment, comment_id)
+    if comment is None or comment.status == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="评论不存在")
+
+    is_liked = comment_like_repository.is_liked(db, comment_id, user_id)
+    if is_liked:
+        db.rollback()
+        with db.begin():
+            comment_like_repository.remove_like(db, comment_id, user_id)
+            comment_like_repository.decrement_likes_count(db, comment_id)
+        db.refresh(comment)
+        return {"is_liked": False, "likes_count": comment.likes_count}
+    else:
+        db.rollback()
+        created = comment_like_repository.create_like(db, comment_id, user_id)
+        if created:
+            db.flush()
+            comment_like_repository.increment_likes_count(db, comment_id)
+            db.commit()
+        db.refresh(comment)
+        return {"is_liked": True, "likes_count": comment.likes_count}

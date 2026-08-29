@@ -277,7 +277,7 @@ class CommentService:
         comments: list[Comment],
         current_user_id: int | None = None,
     ) -> list[CommentResponse]:
-        """批量组装评论响应（含作者信息、被回复者信息）。
+        """批量组装评论响应（含作者信息、被回复者信息、点赞状态）。
 
         Args:
             db: 数据库同步会话。
@@ -298,6 +298,14 @@ class CommentService:
 
         # 批量查询用户信息
         users = sync_user_repository.batch_get_by_ids(db, list(user_ids))
+
+        # 批量查询点赞状态
+        liked_ids: set[int] = set()
+        if current_user_id is not None and comments:
+            from app.repositories.comment_like_repository import comment_like_repository
+
+            comment_ids = [c.id for c in comments]
+            liked_ids = comment_like_repository.batch_is_liked(db, comment_ids, current_user_id)
 
         items: list[CommentResponse] = []
         for c in comments:
@@ -322,7 +330,7 @@ class CommentService:
                     content=c.content,
                     likes_count=c.likes_count,
                     reply_count=c.reply_count,
-                    is_liked=False,
+                    is_liked=c.id in liked_ids,
                     created_at=c.created_at,
                     updated_at=c.updated_at,
                 )
