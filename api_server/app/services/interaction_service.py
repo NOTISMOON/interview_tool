@@ -20,6 +20,7 @@ from app.repositories.like_repository import like_repository
 from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.post_repository import post_repository
 from app.repositories.user_repository import sync_user_repository
+from app.services.hot_post_service import LIKE_WEIGHT, hot_post_service
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,8 @@ class InteractionService:
 
         # 更新Redis缓存（事务提交后）
         interaction_cache.add_like(cache_client, post_id, user_id)
+        # 热度分累加（点赞权重）
+        hot_post_service.increment_hot_score(cache_client, post_id, LIKE_WEIGHT)
 
         # 刷新点赞数
         db.refresh(post_repository.get_by_id(db, post_id))
@@ -174,6 +177,8 @@ class InteractionService:
 
         # 更新Redis缓存
         interaction_cache.remove_like(cache_client, post_id, user_id)
+        # 热度分扣减（取消点赞权重）
+        hot_post_service.increment_hot_score(cache_client, post_id, -LIKE_WEIGHT)
 
         likes_count = post_repository.get_by_id(db, post_id).likes_count
 

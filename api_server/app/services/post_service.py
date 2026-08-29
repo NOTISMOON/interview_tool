@@ -110,6 +110,11 @@ class PostService:
         from app.services.user_service import user_service
 
         user_service.invalidate_profile_cache(cache_client, author_id)
+        # 加入热度增量 ZSET（仅当帖子有标签时参与热门）
+        if data.tags:
+            from app.services.hot_post_service import hot_post_service
+
+            hot_post_service.add_post_to_hot_score(cache_client, post_id)
         logger.info("帖子创建成功 post_id=%s author_id=%s", post_id, author_id)
         return post
 
@@ -209,6 +214,7 @@ class PostService:
         from app.services.hot_post_service import hot_post_service
 
         hot_post_service.remove_from_hot_cache(post_id)
+        hot_post_service.remove_post_from_hot_score(cache_client, post_id)
         from app.services.user_service import user_service
 
         user_service.invalidate_profile_cache(cache_client, post_author_id)

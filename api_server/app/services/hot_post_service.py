@@ -1,8 +1,11 @@
-"""热门帖子服务层：浏览数统计、热门计算、Redis ZSET 缓存读写。
+"""热门帖子服务层：浏览数统计、热度增量累加、Redis ZSET 计算与读取。
 
 职责：
   - 浏览数统计：Redis 计数器 INCR + 定时同步到 MySQL（每 5 分钟）
-  - 热门计算：定时任务（每 10 分钟）按热度公式计算 Top 100，更新 is_hot + ZSET
+  - 热度增量：互动（点赞/评论/浏览）发生时累加热度分到 Redis ZSET post:hot:score，
+    避免定时任务全量扫描数据库
+  - 热门计算：定时任务（每 10 分钟）从 post:hot:score ZSET 取候选 Top N，
+    仅针对候选批量查 MySQL（IN 查询，不扫全表）应用时间衰减，产出 Top 100
   - 缓存对账：定时校验 Redis ZSET 与 MySQL 一致性
 """
 
@@ -11,7 +14,7 @@ import logging
 from datetime import datetime, timedelta
 
 import redis
-from sqlalchemy import text, update
+from sqlalchemy import text, update, func
 from sqlalchemy.orm import Session
 
 from app.db.sync_session import SyncSessionLocal
@@ -19,8 +22,10 @@ from app.redis.sync_client import get_redis
 
 logger = logging.getLogger(__name__)
 
-# 热门帖子 ZSET Key
+# 热门帖子最终 ZSET Key
 HOT_ZSET_KEY = "post:hot"
+# 热度增量 ZSET Key（互动时累加分数，定时任务读取）
+HOT_SCORE_ZSET_KEY = "post:hot:score"
 # 浏览数计数器 Key 前缀
 VIEWS_PREFIX = "post:views:"
 # 浏览数同步锁 Key
@@ -37,6 +42,8 @@ VIEW_WEIGHT = 0.1        # 浏览权重
 DECAY_FACTOR = 1.5       # 时间衰减系数（每小时）
 HOT_TOP_N = 100          # 热门帖子 Top N
 HOT_RECENT_DAYS = 7      # 统计近 7 天帖子
+# 定时任务从增量 ZSET 取的候选数（留出衰减淘汰空间，不必扫全表）
+HOT_CANDIDATE_N = 300
 
 # 缓存对账阈值
 RECONCILE_THRESHOLD = 10  # ZSET 大小与 MySQL 标记数差异超过该值则触发重建
@@ -58,7 +65,7 @@ class HotPostService:
     # ------------------------------------------------------------------
 
     def record_view(self, post_id: int) -> None:
-        """记录一次帖子浏览（Redis 计数器 INCR）。
+        """记录一次帖子浏览（Redis 计数器 INCR + 热度分累加）。
 
         不阻塞、不写 MySQL，纯粹 Redis 计数器累加，定时任务批量同步到 DB。
 
@@ -77,6 +84,8 @@ class HotPostService:
                 )
                 if expire_seconds > 0:
                     client.expire(key, expire_seconds)
+            # 热度分同步累加（浏览权重）
+            self.increment_hot_score(client, post_id, VIEW_WEIGHT)
         except Exception:
             logger.exception("记录浏览数失败 post_id=%s", post_id)
 
@@ -141,17 +150,96 @@ class HotPostService:
             db.close()
 
     # ------------------------------------------------------------------
+    # 热度分增量维护（互动埋点，避免定时任务全量扫库）
+    # ------------------------------------------------------------------
+
+    def add_post_to_hot_score(self, client: redis.Redis, post_id: int) -> None:
+        """帖子创建时加入热度增量 ZSET（初始分 0）。
+
+        Args:
+            client: Redis 客户端。
+            post_id: 帖子 ID。
+        """
+        try:
+            client.zadd(HOT_SCORE_ZSET_KEY, {str(post_id): 0})
+            client.expire(HOT_SCORE_ZSET_KEY, HOT_RECENT_DAYS * 86400)
+        except Exception:
+            logger.exception("帖子加入热度 ZSET 失败 post_id=%s", post_id)
+
+    def increment_hot_score(self, client: redis.Redis, post_id: int, delta: float) -> None:
+        """互动时累加热度分（点赞/评论/浏览）。
+
+        Args:
+            client: Redis 客户端。
+            post_id: 帖子 ID。
+            delta: 热度增量（权重值，可为负）。
+        """
+        try:
+            client.zincrby(HOT_SCORE_ZSET_KEY, delta, str(post_id))
+            client.expire(HOT_SCORE_ZSET_KEY, HOT_RECENT_DAYS * 86400)
+        except Exception:
+            logger.exception("热度分累加失败 post_id=%s delta=%s", post_id, delta)
+
+    def remove_post_from_hot_score(self, client: redis.Redis, post_id: int) -> None:
+        """删除帖子时从热度增量 ZSET 移除。
+
+        Args:
+            client: Redis 客户端。
+            post_id: 帖子 ID。
+        """
+        try:
+            client.zrem(HOT_SCORE_ZSET_KEY, str(post_id))
+        except Exception:
+            logger.exception("热度 ZSET 移除失败 post_id=%s", post_id)
+
+    def _bootstrap_hot_score(self, client: redis.Redis, db: Session, now: datetime) -> None:
+        """首次部署迁移：从 DB 一次性加载现有帖子互动数据初始化热度 ZSET。
+
+        仅在增量 ZSET 为空（无任何互动记录）时触发一次，之后全部走增量路径。
+
+        Args:
+            client: Redis 客户端。
+            db: 数据库会话。
+            now: 当前时间。
+        """
+        from app.models.post import Post, POST_STATUS_NORMAL
+
+        rows = (
+            db.query(Post)
+            .filter(
+                Post.status == POST_STATUS_NORMAL,
+                Post.created_at >= now - timedelta(days=HOT_RECENT_DAYS),
+                Post.tags.isnot(None),
+                func.json_length(Post.tags) > 0,
+            )
+            .all()
+        )
+        pipeline = client.pipeline()
+        for post in rows:
+            base_score = (
+                post.likes_count * LIKE_WEIGHT
+                + post.comments_count * COMMENT_WEIGHT
+                + post.views_count * VIEW_WEIGHT
+            )
+            pipeline.zadd(HOT_SCORE_ZSET_KEY, {str(post.id): base_score})
+        if rows:
+            pipeline.expire(HOT_SCORE_ZSET_KEY, HOT_RECENT_DAYS * 86400)
+            pipeline.execute()
+        logger.info("热门热度 ZSET 初始化完成: 加载 %s 条现有帖子", len(rows))
+
+    # ------------------------------------------------------------------
     # 热门计算
     # ------------------------------------------------------------------
 
     def calc_hot_posts(self) -> int:
-        """计算热门帖子并更新缓存。
+        """计算热门帖子并更新缓存（基于 Redis 增量 ZSET，不扫全表）。
 
         流程：
-          1. 查询近 7 天正常帖子
-          2. 按热度公式计算每条帖子的热度分
-          3. 更新 Top 100 帖子的 is_hot=1，其余 is_hot=0
-          4. 写入 Redis ZSET post:hot
+          1. 从 post:hot:score ZSET 取候选 Top N（仅互动过的帖子，天然近 7 天）
+          2. 批量查 MySQL（IN 查询）过滤状态与标签
+          3. 对候选应用时间衰减，计算最终热度分
+          4. 更新 Top 100 帖子的 is_hot=1，其余 is_hot=0
+          5. 写入 Redis ZSET post:hot
 
         Returns:
             本次更新的热门帖子数。
@@ -159,72 +247,89 @@ class HotPostService:
         db = SyncSessionLocal()
         try:
             now = datetime.now()
-            since = now - timedelta(days=HOT_RECENT_DAYS)
+            client = self._get_cache()
 
-            # 查询近 7 天正常帖子
+            # 1. 从增量 ZSET 取候选（互动过的帖子，不扫全表）
+            members = client.zrevrange(HOT_SCORE_ZSET_KEY, 0, HOT_CANDIDATE_N - 1)
+            candidate_ids = [int(m) for m in members if str(m).isdigit()]
+
             from app.models.post import Post, POST_STATUS_NORMAL
 
-            rows = (
+            if not candidate_ids:
+                # 首次部署/迁移兜底：增量 ZSET 为空时，一次性从 DB 加载现有帖子
+                # 的互动数据初始化 ZSET（仅触发一次，之后都走增量路径）
+                self._bootstrap_hot_score(client, db, now)
+                members = client.zrevrange(HOT_SCORE_ZSET_KEY, 0, HOT_CANDIDATE_N - 1)
+                candidate_ids = [int(m) for m in members if str(m).isdigit()]
+
+            if not candidate_ids:
+                # 仍无候选：清空所有热门标记，避免历史热门残留
+                db.execute(update(Post).where(Post.is_hot == 1).values(is_hot=0))
+                db.commit()
+                logger.info("热门计算：无互动候选，清空热门标记")
+                return 0
+
+            # 2. 批量查 MySQL（IN 查询，仅候选数量，不扫全表）
+            posts = (
                 db.query(Post)
                 .filter(
+                    Post.id.in_(candidate_ids),
                     Post.status == POST_STATUS_NORMAL,
-                    Post.created_at >= since,
+                    Post.created_at >= now - timedelta(days=HOT_RECENT_DAYS),
+                    Post.tags.isnot(None),
+                    func.json_length(Post.tags) > 0,
                 )
                 .all()
             )
 
-            if not rows:
-                logger.info("热门计算：近 %s 天无帖子", HOT_RECENT_DAYS)
-                # 近 7 天无帖子时清空所有热门标记，避免历史热门残留
+            if not posts:
                 db.execute(update(Post).where(Post.is_hot == 1).values(is_hot=0))
                 db.commit()
+                logger.info("热门计算：候选均无效，清空热门标记")
                 return 0
 
-            # 计算热度分
+            # 3. 计算最终热度分：互动累计分 - 时间衰减
+            #    从 ZSET 读原始累计分作为"热度基础"，再按帖子创建时间衰减
+            score_map: dict[int, float] = {}
+            for pid, score in client.zrange(HOT_SCORE_ZSET_KEY, 0, -1, withscores=True):
+                try:
+                    score_map[int(pid)] = float(score)
+                except (ValueError, TypeError):
+                    continue
+
             scored: list[tuple[int, float]] = []
-            for post in rows:
+            for post in posts:
                 hours_elapsed = (now - post.created_at).total_seconds() / 3600
                 time_decay = hours_elapsed * DECAY_FACTOR
-                score = (
-                    post.likes_count * LIKE_WEIGHT
-                    + post.comments_count * COMMENT_WEIGHT
-                    + post.views_count * VIEW_WEIGHT
-                    - time_decay
-                )
+                base_score = score_map.get(post.id, 0.0)
+                score = base_score - time_decay
                 scored.append((post.id, max(score, 0)))
 
             # 按热度分降序排序
             scored.sort(key=lambda x: x[1], reverse=True)
-
-            # 仅热度分 > 0 的帖子有资格成为热门：避免低活跃社区"矮子里拔将军"，
-            # 让时间衰减后为负分的帖子（即使仍在前 Top N 名额内）被强制标记热门而长期霸榜
+            # 仅热度分 > 0 的帖子有资格成为热门
             eligible = [(pid, score) for pid, score in scored if score > 0]
 
             # Top 100 为热门
             hot_ids = {pid for pid, _ in eligible[:HOT_TOP_N]}
 
-            # 批量更新 is_hot
-            # 先将所有当前标记为热门的帖子置 0（含超过 7 天窗口的历史热门，
-            # 避免"最热僵尸"——旧帖子 is_hot 永远不被重置）
+            # 4. 批量更新 is_hot
             db.execute(update(Post).where(Post.is_hot == 1).values(is_hot=0))
-            # 再标记本次 Top 100 为热门
             if hot_ids:
                 db.execute(
                     update(Post).where(Post.id.in_(list(hot_ids))).values(is_hot=1)
                 )
             db.commit()
 
-            # 写入 Redis ZSET
-            client = self._get_cache()
+            # 5. 写入 Redis ZSET
             pipeline = client.pipeline()
             pipeline.delete(HOT_ZSET_KEY)
             for pid, score in eligible[:HOT_TOP_N]:
                 pipeline.zadd(HOT_ZSET_KEY, {str(pid): score})
-            # 设置 TTL：7 天，防内存泄漏
             pipeline.expire(HOT_ZSET_KEY, 7 * 86400)
             pipeline.execute()
 
-            logger.info("热门计算完成: Top %s, 共扫描 %s 条帖子", len(hot_ids), len(rows))
+            logger.info("热门计算完成: Top %s, 候选 %s, 无候选扫描", len(hot_ids), len(candidate_ids))
             return len(hot_ids)
         except Exception:
             logger.exception("热门计算失败")
@@ -276,7 +381,12 @@ class HotPostService:
 
             db_count = (
                 db.query(Post)
-                .filter(Post.status == POST_STATUS_NORMAL, Post.is_hot == 1)
+                .filter(
+                    Post.status == POST_STATUS_NORMAL,
+                    Post.is_hot == 1,
+                    Post.tags.isnot(None),
+                    func.json_length(Post.tags) > 0,
+                )
                 .count()
             )
             result["zset_size"] = zset_size

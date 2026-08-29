@@ -128,7 +128,10 @@ class PostRepository:
             stmt = stmt.where(Post.author_id == author_id)
 
         if sort == "hot":
-            stmt = stmt.order_by(Post.is_hot.desc(), Post.likes_count.desc(), Post.id.desc())
+            # 热门排序：只显示 is_hot=1 的帖子，按点赞数降序
+            stmt = stmt.where(Post.is_hot == 1).order_by(Post.likes_count.desc(), Post.id.desc())
+        elif sort == "pinned":
+            stmt = stmt.order_by(Post.is_pinned.desc(), Post.id.desc())
         else:
             stmt = stmt.order_by(Post.id.desc())
 
