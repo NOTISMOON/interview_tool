@@ -16,7 +16,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { App } from 'antd';
+import App from 'antd/es/app';
 import {
   getInterviewState,
   submitAnswer,
@@ -456,7 +456,7 @@ const InterviewSession = () => {
   if (takenOver) {
     return (
       <div className="fixed inset-0 z-[100] bg-[#232529] text-[#E8E8E8] flex flex-col items-center justify-center gap-5 px-6">
-        <div className="w-16 h-16 rounded-full bg-[rgba(4,120,87,0.12)] border-2 border-[rgba(4,120,87,0.32)] flex items-center justify-center text-3xl">
+        <div className="w-16 h-16 rounded-full bg-[rgba(217,164,65,0.12)] border-2 border-[rgba(217,164,65,0.32)] flex items-center justify-center text-3xl">
           🖥️
         </div>
         <h2 className="text-xl font-bold text-[#F7F8FA]">面试已在另一个页面打开</h2>
@@ -470,8 +470,8 @@ const InterviewSession = () => {
             disabled={resumeLoading}
             className={`inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold transition-all ${
               resumeLoading
-                ? 'bg-[rgba(4,120,87,0.09)] border border-[rgba(4,120,87,0.15)] text-[#666666] cursor-not-allowed'
-                : 'bg-[#047857] text-white hover:bg-[#065F46] hover:-translate-y-px'
+                ? 'bg-[rgba(217,164,65,0.09)] border border-[rgba(217,164,65,0.15)] text-[#666666] cursor-not-allowed'
+                : 'bg-[#D9A441] text-[#16130A] hover:bg-[#C99A3C] hover:-translate-y-px'
             }`}
           >
             {resumeLoading ? (
@@ -522,11 +522,11 @@ const InterviewSession = () => {
       <div className="fixed inset-0 z-[100] bg-[#232529] text-[#E8E8E8] flex flex-col overflow-hidden">
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(4,120,87,0.07) 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(217,164,65,0.07) 0%, transparent 70%)' }}
         />
         <div className="relative z-[2] flex-1 flex flex-col items-center justify-center px-6 max-w-2xl mx-auto w-full">
           <div className="text-center" style={{ animation: 'room-fade-in 0.6s ease-out' }}>
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[rgba(16,185,129,0.12)] border-2 border-[rgba(16,185,129,0.32)] flex items-center justify-center text-[#10B981]">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[rgba(230,175,78,0.12)] border-2 border-[rgba(230,175,78,0.32)] flex items-center justify-center text-[#E6AF4E]">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M8 12l3 3 5-5" />
@@ -558,20 +558,20 @@ const InterviewSession = () => {
               {reportStatus?.status === 'ready' ? (
                 <button
                   onClick={() => navigate(`/dashboard/report/${interviewId}`, { replace: true })}
-                  className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-[#047857] text-white hover:bg-[#065F46] hover:-translate-y-px transition-all"
+                  className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-[#D9A441] text-[#16130A] hover:bg-[#C99A3C] hover:-translate-y-px transition-all"
                 >
                   查看面试报告
                 </button>
               ) : reportStatus?.status === 'failed' ? (
                 <button
                   onClick={handleRegenerateReport}
-                  className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-[#047857] text-white hover:bg-[#065F46] hover:-translate-y-px transition-all"
+                  className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-[#D9A441] text-[#16130A] hover:bg-[#C99A3C] hover:-translate-y-px transition-all"
                 >
                   报告生成失败，点击重试
                 </button>
               ) : (
                 <div className="flex items-center gap-3 px-7 py-3 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-                  <span className="w-4 h-4 rounded-full border-2 border-[rgba(255,255,255,0.15)] border-t-[#047857] animate-spin" />
+                  <span className="w-4 h-4 rounded-full border-2 border-[rgba(255,255,255,0.15)] border-t-[#D9A441] animate-spin" />
                   <span className="text-[15px] text-[#999999]">报告生成中…</span>
                 </div>
               )}
@@ -592,7 +592,7 @@ const InterviewSession = () => {
   if (phase === 'loading' || !currentQuestion) {
     return (
       <div className="fixed inset-0 z-[100] bg-[#232529] flex flex-col items-center justify-center gap-4">
-        <div className="w-10 h-10 rounded-full border-4 border-[rgba(255,255,255,0.08)] border-t-[#047857] animate-spin" />
+        <div className="w-10 h-10 rounded-full border-4 border-[rgba(255,255,255,0.08)] border-t-[#D9A441] animate-spin" />
         <p className="text-sm text-[#666666]">正在恢复面试状态…</p>
       </div>
     );
@@ -611,7 +611,7 @@ const InterviewSession = () => {
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(4,120,87,0.07) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 50% 80%, rgba(6,95,70,0.05) 0%, transparent 70%)',
+            'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(217,164,65,0.07) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 50% 80%, rgba(169,126,36,0.05) 0%, transparent 70%)',
         }}
       />
 
@@ -628,8 +628,8 @@ const InterviewSession = () => {
         </button>
         <div className="flex items-center gap-2.5">
           <span
-            className="w-2 h-2 rounded-full bg-[#10B981]"
-            style={{ boxShadow: '0 0 8px rgba(16,185,129,0.5)', animation: 'room-dot-pulse 2s infinite' }}
+            className="w-2 h-2 rounded-full bg-[#E6AF4E]"
+            style={{ boxShadow: '0 0 8px rgba(230,175,78,0.5)', animation: 'room-dot-pulse 2s infinite' }}
           />
           <span className="text-[15px] font-semibold text-[#E8E8E8] tracking-wide">
             面试进行中 · {progressLabel}
@@ -643,7 +643,7 @@ const InterviewSession = () => {
         {/* 题目卡片 */}
         <div className="relative w-full text-center px-9 py-10 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] rounded-3xl backdrop-blur-md overflow-hidden">
           <div className="flex items-center justify-center gap-2 mb-5 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[rgba(4,120,87,0.18)] text-[#6EE7B7]">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[rgba(217,164,65,0.18)] text-[#F0C970]">
               {CATEGORY_LABEL[currentQuestion.category ?? 1]}
             </span>
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[rgba(255,255,255,0.06)] text-[#999999]">
@@ -655,7 +655,7 @@ const InterviewSession = () => {
           </h2>
           <div
             className="absolute -top-20 left-1/2 -translate-x-1/2 pointer-events-none"
-            style={{ width: '280px', height: '100px', background: 'radial-gradient(ellipse, rgba(4,120,87,0.15), transparent 70%)' }}
+            style={{ width: '280px', height: '100px', background: 'radial-gradient(ellipse, rgba(217,164,65,0.15), transparent 70%)' }}
           />
         </div>
 
@@ -667,7 +667,7 @@ const InterviewSession = () => {
                 <circle cx="80" cy="80" r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
                 <circle
                   cx="80" cy="80" r={RING_RADIUS} fill="none"
-                  stroke={isUrgent ? '#F53535' : '#047857'} strokeWidth="6" strokeLinecap="round"
+                  stroke={isUrgent ? '#F53535' : '#D9A441'} strokeWidth="6" strokeLinecap="round"
                   strokeDasharray={RING_CIRCUMFERENCE} strokeDashoffset={ringOffset}
                   style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.5s', ...(isUrgent ? { animation: 'ring-urgent-pulse 0.5s infinite' } : {}) }}
                 />
@@ -687,8 +687,8 @@ const InterviewSession = () => {
               disabled={!canSkip}
               className={`inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold transition-all border ${
                 canSkip
-                  ? 'bg-[rgba(4,120,87,0.15)] border-[rgba(4,120,87,0.32)] text-[#6EE7B7] hover:bg-[rgba(4,120,87,0.25)] hover:border-[rgba(4,120,87,0.45)] hover:-translate-y-px'
-                  : 'bg-[rgba(4,120,87,0.09)] border-[rgba(4,120,87,0.15)] text-[#666666] opacity-60 cursor-not-allowed'
+                  ? 'bg-[rgba(217,164,65,0.15)] border-[rgba(217,164,65,0.32)] text-[#F0C970] hover:bg-[rgba(217,164,65,0.25)] hover:border-[rgba(217,164,65,0.45)] hover:-translate-y-px'
+                  : 'bg-[rgba(217,164,65,0.09)] border-[rgba(217,164,65,0.15)] text-[#666666] opacity-60 cursor-not-allowed'
               }`}
             >
               <span>跳过思考，开始作答</span>
@@ -733,7 +733,7 @@ const InterviewSession = () => {
                     : '当前浏览器不支持语音识别，请直接键盘输入你的回答'
                 }
                 rows={6}
-                className="w-full px-5 py-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-[15px] text-[#F7F8FA] placeholder:text-[#666666] leading-relaxed resize-none focus:outline-none focus:border-[rgba(4,120,87,0.45)] transition-colors"
+                className="w-full px-5 py-4 rounded-2xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-[15px] text-[#F7F8FA] placeholder:text-[#666666] leading-relaxed resize-none focus:outline-none focus:border-[rgba(217,164,65,0.45)] transition-colors"
               />
               {/* 实时中间结果预览 */}
               {interim && (
@@ -751,7 +751,7 @@ const InterviewSession = () => {
                   className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
                     isListening
                       ? 'bg-[rgba(245,53,53,0.15)] border-[rgba(245,53,53,0.32)] text-[#F5A3A3] hover:bg-[rgba(245,53,53,0.25)]'
-                      : 'bg-[rgba(4,120,87,0.15)] border-[rgba(4,120,87,0.32)] text-[#6EE7B7] hover:bg-[rgba(4,120,87,0.25)]'
+                      : 'bg-[rgba(217,164,65,0.15)] border-[rgba(217,164,65,0.32)] text-[#F0C970] hover:bg-[rgba(217,164,65,0.25)]'
                   }`}
                 >
                   {isListening ? '暂停语音识别' : '继续语音识别'}
@@ -762,7 +762,7 @@ const InterviewSession = () => {
                 disabled={!transcript.trim()}
                 className={`inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold transition-all ${
                   transcript.trim()
-                    ? 'bg-[rgba(16,185,129,0.15)] border border-[rgba(16,185,129,0.32)] text-[#6EE7B7] hover:bg-[rgba(16,185,129,0.25)] hover:border-[rgba(16,185,129,0.45)] hover:-translate-y-px'
+                    ? 'bg-[rgba(230,175,78,0.15)] border border-[rgba(230,175,78,0.32)] text-[#F0C970] hover:bg-[rgba(230,175,78,0.25)] hover:border-[rgba(230,175,78,0.45)] hover:-translate-y-px'
                     : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-[#666666] opacity-60 cursor-not-allowed'
                 }`}
               >
@@ -778,7 +778,7 @@ const InterviewSession = () => {
         {/* 提交中：Fast Decision 即时判定，秒级进下一题 */}
         {phase === 'submitting' && (
           <div className="flex flex-col items-center gap-5 w-full">
-            <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#047857] animate-spin" />
+            <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
             <div className="text-center">
               <p className="text-[16px] font-semibold text-[#F7F8FA]">正在判定下一题…</p>
               <p className="text-[13px] text-[#666666] mt-1">回答已收录，即将进入下一题</p>
@@ -789,7 +789,7 @@ const InterviewSession = () => {
         {/* 轻量过渡：回答已收录，异步分析在后台进行（追问不暴露） */}
         {phase === 'summary' && (
           <div className="flex flex-col items-center gap-5 w-full">
-            <div className="w-12 h-12 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#047857] animate-spin" />
+            <div className="w-12 h-12 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
             <p className="text-[14px] text-[#999999]">回答已收录，正在准备下一题…</p>
           </div>
         )}
@@ -797,7 +797,7 @@ const InterviewSession = () => {
         {/* 分析恢复中（analyzing 刷新，§15） */}
         {phase === 'recovering' && (
           <div className="flex flex-col items-center gap-5 w-full">
-            <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#047857] animate-spin" />
+            <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
             <p className="text-[15px] text-[#999999]">正在恢复上一次的分析结果…</p>
           </div>
         )}
@@ -805,7 +805,7 @@ const InterviewSession = () => {
         {/* 报告生成中（summarizing，§13） */}
         {phase === 'summarizing' && (
           <div className="flex flex-col items-center gap-5 w-full">
-            <div className="w-16 h-16 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#047857] animate-spin" />
+            <div className="w-16 h-16 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
             <div className="text-center">
               <p className="text-[17px] font-semibold text-[#F7F8FA]">所有题目已完成</p>
               <p className="text-[14px] text-[#666666] mt-1.5">AI 正在后台生成你的面试报告，完成后将通过消息通知你，可先离开稍后查看</p>

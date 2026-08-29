@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Spin } from 'antd';
-import { ArrowLeftOutlined, TeamOutlined } from '@ant-design/icons';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Spin from 'antd/es/spin';
+import { ArrowLeftOutlined, TeamOutlined } from '@/components/icons';
 import { getMyFollowing, unfollowUser } from '@/lib/api/user';
 import type { FollowItemResponse } from '@/lib/api/user';
 import type { UserBrief } from '@/types';
@@ -138,7 +140,7 @@ const FollowingPage = () => {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="text-sm text-[#00BFA5] font-medium hover:text-[#00A88A] transition-colors"
+                className="text-sm text-[#D9A441] font-medium hover:text-[#A97E24] transition-colors"
               >
                 {loadingMore ? '加载中...' : '加载更多'}
               </button>

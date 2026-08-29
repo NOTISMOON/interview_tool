@@ -1,7 +1,9 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, App, Divider } from 'antd';
-import { GithubOutlined, ArrowLeftOutlined, ThunderboltFilled } from '@ant-design/icons';
+import Button from 'antd/es/button';
+import App from 'antd/es/app';
+import Divider from 'antd/es/divider';
+import { GithubOutlined, ArrowLeftOutlined, ThunderboltFilled } from '@/components/icons';
 import { getGithubAuthUrl } from '@/lib/api/auth';
 import { useSlideInLeft, useSlideInRight } from '@/hooks/useGsapAnimations';
 
@@ -27,14 +29,14 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex">
       <div ref={leftPanelRef} className="hidden lg:flex flex-1 bg-[#232529] items-center justify-center relative overflow-hidden">
-        <div className="absolute top-20 left-20 w-96 h-96 bg-[#00BFA5]/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 right-20 w-80 h-80 bg-[#00BFA5]/5 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-20 w-96 h-96 bg-[#D9A441]/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-20 w-80 h-80 bg-[#D9A441]/5 rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-[#00B578]/5 rounded-full blur-3xl" />
         <div className="relative max-w-md text-center">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#00BFA5] to-[#4DC9B4] flex items-center justify-center text-4xl mx-auto mb-6 text-white shadow-[0_8px_28px_rgba(0,191,165,0.4)]">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#D9A441] to-[#E6AF4E] flex items-center justify-center text-4xl mx-auto mb-6 text-white shadow-[0_8px_28px_rgba(217,164,65,0.4)]">
             <ThunderboltFilled />
           </div>
-          <h2 className="text-3xl font-extrabold text-white mb-4">AI 面试平台</h2>
+          <h2 className="text-3xl font-extrabold text-white mb-4">AI 超级面试</h2>
           <p className="text-lg text-white/60 leading-relaxed mb-10">
             智能模拟面试，精准分析报告。
             <br />
@@ -50,7 +52,7 @@ const LoginPage = () => {
           </Link>
 
           <div className="mb-8">
-            <h1 className="text-[28px] font-extrabold text-[#232529] mb-2">欢迎使用 AI 面试平台</h1>
+            <h1 className="text-[28px] font-extrabold text-[#232529] mb-2">欢迎使用 AI 超级面试</h1>
           </div>
 
           <Button
@@ -73,7 +75,7 @@ const LoginPage = () => {
 
           <p className="text-xs text-[#999999] text-center mt-8">
             登录即表示你同意我们的
-            <Link to="/privacy" className="text-[#00BFA5] hover:underline mx-1">隐私政策</Link>
+            <Link to="/privacy" className="text-[#D9A441] hover:underline mx-1">隐私政策</Link>
             和服务条款
           </p>
         </div>

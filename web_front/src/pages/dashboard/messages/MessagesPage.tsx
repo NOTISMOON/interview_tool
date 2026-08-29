@@ -1,6 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Tabs, App, Spin, Tooltip, Avatar } from 'antd';
+import Tabs from 'antd/es/tabs';
+import App from 'antd/es/app';
+import Spin from 'antd/es/spin';
+import Tooltip from 'antd/es/tooltip';
+import Avatar from 'antd/es/avatar';
 import {
   ArrowLeftOutlined,
   BellOutlined,
@@ -13,7 +17,7 @@ import {
   EyeOutlined,
   DeleteOutlined,
   EyeInvisibleOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
@@ -315,24 +319,24 @@ const MessagesPage = () => {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'system': return <BellOutlined className="text-[#00BFA5]" />;
+      case 'system': return <BellOutlined className="text-[#D9A441]" />;
       case 'like': return <LikeOutlined className="text-[#F53535]" />;
       case 'comment': return <CommentOutlined className="text-[#00B578]" />;
       case 'follow': return <TeamOutlined className="text-[#232529]" />;
-      case 'dm': return <MessageOutlined className="text-[#00BFA5]" />;
-      case 'follow_post': return <FireOutlined className="text-[#00BFA5]" />;
+      case 'dm': return <MessageOutlined className="text-[#D9A441]" />;
+      case 'follow_post': return <FireOutlined className="text-[#D9A441]" />;
       default: return <BellOutlined className="text-[#999999]" />;
     }
   };
 
   const getIconBg = (type: string) => {
     switch (type) {
-      case 'system': return 'bg-[#E0F7F4]';
+      case 'system': return 'bg-[#F7EBD3]';
       case 'like': return 'bg-[#FDECEC]';
-      case 'comment': return 'bg-[#E0F7F4]';
+      case 'comment': return 'bg-[#F7EBD3]';
       case 'follow': return 'bg-[#F7F8FA]';
-      case 'dm': return 'bg-[#E0F7F4]';
-      case 'follow_post': return 'bg-[#E0F7F4]';
+      case 'dm': return 'bg-[#F7EBD3]';
+      case 'follow_post': return 'bg-[#F7EBD3]';
       default: return 'bg-[#F7F8FA]';
     }
   };
@@ -380,7 +384,7 @@ const MessagesPage = () => {
         {conversations.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
-              <MessageOutlined className="text-[#00BFA5]" />
+              <MessageOutlined className="text-[#D9A441]" />
               <span className="text-sm font-semibold text-[#232529]">私信</span>
               {conversationsTotalUnread > 0 && (
                 <span className="tag tag-flame text-xs">{conversationsTotalUnread}</span>
@@ -424,7 +428,7 @@ const MessagesPage = () => {
                         {conv.last_message || '暂无消息'}
                       </p>
                       {conv.unread > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[#00BFA5] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-[#D9A441] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
                           {conv.unread > 99 ? '99+' : conv.unread}
                         </span>
                       )}
@@ -454,14 +458,14 @@ const MessagesPage = () => {
           filteredMessages.map((msgItem) => (
             <div
               key={msgItem.id}
-              className={`group bg-white border rounded-xl p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative overflow-hidden ${!msgItem.isRead ? 'border-[#00BFA5]/30 bg-[#E0F7F4]/30' : 'border-[#E8E8E8]'}`}
+              className={`group bg-white border rounded-xl p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative overflow-hidden ${!msgItem.isRead ? 'border-[#D9A441]/30 bg-[#F7EBD3]/30' : 'border-[#E8E8E8]'}`}
               onClick={() => handleMessageClick(msgItem)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ kind: 'message', item: msgItem, x: e.clientX, y: e.clientY });
               }}
             >
-              {!msgItem.isRead && <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-[#00BFA5] rounded-full" />}
+              {!msgItem.isRead && <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-[#D9A441] rounded-full" />}
               <div className="flex items-start gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${getIconBg(msgItem.type)}`}>
                   {getIcon(msgItem.type)}

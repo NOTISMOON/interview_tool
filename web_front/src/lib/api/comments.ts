@@ -89,3 +89,9 @@ export async function listReplies(
 export async function deleteComment(commentId: number): Promise<void> {
   await request.delete(`/posts/comments/${commentId}`);
 }
+
+/** 切换评论点赞状态 */
+export async function toggleCommentLike(commentId: number): Promise<{ is_liked: boolean; likes_count: number }> {
+  const { data } = await request.post<{ is_liked: boolean; likes_count: number }>(`/comments/${commentId}/like`);
+  return data;
+}

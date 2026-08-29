@@ -1,6 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Spin, Empty } from 'antd';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Spin from 'antd/es/spin';
+import Empty from 'antd/es/empty';
 import {
   ArrowLeftOutlined,
   StarFilled,
@@ -9,7 +12,7 @@ import {
   FireOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { listFavorites, toggleFavorite } from '@/lib/api/interactions';
 import type { PostListItem } from '@/types';
 import dayjs from 'dayjs';
@@ -19,9 +22,12 @@ import 'dayjs/locale/zh-cn';
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
 
-/** 格式化时间为相对时间展示 */
+/** 格式化时间为相对时间展示（超过7天显示具体日期） */
 function formatTime(dateStr: string): string {
-  return dayjs(dateStr).fromNow();
+  const d = dayjs(dateStr);
+  if (!d.isValid()) return dateStr;
+  if (dayjs().diff(d, 'day') > 7) return d.format('YYYY-MM-DD HH:mm');
+  return d.fromNow();
 }
 
 const FavoritesPage = () => {
@@ -114,7 +120,7 @@ const FavoritesPage = () => {
           {favorites.map((post) => (
             <div
               key={post.id}
-              className="bg-white border border-[#E8E8E8] rounded-xl p-5 hover:border-[#00BFA5]/30 hover:shadow-sm transition-all group"
+              className="bg-white border border-[#E8E8E8] rounded-xl p-5 hover:border-[#D9A441]/30 hover:shadow-sm transition-all group"
             >
               <div
                 className="flex items-start gap-3 cursor-pointer"
@@ -165,7 +171,7 @@ const FavoritesPage = () => {
               <button
                 onClick={() => fetchFavorites()}
                 disabled={loading}
-                className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
+                className="text-sm text-[#D9A441] hover:text-[#A97E24] disabled:opacity-50"
               >
                 {loading ? '加载中...' : '加载更多'}
               </button>

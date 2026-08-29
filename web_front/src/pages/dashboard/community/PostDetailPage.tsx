@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Avatar, App, Spin, Empty, Modal } from 'antd';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Spin from 'antd/es/spin';
+import Empty from 'antd/es/empty';
+import Modal from 'antd/es/modal';
 import {
   ArrowLeftOutlined,
   LikeOutlined,
@@ -12,12 +16,20 @@ import {
   FireOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { useAppStore } from '@/store';
 import { getPostDetail, deletePost } from '@/lib/api/posts';
 import { toggleLike, toggleFavorite } from '@/lib/api/interactions';
-import { createComment, listComments, listReplies } from '@/lib/api/comments';
+import { createComment, listComments, listReplies, toggleCommentLike } from '@/lib/api/comments';
+import { shareUrl } from '@/lib/share';
 import type { PostDetail, PostComment } from '@/types';
+
+/** 分享帖子：优先系统分享，否则复制链接 */
+async function sharePost(post: PostDetail): Promise<import('@/lib/share').ShareResult> {
+  const url = `${window.location.origin}/dashboard/community/post/${post.id}`;
+  return shareUrl({ url, title: post.title, text: post.content });
+}
+
 import { buildCosUrl } from '@/utils/cos';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -26,9 +38,16 @@ import 'dayjs/locale/zh-cn';
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
 
-/** 格式化时间为相对时间展示 */
+/** 格式化时间为相对时间展示（超过7天显示具体日期） */
 function formatTime(dateStr: string): string {
-  return dayjs(dateStr).fromNow();
+  const d = dayjs(dateStr);
+  if (!d.isValid()) return dateStr;
+  const now = dayjs();
+  // 超过7天显示具体日期
+  if (now.diff(d, 'day') > 7) {
+    return d.format('YYYY-MM-DD HH:mm');
+  }
+  return d.fromNow();
 }
 
 const PostDetailPage = () => {
@@ -272,6 +291,7 @@ const PostDetailPage = () => {
         <div className="flex items-center gap-3 mb-5">
           <Avatar
             size={40}
+            src={post.author?.avatar ? buildCosUrl(post.author.avatar) : undefined}
             className="!bg-[#232529] flex-shrink-0 !text-base cursor-pointer"
             onClick={() => navigate(`/dashboard/user/${post.author?.id}`)}
           >
@@ -279,7 +299,7 @@ const PostDetailPage = () => {
           </Avatar>
           <div className="flex-1">
             <div
-              className="text-sm font-semibold text-[#232529] cursor-pointer hover:text-[#00BFA5]"
+              className="text-sm font-semibold text-[#232529] cursor-pointer hover:text-[#D9A441]"
               onClick={() => navigate(`/dashboard/user/${post.author?.id}`)}
             >{post.author?.nickname || '未知用户'}</div>
             <div className="text-xs text-[#999999]">{formatTime(post.created_at)}</div>
@@ -336,15 +356,24 @@ const PostDetailPage = () => {
               onClick={handleLike}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 isLiked
-                  ? 'bg-[#E0F7F4] text-[#00BFA5]'
-                  : 'bg-[#F7F8FA] text-[#666666] hover:bg-[#E0F7F4] hover:text-[#00BFA5]'
+                  ? 'bg-[#F7EBD3] text-[#D9A441]'
+                  : 'bg-[#F7F8FA] text-[#666666] hover:bg-[#F7EBD3] hover:text-[#D9A441]'
               }`}
             >
               {isLiked ? <LikeFilled /> : <LikeOutlined />}
               {isLiked ? '已赞' : '点赞'}
             </button>
             <button
-              onClick={() => msg.info('分享功能即将上线')}
+              onClick={async () => {
+                try {
+                  const r = await sharePost(post);
+                  if (r === 'copied') msg.success('链接已复制');
+                  else if (r === 'failed') msg.error('分享失败，请手动复制链接');
+                  // shared：系统分享面板已打开，无需额外提示
+                } catch {
+                  msg.error('分享失败');
+                }
+              }}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-[#F7F8FA] text-[#666666] hover:bg-[#F2F3F5] transition-all"
             >
               <ShareAltOutlined /> 分享
@@ -366,7 +395,7 @@ const PostDetailPage = () => {
 
       <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mb-4">
         <h3 className="text-sm font-bold text-[#232529] mb-4 flex items-center gap-2">
-          <MessageOutlined className="text-[#00BFA5]" />
+          <MessageOutlined className="text-[#D9A441]" />
           评论 ({comments.length})
         </h3>
         {commentsLoading ? (
@@ -390,8 +419,21 @@ const PostDetailPage = () => {
                   <p className="text-sm text-[#232529] leading-relaxed">{comment.content}</p>
                   <div className="flex items-center gap-3 mt-2">
                     <button
-                      onClick={() => msg.info('评论点赞功能即将上线')}
-                      className="text-xs text-[#999999] hover:text-[#00BFA5] transition-colors inline-flex items-center gap-1"
+                      onClick={async () => {
+                        try {
+                          const res = await toggleCommentLike(comment.id);
+                          setComments((prev) =>
+                            prev.map((c) =>
+                              c.id === comment.id ? { ...c, is_liked: res.is_liked, likes_count: res.likes_count } : c,
+                            ),
+                          );
+                        } catch {
+                          msg.error('操作失败');
+                        }
+                      }}
+                      className={`text-xs transition-colors inline-flex items-center gap-1 ${
+                        comment.is_liked ? 'text-[#D9A441]' : 'text-[#999999] hover:text-[#D9A441]'
+                      }`}
                     >
                       <LikeOutlined /> {comment.likes_count}
                     </button>
@@ -399,7 +441,7 @@ const PostDetailPage = () => {
                       onClick={() => startReply(comment, comment)}
                       className={`text-xs transition-colors ${
                         replyingTo?.root.id === comment.id
-                          ? 'text-[#00BFA5] font-medium'
+                          ? 'text-[#D9A441] font-medium'
                           : 'text-[#999999] hover:text-[#232529]'
                       }`}
                     >
@@ -436,19 +478,41 @@ const PostDetailPage = () => {
                                   {reply.author?.nickname || '未知用户'}
                                 </span>
                                 {reply.reply_to && (
-                                  <span className="text-xs text-[#00BFA5]">
+                                  <span className="text-xs text-[#D9A441]">
                                     回复 @{reply.reply_to.nickname}
                                   </span>
                                 )}
                                 <span className="text-xs text-[#999999]">{formatTime(reply.created_at)}</span>
                               </div>
                               <p className="text-sm text-[#232529] leading-relaxed">{reply.content}</p>
-                              <button
-                                onClick={() => startReply(comment, reply)}
-                                className="text-xs text-[#999999] hover:text-[#232529] transition-colors mt-1"
-                              >
-                                回复
-                              </button>
+                              <div className="flex items-center gap-3 mt-1">
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const res = await toggleCommentLike(reply.id);
+                                      setRepliesMap((prev) => ({
+                                        ...prev,
+                                        [comment.id]: (prev[comment.id] || []).map((r) =>
+                                          r.id === reply.id ? { ...r, is_liked: res.is_liked, likes_count: res.likes_count } : r,
+                                        ),
+                                      }));
+                                    } catch {
+                                      msg.error('操作失败');
+                                    }
+                                  }}
+                                  className={`text-xs transition-colors inline-flex items-center gap-1 ${
+                                    reply.is_liked ? 'text-[#D9A441]' : 'text-[#999999] hover:text-[#D9A441]'
+                                  }`}
+                                >
+                                  <LikeOutlined /> {reply.likes_count}
+                                </button>
+                                <button
+                                  onClick={() => startReply(comment, reply)}
+                                  className="text-xs text-[#999999] hover:text-[#232529] transition-colors"
+                                >
+                                  回复
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))
@@ -459,7 +523,7 @@ const PostDetailPage = () => {
                       {/* 回复该一级评论的表单 */}
                       {replyingTo?.root.id === comment.id && (
                         <div className="flex gap-2 mt-2">
-                          <Avatar size={24} src={user?.avatar} className="!bg-[#00BFA5] flex-shrink-0 !text-[10px]">
+                          <Avatar size={24} src={user?.avatar} className="!bg-[#D9A441] flex-shrink-0 !text-[10px]">
                             {user?.nickname?.[0] || 'U'}
                           </Avatar>
                           <div className="flex-1">
@@ -471,7 +535,7 @@ const PostDetailPage = () => {
                               onChange={(e) => setReplyText(e.target.value)}
                               placeholder="写下你的回复..."
                               autoFocus
-                              className="w-full px-3 py-2 border border-[#E8E8E8] rounded-lg text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#00BFA5] focus:ring-1 focus:ring-[#00BFA5]/20 transition-all min-h-[60px]"
+                              className="w-full px-3 py-2 border border-[#E8E8E8] rounded-lg text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#D9A441] focus:ring-1 focus:ring-[#D9A441]/20 transition-all min-h-[60px]"
                             />
                             <div className="flex justify-end gap-2 mt-2">
                               <button
@@ -483,7 +547,7 @@ const PostDetailPage = () => {
                               <button
                                 onClick={submitReply}
                                 disabled={!replyText.trim() || replySubmitting}
-                                className="px-3 py-1 rounded-lg text-xs font-medium bg-[#00BFA5] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                className="px-3 py-1 rounded-lg text-xs font-medium bg-[#D9A441] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
                               >
                                 {replySubmitting ? '回复中...' : '回复'}
                               </button>
@@ -503,13 +567,13 @@ const PostDetailPage = () => {
       <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
         <h3 className="text-sm font-bold text-[#232529] mb-4">发表评论</h3>
         <div className="flex gap-3">
-          <Avatar size={32} src={user?.avatar} className="!bg-[#00BFA5] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
+          <Avatar size={32} src={user?.avatar} className="!bg-[#D9A441] flex-shrink-0 !text-xs">{user?.nickname?.[0] || 'U'}</Avatar>
           <div className="flex-1">
             <textarea
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="写下你的评论..."
-              className="w-full px-4 py-3 border border-[#E8E8E8] rounded-xl text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#00BFA5] focus:ring-1 focus:ring-[#00BFA5]/20 transition-all min-h-[80px]"
+              className="w-full px-4 py-3 border border-[#E8E8E8] rounded-xl text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#D9A441] focus:ring-1 focus:ring-[#D9A441]/20 transition-all min-h-[80px]"
             />
             <div className="flex justify-end mt-3">
               <button

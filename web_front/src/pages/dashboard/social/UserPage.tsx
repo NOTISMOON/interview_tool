@@ -1,6 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Avatar, App, Tabs, Spin, Empty } from 'antd';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Tabs from 'antd/es/tabs';
+import Spin from 'antd/es/spin';
+import Empty from 'antd/es/empty';
 import {
   ArrowLeftOutlined,
   MessageOutlined,
@@ -11,7 +15,7 @@ import {
   EnvironmentOutlined,
   SmileOutlined,
   FileTextOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { getUserPublicProfile, followUser, unfollowUser } from '@/lib/api/user';
 import type { UserPublicProfileResponse, UserCardResponse } from '@/lib/api/user';
 import { listPosts } from '@/lib/api/posts';
@@ -273,7 +277,7 @@ const UserPage = () => {
                         {posts.map((post) => (
                           <div
                             key={post.id}
-                            className="border border-[#E8E8E8] rounded-xl p-4 hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
+                            className="border border-[#E8E8E8] rounded-xl p-4 hover:border-[#D9A441]/30 hover:shadow-sm transition-all cursor-pointer"
                             onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
                           >
                             <div className="flex items-center gap-2 mb-1.5">
@@ -301,7 +305,7 @@ const UserPage = () => {
                             <button
                               onClick={() => fetchPosts()}
                               disabled={postsLoading}
-                              className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
+                              className="text-sm text-[#D9A441] hover:text-[#A97E24] disabled:opacity-50"
                             >
                               {postsLoading ? '加载中...' : '加载更多'}
                             </button>

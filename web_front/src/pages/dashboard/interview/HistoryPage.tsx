@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 面试记录页（真实后端对接：GET /interviews 分页列表）。
  *
  * 展示当前用户全部面试记录：进行中可继续、已完成看报告、已中断只读。
@@ -6,7 +6,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Pagination } from 'antd';
+import App from 'antd/es/app';
+import Pagination from 'antd/es/pagination';
 import {
   CalendarOutlined,
   RightOutlined,
@@ -17,14 +18,14 @@ import {
   ReloadOutlined,
   PauseCircleOutlined,
   ClockCircleOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { getInterviewList, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
 import type { ApiInterviewListItem } from '@/lib/api/interview';
 
 /** 状态标签样式（0-进行中 1-已完成 2-已中断） */
 const STATUS_META: Record<number, { label: string; cls: string }> = {
   0: { label: '进行中', cls: 'bg-[#FFF7E0] text-[#FFAA00]' },
-  1: { label: '已完成', cls: 'bg-[#E0F7F4] text-[#00BFA5]' },
+  1: { label: '已完成', cls: 'bg-[#F7EBD3] text-[#D9A441]' },
   2: { label: '已中断', cls: 'bg-[#FDECEC] text-[#F53535]' },
 };
 
@@ -114,12 +115,12 @@ const HistoryPage = () => {
           {items.map((item) => {
             const meta = STATUS_META[item.status] ?? STATUS_META[2];
             const score = item.total_score;
-            const scoreColor = score === null ? '#999999' : score >= 85 ? '#00B578' : score >= 70 ? '#00BFA5' : score >= 60 ? '#FFAA00' : '#F53535';
+            const scoreColor = score === null ? '#999999' : score >= 85 ? '#00B578' : score >= 70 ? '#D9A441' : score >= 60 ? '#FFAA00' : '#F53535';
             return (
               <div
                 key={item.interview_id}
                 onClick={() => handleOpen(item)}
-                className="bg-white border border-[#E8E8E8] rounded-xl p-4 flex items-center hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
+                className="bg-white border border-[#E8E8E8] rounded-xl p-4 flex items-center hover:border-[#D9A441]/30 hover:shadow-sm transition-all cursor-pointer"
               >
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0"

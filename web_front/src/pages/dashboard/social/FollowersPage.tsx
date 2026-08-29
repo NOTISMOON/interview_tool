@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Spin } from 'antd';
-import { ArrowLeftOutlined, TeamOutlined } from '@ant-design/icons';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Spin from 'antd/es/spin';
+import { ArrowLeftOutlined, TeamOutlined } from '@/components/icons';
 import { getMyFollowers, followUser, unfollowUser } from '@/lib/api/user';
 import type { FollowItemResponse } from '@/lib/api/user';
 import type { UserBrief } from '@/types';
@@ -85,7 +87,7 @@ const FollowersPage = () => {
 
   const getButtonContent = (user: UserBrief) => {
     if (user.isFollowing && user.isFollowedBy) {
-      return { text: '互相关注', className: 'bg-[#E0F7F4] text-[#00BFA5] border border-[#00BFA5]/20' };
+      return { text: '互相关注', className: 'bg-[#F7EBD3] text-[#D9A441] border border-[#D9A441]/20' };
     }
     if (user.isFollowing) {
       return { text: '已关注', className: 'bg-[#F7F8FA] text-[#666666] border border-[#E8E8E8] hover:border-[#F53535] hover:text-[#F53535] hover:bg-[#FDECEC]' };
@@ -170,7 +172,7 @@ const FollowersPage = () => {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="text-sm text-[#00BFA5] font-medium hover:text-[#00A88A] transition-colors"
+                className="text-sm text-[#D9A441] font-medium hover:text-[#A97E24] transition-colors"
               >
                 {loadingMore ? '加载中...' : '加载更多'}
               </button>

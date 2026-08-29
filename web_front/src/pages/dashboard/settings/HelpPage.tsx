@@ -1,12 +1,13 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Collapse } from 'antd';
+import App from 'antd/es/app';
+import Collapse from 'antd/es/collapse';
 import {
   ArrowLeftOutlined,
   QuestionCircleOutlined,
   MessageOutlined,
   MailOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 
 const FAQ_ITEMS = [
   {
@@ -68,7 +69,7 @@ const HelpPage = () => {
       </div>
 
       <div className="bg-white border border-[#E8E8E8] rounded-2xl p-8 mb-6 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-[#00BFA5]" />
+        <div className="absolute top-0 left-0 w-1 h-full bg-[#D9A441]" />
         <div className="relative">
           <h2 className="text-xl font-bold text-[#232529] mb-2">需要帮助？</h2>
           <p className="text-sm text-[#666666] mb-4">我们随时为你提供支持</p>
@@ -91,7 +92,7 @@ const HelpPage = () => {
 
       <div className="mb-6">
         <h2 className="text-base font-bold text-[#232529] mb-4 flex items-center gap-2">
-          <QuestionCircleOutlined className="text-[#00BFA5]" />
+          <QuestionCircleOutlined className="text-[#D9A441]" />
           常见问题
         </h2>
         <div className="bg-white border border-[#E8E8E8] rounded-2xl overflow-hidden">

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { HomeOutlined, DashboardOutlined } from '@ant-design/icons';
+import { HomeOutlined, DashboardOutlined } from '@/components/icons';
 import { useAppStore } from '@/store';
 
 const NotFoundPage = () => {

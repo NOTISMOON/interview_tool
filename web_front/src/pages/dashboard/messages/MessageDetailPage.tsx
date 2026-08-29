@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { App, Dropdown, Spin } from 'antd';
+import App from 'antd/es/app';
+import Dropdown from 'antd/es/dropdown';
+import Spin from 'antd/es/spin';
 import {
   ArrowLeftOutlined,
   BellOutlined,
@@ -12,7 +14,7 @@ import {
   MoreOutlined,
   DeleteOutlined,
   FireOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { getMessageDetail, deleteMessage } from '@/lib/api/messages';
 import type { MessageResponse } from '@/lib/api/messages';
 import { getPostDetail } from '@/lib/api/posts';
@@ -34,26 +36,26 @@ const TYPE_MAP: Record<string, SystemMessage['type']> = {
 
 const getIcon = (type: string) => {
   switch (type) {
-    case 'system': return <BellOutlined className="text-[#00BFA5]" />;
+    case 'system': return <BellOutlined className="text-[#D9A441]" />;
     case 'like': return <LikeOutlined className="text-[#F53535]" />;
     case 'comment': return <CommentOutlined className="text-[#00B578]" />;
     case 'follow': return <TeamOutlined className="text-[#232529]" />;
-    case 'dm': return <MessageOutlined className="text-[#00BFA5]" />;
+    case 'dm': return <MessageOutlined className="text-[#D9A441]" />;
     case 'interview': return <VideoCameraOutlined className="text-[#232529]" />;
-    case 'follow_post': return <FireOutlined className="text-[#00BFA5]" />;
+    case 'follow_post': return <FireOutlined className="text-[#D9A441]" />;
     default: return <BellOutlined className="text-[#999999]" />;
   }
 };
 
 const getIconBg = (type: string) => {
   switch (type) {
-    case 'system': return 'bg-[#E0F7F4]';
+    case 'system': return 'bg-[#F7EBD3]';
     case 'like': return 'bg-[#FDECEC]';
-    case 'comment': return 'bg-[#E0F7F4]';
+    case 'comment': return 'bg-[#F7EBD3]';
     case 'follow': return 'bg-[#F7F8FA]';
-    case 'dm': return 'bg-[#E0F7F4]';
+    case 'dm': return 'bg-[#F7EBD3]';
     case 'interview': return 'bg-[#F7F8FA]';
-    case 'follow_post': return 'bg-[#E0F7F4]';
+    case 'follow_post': return 'bg-[#F7EBD3]';
     default: return 'bg-[#F7F8FA]';
   }
 };
@@ -198,7 +200,7 @@ const MessageDetailPage = () => {
     if (type === 'follow' && detail.from_user) {
       return (
         <div
-          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#00BFA5]/30 transition-all cursor-pointer"
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#D9A441]/30 transition-all cursor-pointer"
           onClick={() => userLink && navigate(`/dashboard/user/${userLink}`)}
         >
           <div className="flex items-center gap-3">
@@ -225,7 +227,7 @@ const MessageDetailPage = () => {
     if ((type === 'comment' || type === 'like' || type === 'follow_post') && post) {
       return (
         <div
-          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#00BFA5]/30 transition-all cursor-pointer"
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#D9A441]/30 transition-all cursor-pointer"
           onClick={() => postLink && navigate(`/dashboard/community/post/${postLink}`)}
         >
           <div className="flex items-center gap-3 mb-2">
@@ -245,7 +247,7 @@ const MessageDetailPage = () => {
     if (reportLink) {
       return (
         <div
-          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#00BFA5]/30 transition-all cursor-pointer"
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#D9A441]/30 transition-all cursor-pointer"
           onClick={() => navigate(`/dashboard/report/${reportLink}`)}
         >
           <div className="flex items-center gap-3 mb-2">

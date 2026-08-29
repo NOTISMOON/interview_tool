@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+﻿import { useNavigate } from 'react-router-dom';
+import { ArrowLeftOutlined } from '@/components/icons';
 
 const SECTIONS = [
   {
@@ -61,7 +61,7 @@ const PrivacyPage = () => {
             <strong className="text-[#232529]">最后更新日期：2026 年 8 月 10 日</strong>
           </p>
           <p className="text-sm text-[#666666] leading-relaxed">
-            面试教练（"我们"）非常重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的服务即表示您同意本政策中描述的做法。
+            AI 超级面试（"我们"）非常重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的服务即表示您同意本政策中描述的做法。
           </p>
         </div>
 
@@ -77,11 +77,11 @@ const PrivacyPage = () => {
         <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 mt-4 text-center">
           <p className="text-sm text-[#666666]">
             如有疑问，请联系{' '}
-            <span className="text-[#00BFA5] font-medium">interview-coach@example.com</span>
+            <span className="text-[#D9A441] font-medium">interview-coach@example.com</span>
           </p>
         </div>
 
-        <p className="text-center text-xs text-[#999999] mt-8">面试教练 v1.0.0</p>
+        <p className="text-center text-xs text-[#999999] mt-8">AI 超级面试 v1.0.0</p>
       </div>
     </div>
   );

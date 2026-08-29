@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+﻿import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Avatar, App, Spin } from 'antd';
-import { ArrowLeftOutlined, SendOutlined, MessageOutlined, EyeOutlined, EyeInvisibleOutlined, DeleteOutlined } from '@ant-design/icons';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Spin from 'antd/es/spin';
+import { ArrowLeftOutlined, SendOutlined, MessageOutlined, EyeOutlined, EyeInvisibleOutlined, DeleteOutlined } from '@/components/icons';
 import { useAppStore } from '@/store';
 import { useMessageVersion } from '@/lib/messageVersion';
 import ContextMenu from '@/components/ContextMenu';
@@ -368,7 +370,7 @@ const ChatPage = () => {
               {peerName[0] || '?'}
             </Avatar>
             <div
-              className="text-sm font-semibold text-[#232529] cursor-pointer hover:text-[#00BFA5]"
+              className="text-sm font-semibold text-[#232529] cursor-pointer hover:text-[#D9A441]"
               onClick={() => navigate(`/dashboard/user/${peerIdRef.current}`)}
             >
               {peerName}
@@ -395,7 +397,7 @@ const ChatPage = () => {
                   <div
                     className={`max-w-[70%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl break-words ${
                       self
-                        ? 'bg-[#00BFA5] text-white rounded-br-md'
+                        ? 'bg-[#D9A441] text-white rounded-br-md'
                         : 'bg-[#F7F8FA] text-[#232529] rounded-bl-md'
                     }`}
                   >
@@ -422,12 +424,12 @@ const ChatPage = () => {
               onKeyDown={handleKeyDown}
               placeholder="输入消息..."
               rows={1}
-              className="flex-1 px-4 py-2.5 border border-[#E8E8E8] rounded-xl text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#00BFA5] focus:ring-1 focus:ring-[#00BFA5]/20 transition-all max-h-[120px]"
+              className="flex-1 px-4 py-2.5 border border-[#E8E8E8] rounded-xl text-sm text-[#232529] placeholder:text-[#999999] resize-none focus:outline-none focus:border-[#D9A441] focus:ring-1 focus:ring-[#D9A441]/20 transition-all max-h-[120px]"
             />
             <button
               onClick={handleSend}
               disabled={!inputValue.trim() || sending}
-              className="w-10 h-10 rounded-xl bg-[#00BFA5] text-white flex items-center justify-center hover:bg-[#00A88A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="w-10 h-10 rounded-xl bg-[#D9A441] text-white flex items-center justify-center hover:bg-[#A97E24] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             >
               <SendOutlined />
             </button>
@@ -439,7 +441,7 @@ const ChatPage = () => {
       {/* 右栏：私信会话列表（利用右侧空白） */}
       <aside className="w-[320px] flex flex-col flex-shrink-0 min-h-0">
         <div className="flex items-center gap-2 px-1 mb-3">
-          <MessageOutlined className="text-[#00BFA5]" />
+          <MessageOutlined className="text-[#D9A441]" />
           <h2 className="text-sm font-semibold text-[#232529]">会话</h2>
         </div>
         <div className="bg-white border border-[#E8E8E8] rounded-2xl flex-1 overflow-y-auto min-h-0">
@@ -457,7 +459,7 @@ const ChatPage = () => {
                     setConvMenu({ item: conv, x: e.clientX, y: e.clientY });
                   }}
                   className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-[#F7F8FA] last:border-b-0 ${
-                    isActive ? 'bg-[#E0F7F4]' : 'hover:bg-[#F7F8FA]'
+                    isActive ? 'bg-[#F7EBD3]' : 'hover:bg-[#F7F8FA]'
                   }`}
                 >
                   <Avatar size={40} src={conv.peer?.avatar} className="!bg-[#232529] flex-shrink-0 !text-sm">
@@ -465,7 +467,7 @@ const ChatPage = () => {
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className={`text-sm truncate ${isActive ? 'font-semibold text-[#00BFA5]' : 'font-medium text-[#232529]'}`}>
+                      <span className={`text-sm truncate ${isActive ? 'font-semibold text-[#D9A441]' : 'font-medium text-[#232529]'}`}>
                         {conv.peer?.nickname || `用户${conv.peer?.id}`}
                       </span>
                       {conv.last_message_at && (
@@ -482,7 +484,7 @@ const ChatPage = () => {
                         {conv.last_message || '暂无消息'}
                       </p>
                       {conv.unread > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[#00BFA5] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-[#D9A441] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">
                           {conv.unread > 99 ? '99+' : conv.unread}
                         </span>
                       )}

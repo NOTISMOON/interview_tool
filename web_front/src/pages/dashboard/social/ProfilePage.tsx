@@ -1,6 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Avatar, App, Modal, Input, Upload, DatePicker, Radio, Empty, Popconfirm, Switch, Spin } from 'antd';
+﻿import { useEffect, useState, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import Avatar from 'antd/es/avatar';
+import App from 'antd/es/app';
+import Modal from 'antd/es/modal';
+import Input from 'antd/es/input';
+import Upload from 'antd/es/upload';
+import DatePicker from 'antd/es/date-picker';
+import Radio from 'antd/es/radio';
+import Empty from 'antd/es/empty';
+import Popconfirm from 'antd/es/popconfirm';
+import Switch from 'antd/es/switch';
+import Spin from 'antd/es/spin';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import {
@@ -32,7 +42,7 @@ import {
   LikeOutlined,
   MessageOutlined,
   ReloadOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import type { ProfileVisibility } from '@/types';
 import type { PostListItem } from '@/types';
 import { useAppStore } from '@/store';
@@ -47,6 +57,8 @@ import {
   RESUME_STATUS_LABEL,
 } from '@/lib/api/resume';
 import type { ApiResume } from '@/lib/api/resume';
+import { cachedFetch, invalidateCache } from '@/lib/queryCache';
+import { shareUrl } from '@/lib/share';
 
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn');
@@ -56,19 +68,35 @@ function formatTime(dateStr: string): string {
   return dayjs(dateStr).fromNow();
 }
 
+/** 面试统计缓存 key（TTL 30s，避免每次进主页重复请求） */
+const INTERVIEW_STATS_CACHE_KEY = 'profile:interview-stats';
+/** 简历列表缓存 key（TTL 30s） */
+const RESUMES_CACHE_KEY = 'profile:resumes';
+
 const ProfilePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { message, modal } = App.useApp();
   const { user, logout, updateUser, refreshUser } = useAppStore();
   const { upload: uploadAvatar, uploading: avatarUploading } = useUpload('avatar');
+
+  /** 从路由 state 接收打开简历弹窗指令 */
+  useEffect(() => {
+    const state = location.state as { openResumeModal?: boolean } | null;
+    if (state?.openResumeModal) {
+      setResumeModalOpen(true);
+      // 清除 state 避免刷新页面再次触发
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   /** 面试统计（GET /interviews：次数与平均分） */
   const [interviewCount, setInterviewCount] = useState(0);
   const [avgScore, setAvgScore] = useState<number | null>(null);
 
-  // 拉取面试统计（失败静默）
+  // 拉取面试统计（30s 缓存，数据变化不频繁，避免每次进入重复请求）
   useEffect(() => {
-    getInterviewList(1, 100)
+    cachedFetch(INTERVIEW_STATS_CACHE_KEY, 30000, () => getInterviewList(1, 100))
       .then((res) => {
         setInterviewCount(res.total);
         const finished = res.items.filter((it) => it.status === 1 && it.total_score !== null);
@@ -111,11 +139,11 @@ const ProfilePage = () => {
   const [resumes, setResumes] = useState<ApiResume[]>([]);
   const [resumesLoading, setResumesLoading] = useState(false);
 
-  /** 拉取服务端简历列表（失败静默，保留已有展示） */
+  /** 拉取服务端简历列表（30s 缓存，失败静默，保留已有展示） */
   const loadResumes = async () => {
     setResumesLoading(true);
     try {
-      const res = await getResumes(1, 20);
+      const res = await cachedFetch(RESUMES_CACHE_KEY, 30000, () => getResumes(1, 20));
       setResumes(res.items);
     } catch {
       // 接口失败不影响已有展示
@@ -207,8 +235,9 @@ const ProfilePage = () => {
     }
   };
 
-  /** 上传成功回调：刷新服务端简历列表并提示 */
+  /** 上传成功回调：清除缓存并刷新服务端简历列表 */
   const handleResumeUploaded = async () => {
+    invalidateCache(RESUMES_CACHE_KEY);
     message.success('简历上传成功');
     await loadResumes();
   };
@@ -229,6 +258,7 @@ const ProfilePage = () => {
       onOk: async () => {
         try {
           await deleteResume(resume.id);
+          invalidateCache(RESUMES_CACHE_KEY);
           message.success('简历已删除');
           await loadResumes();
         } catch {
@@ -242,6 +272,7 @@ const ProfilePage = () => {
   const handleRetryResume = async (resume: ApiResume) => {
     try {
       await retryResume(resume.id);
+      invalidateCache(RESUMES_CACHE_KEY);
       message.success('已重新分析，请稍候');
       await loadResumes();
     } catch {
@@ -267,24 +298,30 @@ const ProfilePage = () => {
     {
       title: '数据',
       items: [
-        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#00BFA5', bg: '#E0F7F4', onClick: () => setResumeModalOpen(true) },
-        { icon: <HistoryOutlined />, label: '面试记录', count: interviewCount, color: '#00B578', bg: '#E0F7F4', onClick: () => navigate('/dashboard/history') },
+        { icon: <FileTextOutlined />, label: '我的简历', count: resumes.length, color: '#D9A441', bg: '#F7EBD3', onClick: () => setResumeModalOpen(true) },
+        { icon: <HistoryOutlined />, label: '面试记录', count: interviewCount, color: '#00B578', bg: '#F7EBD3', onClick: () => navigate('/dashboard/history') },
         { icon: <TrophyOutlined />, label: '平均得分', count: avgScore !== null ? `${avgScore} 分` : '--', color: '#FFAA00', bg: '#FFF7E0', onClick: () => navigate('/dashboard/history') },
       ],
     },
     {
       title: '社交',
       items: [
-        { icon: <TeamOutlined />, label: '我的关注', count: user?.followingCount ?? 0, color: '#00BFA5', bg: '#E0F7F4', onClick: () => navigate('/dashboard/following') },
-        { icon: <UserAddOutlined />, label: '我的粉丝', count: user?.followersCount ?? 0, color: '#00B578', bg: '#E0F7F4', onClick: () => navigate('/dashboard/followers') },
+        { icon: <TeamOutlined />, label: '我的关注', count: user?.followingCount ?? 0, color: '#D9A441', bg: '#F7EBD3', onClick: () => navigate('/dashboard/following') },
+        { icon: <UserAddOutlined />, label: '我的粉丝', count: user?.followersCount ?? 0, color: '#00B578', bg: '#F7EBD3', onClick: () => navigate('/dashboard/followers') },
       ],
     },
     {
       title: '功能',
       items: [
-        { icon: <BellOutlined />, label: '消息中心', color: '#00BFA5', bg: '#E0F7F4', onClick: () => navigate('/dashboard/messages') },
+        { icon: <BellOutlined />, label: '消息中心', color: '#D9A441', bg: '#F7EBD3', onClick: () => navigate('/dashboard/messages') },
         { icon: <StarOutlined />, label: '我的收藏', color: '#FFAA00', bg: '#FFF7E0', onClick: () => navigate('/dashboard/favorites') },
-        { icon: <ShareAltOutlined />, label: '邀请好友', color: '#00B578', bg: '#E0F7F4', onClick: () => message.info('功能开发中') },
+        { icon: <ShareAltOutlined />, label: '邀请好友', color: '#00B578', bg: '#F7EBD3', onClick: async () => {
+          const url = window.location.origin;
+          // 优先系统分享，http 下自动降级为复制链接
+          const r = await shareUrl({ url, title: 'AI 超级面试', text: '来 AI 超级面试一起练习面试吧！' });
+          if (r === 'copied') message.success('链接已复制，快去分享给好友吧！');
+          else if (r === 'failed') message.error('复制失败，请手动复制链接');
+        } },
       ],
     },
     {
@@ -362,7 +399,7 @@ const ProfilePage = () => {
           }}
           className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#F7F8FA] transition-colors text-left"
         >
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: '#00BFA5', backgroundColor: '#E0F7F4' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: '#D9A441', backgroundColor: '#F7EBD3' }}>
             <FileTextOutlined />
           </div>
           <span className="flex-1 text-sm font-medium text-[#232529]">我的发帖</span>
@@ -382,7 +419,7 @@ const ProfilePage = () => {
                 {posts.map((post) => (
                   <div
                     key={post.id}
-                    className="border border-[#E8E8E8] rounded-xl p-3 hover:border-[#00BFA5]/30 hover:shadow-sm transition-all cursor-pointer"
+                    className="border border-[#E8E8E8] rounded-xl p-3 hover:border-[#D9A441]/30 hover:shadow-sm transition-all cursor-pointer"
                     onClick={() => navigate(`/dashboard/community/post/${post.id}`)}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -406,7 +443,7 @@ const ProfilePage = () => {
                     <button
                       onClick={() => fetchPosts()}
                       disabled={postsLoading}
-                      className="text-sm text-[#00BFA5] hover:text-[#00A88A] disabled:opacity-50"
+                      className="text-sm text-[#D9A441] hover:text-[#A97E24] disabled:opacity-50"
                     >
                       {postsLoading ? '加载中...' : '加载更多'}
                     </button>
@@ -447,12 +484,12 @@ const ProfilePage = () => {
         <LogoutOutlined /> 退出登录
       </button>
 
-      <p className="text-center text-xs text-[#999999] mt-8">面试教练 v1.0.0</p>
+      <p className="text-center text-xs text-[#999999] mt-8">AI 超级面试 v1.0.0</p>
 
       <Modal
         title={
           <div className="flex items-center gap-2">
-            <EditOutlined className="text-[#00BFA5]" />
+            <EditOutlined className="text-[#D9A441]" />
             <span className="text-lg font-bold text-[#232529]">编辑个人资料</span>
           </div>
         }
@@ -461,7 +498,7 @@ const ProfilePage = () => {
         onOk={handleSaveProfile}
         okText="保存"
         cancelText="取消"
-        okButtonProps={{ className: '!bg-[#00BFA5] !border-[#00BFA5] hover:!bg-[#00A88A] !rounded-lg !px-6' }}
+        okButtonProps={{ className: '!bg-[#D9A441] !border-[#D9A441] hover:!bg-[#A97E24] !rounded-lg !px-6' }}
         cancelButtonProps={{ className: '!rounded-lg !px-6' }}
         width={520}
         destroyOnClose
@@ -656,7 +693,7 @@ const ProfilePage = () => {
       <Modal
         title={
           <div className="flex items-center gap-2">
-            <FileTextOutlined className="text-[#00BFA5]" />
+            <FileTextOutlined className="text-[#D9A441]" />
             <span className="text-lg font-bold text-[#232529]">我的简历</span>
           </div>
         }
@@ -684,8 +721,8 @@ const ProfilePage = () => {
                   key={resume.id}
                   className="flex items-center gap-3 bg-[#F7F8FA] rounded-xl p-3 hover:bg-[#EEEEEE] transition-colors group"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-[#E0F7F4] flex items-center justify-center flex-shrink-0">
-                    <FileTextOutlined className="text-[#00BFA5] text-lg" />
+                  <div className="w-10 h-10 rounded-lg bg-[#F7EBD3] flex items-center justify-center flex-shrink-0">
+                    <FileTextOutlined className="text-[#D9A441] text-lg" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -693,7 +730,7 @@ const ProfilePage = () => {
                       <span
                         className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                           resume.status === 1
-                            ? 'bg-[#E0F7F4] text-[#00B578]'
+                            ? 'bg-[#F7EBD3] text-[#00B578]'
                             : resume.status === 2
                               ? 'bg-[#FDECEC] text-[#F53535]'
                               : 'bg-[#FFF7E0] text-[#FFAA00]'
@@ -726,7 +763,7 @@ const ProfilePage = () => {
                       onClick={() => handleStartInterview(resume.id)}
                       className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                         resume.status === 1
-                          ? 'bg-[#00BFA5] hover:bg-[#00A88A]'
+                          ? 'bg-[#D9A441] hover:bg-[#A97E24]'
                           : 'bg-[#E8E8E8] cursor-not-allowed'
                       }`}
                       title={resume.status === 1 ? '使用此简历去面试' : '简历尚未就绪'}
@@ -755,7 +792,7 @@ const ProfilePage = () => {
 
           <div className="border-t border-[#E8E8E8] pt-4">
             <p className="text-sm font-medium text-[#232529] mb-3 flex items-center gap-1.5">
-              <PlusOutlined className="text-[#00BFA5]" />上传新简历
+              <PlusOutlined className="text-[#D9A441]" />上传新简历
             </p>
             <FileUpload
               fileType="resume"

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 面试报告页（真实后端对接：GET /report + GET /questions + regenerate）。
  *
  * 报告未生成时轮询（generating）；失败可手动重试（§13.1）；
@@ -7,7 +7,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Progress, App, Rate, Tag, Empty } from 'antd';
+import Progress from 'antd/es/progress';
+import App from 'antd/es/app';
+import Rate from 'antd/es/rate';
+import Empty from 'antd/es/empty';
 import {
   ArrowLeftOutlined,
   ReloadOutlined,
@@ -18,7 +21,7 @@ import {
   CheckCircleOutlined,
   LoadingOutlined,
   UserOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import {
   getInterviewReport,
   getInterviewQuestions,
@@ -29,6 +32,7 @@ import type {
   ApiInterviewReport,
   ApiInterviewQuestionDetail,
 } from '@/lib/api/interview';
+import { shareUrl } from '@/lib/share';
 
 /** 报告轮询间隔 */
 const POLL_INTERVAL = 3000;
@@ -171,7 +175,7 @@ const ReportPage = () => {
             </>
           ) : (
             <>
-              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[#F2F3F5] border-t-[#00BFA5] animate-spin" />
+              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[#F2F3F5] border-t-[#D9A441] animate-spin" />
               <h3 className="text-base font-semibold text-[#232529] mb-2">报告生成中…</h3>
               <p className="text-sm text-[#666666]">AI 正在汇总你的整场表现，通常需要 10~30 秒</p>
             </>
@@ -197,11 +201,16 @@ const ReportPage = () => {
           <ArrowLeftOutlined />
         </button>
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/dashboard/interview')} className="text-sm text-[#00BFA5] font-medium hover:text-[#00A88A] transition-colors inline-flex items-center gap-1">
+          <button onClick={() => navigate('/dashboard/interview')} className="text-sm text-[#D9A441] font-medium hover:text-[#A97E24] transition-colors inline-flex items-center gap-1">
             <ReloadOutlined /> 重新面试
           </button>
           <button
-            onClick={() => { navigator.clipboard.writeText(window.location.href); message.success('链接已复制'); }}
+            onClick={async () => {
+              // 优先系统分享，http 下自动降级为复制链接
+              const r = await shareUrl({ url: window.location.href, title: '我的面试报告' });
+              if (r === 'copied') message.success('链接已复制');
+              else if (r === 'failed') message.error('分享失败，请手动复制链接');
+            }}
             className="text-sm text-[#666666] font-medium hover:text-[#232529] transition-colors inline-flex items-center gap-1"
           >
             <ShareAltOutlined /> 分享
@@ -211,7 +220,7 @@ const ReportPage = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="bg-white border border-[#E8E8E8] rounded-2xl p-8 text-center">
-          <Progress type="circle" percent={score} strokeColor="#00BFA5" size={140} format={(p) => (
+          <Progress type="circle" percent={score} strokeColor="#D9A441" size={140} format={(p) => (
             <div>
               <div className="text-3xl font-bold text-[#232529]">{p}</div>
               <div className="text-[10px] text-[#999999]">总分</div>
@@ -225,9 +234,9 @@ const ReportPage = () => {
               <p className="text-xs font-semibold text-[#999999] mb-2 flex items-center justify-center gap-1">
                 <UserOutlined /> 能力画像
               </p>
-              <div className="flex flex-wrap gap-1.5 justify-center">
+              <div className="flex flex-wrap gap-2 justify-center">
                 {Object.entries(report.capability_profile).map(([k, v]) => (
-                  <Tag key={k} className="!m-0">{k}: {v}</Tag>
+                  <span key={k} className="tag tag-flame">{k}: {v}</span>
                 ))}
               </div>
             </div>
@@ -245,7 +254,7 @@ const ReportPage = () => {
                     <span className="text-sm text-[#232529] w-20 flex-shrink-0">{name}</span>
                     <div className="flex-1 h-2 rounded-full bg-[#F7F8FA] overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-[#00BFA5] transition-all"
+                        className="h-full rounded-full bg-[#D9A441] transition-all"
                         style={{ width: `${Math.min(100, Math.max(0, val))}%` }}
                       />
                     </div>
@@ -260,7 +269,7 @@ const ReportPage = () => {
 
           <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
             <h3 className="text-sm font-bold text-[#232529] mb-3 flex items-center gap-2">
-              <StarOutlined className="text-[#00BFA5]" /> 优势亮点
+              <StarOutlined className="text-[#D9A441]" /> 优势亮点
             </h3>
             <div className="space-y-2">
               {report.strengths.map((s, i) => (
@@ -286,7 +295,7 @@ const ReportPage = () => {
           </div>
           <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
             <h3 className="text-sm font-bold text-[#232529] mb-3 flex items-center gap-2">
-              <BulbOutlined className="text-[#00BFA5]" /> 改进建议
+              <BulbOutlined className="text-[#D9A441]" /> 改进建议
             </h3>
             <div className="space-y-2">
               {report.suggestions.map((s, i) => (
@@ -334,7 +343,7 @@ const ReportPage = () => {
                 )}
                 {qd.ai_comment && (
                   <p className="text-xs text-[#666666] bg-white rounded-lg p-3 leading-relaxed">
-                    <span className="text-[#00BFA5] font-semibold">AI 点评：</span>
+                    <span className="text-[#D9A441] font-semibold">AI 点评：</span>
                     {qd.ai_comment}
                   </p>
                 )}

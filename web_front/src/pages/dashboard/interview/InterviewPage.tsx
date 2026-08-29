@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Steps } from 'antd';
+import App from 'antd/es/app';
+import Steps from 'antd/es/steps';
 import {
   ArrowLeftOutlined,
   ThunderboltOutlined,
@@ -13,7 +14,7 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   ClockCircleOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { FileUpload } from '@/components/upload/FileUpload';
 import {
   getResumes,
@@ -46,7 +47,7 @@ const ANALYSIS_STEPS = [
 // 解析状态 → 标签配色（对齐后端 resume.status）
 const STATUS_TAG_CLASS: Record<number, string> = {
   0: 'bg-[#FFF7E0] text-[#FFAA00]',
-  1: 'bg-[#E0F7F4] text-[#00B578]',
+  1: 'bg-[#F7EBD3] text-[#00B578]',
   2: 'bg-[#FDECEC] text-[#F53535]',
 };
 
@@ -292,11 +293,19 @@ const InterviewPage = () => {
         <div className="bg-white border border-[#E8E8E8] rounded-2xl p-4 mb-5">
           <Steps
             current={step}
-            items={[
-              { title: '选择简历' },
-              { title: 'AI 分析' },
-              { title: '设备检测' },
-            ]}
+            items={['选择简历', 'AI 分析', '设备检测'].map((t, i) => ({
+              title: (
+                <span
+                  style={{
+                    color: 'var(--color-ink)',
+                    opacity: i === step ? 1 : 0.85,
+                    fontWeight: i === step ? 600 : 400,
+                  }}
+                >
+                  {t}
+                </span>
+              ),
+            }))}
           />
         </div>
       </div>
@@ -306,7 +315,7 @@ const InterviewPage = () => {
         {step === 0 && (
           <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-3">
-              <FileTextOutlined className="text-[#00BFA5]" />
+              <FileTextOutlined className="text-[#D9A441]" />
               <h2 className="text-base font-bold text-[#232529]">已有简历</h2>
               {resumes.length > 0 && (
                 <span className="text-xs text-[#999999] ml-auto">{resumes.length} 份</span>
@@ -328,17 +337,17 @@ const InterviewPage = () => {
                         onClick={() => resume.status === 1 && handleSelectResume(resume.id)}
                         className={`flex items-center gap-4 px-5 py-4 transition-colors ${
                           resume.status === 1 ? 'cursor-pointer' : 'cursor-default'
-                        } ${selected ? 'bg-[#E0F7F4]' : resume.status === 1 ? 'hover:bg-[#F7F8FA]' : ''}`}
+                        } ${selected ? 'bg-[#F7EBD3]' : resume.status === 1 ? 'hover:bg-[#F7F8FA]' : ''}`}
                       >
                         <div
                           className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                            selected ? 'border-[#00BFA5] bg-[#00BFA5]' : 'border-[#E5E6EB]'
+                            selected ? 'border-[#D9A441] bg-[#D9A441]' : 'border-[#E5E6EB]'
                           }`}
                         >
                           {selected && <CheckOutlined className="text-white text-[10px]" />}
                         </div>
-                        <div className="w-9 h-9 rounded-lg bg-[#E0F7F4] flex items-center justify-center flex-shrink-0">
-                          <FileTextOutlined className="text-[#00BFA5] text-base" />
+                        <div className="w-9 h-9 rounded-lg bg-[#F7EBD3] flex items-center justify-center flex-shrink-0">
+                          <FileTextOutlined className="text-[#D9A441] text-base" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[#232529] truncate">{resume.file_name}</p>
@@ -398,7 +407,7 @@ const InterviewPage = () => {
                 </div>
                 <div
                   onClick={handleOpenUpload}
-                  className="border-2 border-dashed border-[#E8E8E8] rounded-2xl p-8 text-center cursor-pointer hover:border-[#00BFA5] hover:bg-[#E0F7F4]/30 transition-all"
+                  className="border-2 border-dashed border-[#E8E8E8] rounded-2xl p-8 text-center cursor-pointer hover:border-[#D9A441] hover:bg-[#F7EBD3]/30 transition-all"
                 >
                   <div className="w-12 h-12 rounded-full bg-[#F7F8FA] flex items-center justify-center mx-auto mb-2">
                     <PlusOutlined className="text-[#999999]" />
@@ -413,7 +422,7 @@ const InterviewPage = () => {
                   <h3 className="text-sm font-bold text-[#232529]">上传新简历</h3>
                   <button
                     onClick={handleCloseUpload}
-                    className="text-xs text-[#999999] hover:text-[#00BFA5] ml-auto transition-colors"
+                    className="text-xs text-[#999999] hover:text-[#D9A441] ml-auto transition-colors"
                   >
                     取消
                   </button>
@@ -436,16 +445,16 @@ const InterviewPage = () => {
                     onClick={() => setInterviewType(opt.value)}
                     className={`text-left px-4 py-3 rounded-xl border-2 transition-all ${
                       selected
-                        ? 'border-[#00BFA5] bg-[#E0F7F4]'
+                        ? 'border-[#D9A441] bg-[#F7EBD3]'
                         : 'border-[#E8E8E8] bg-white hover:border-[#E5E6EB]'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <ClockCircleOutlined className={selected ? 'text-[#00BFA5]' : 'text-[#999999]'} />
-                      <span className={`text-sm font-semibold ${selected ? 'text-[#00BFA5]' : 'text-[#232529]'}`}>
+                      <ClockCircleOutlined className={selected ? 'text-[#D9A441]' : 'text-[#999999]'} />
+                      <span className={`text-sm font-semibold ${selected ? 'text-[#D9A441]' : 'text-[#232529]'}`}>
                         {opt.title}
                       </span>
-                      {selected && <CheckOutlined className="text-[#00BFA5] text-xs ml-auto" />}
+                      {selected && <CheckOutlined className="text-[#D9A441] text-xs ml-auto" />}
                     </div>
                     <p className="text-xs text-[#999999] mt-1">{opt.desc}</p>
                   </button>
@@ -472,7 +481,7 @@ const InterviewPage = () => {
         {/* ============ STEP 2: AI 分析中（真实创建：LLM 预生成基础题） ============ */}
         {step === 1 && (
           <div className="bg-white border border-[#E8E8E8] rounded-2xl p-10 text-center">
-            <div className="w-16 h-16 mx-auto mb-5 rounded-full border-4 border-[#F2F3F5] border-t-[#00BFA5] animate-spin" />
+            <div className="w-16 h-16 mx-auto mb-5 rounded-full border-4 border-[#F2F3F5] border-t-[#D9A441] animate-spin" />
             <h2 className="text-lg font-bold text-[#232529] mb-2">AI 正在分析你的简历...</h2>
             <p className="text-sm text-[#666666] mb-6">
               {analysisStepIdx >= ANALYSIS_STEPS.length && generating
@@ -487,12 +496,12 @@ const InterviewPage = () => {
                   <div
                     key={label}
                     className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg bg-[#F7F8FA] transition-colors ${
-                      isDone ? 'text-[#00B578]' : isCurrent ? 'text-[#00BFA5] font-semibold' : 'text-[#666666]'
+                      isDone ? 'text-[#00B578]' : isCurrent ? 'text-[#D9A441] font-semibold' : 'text-[#666666]'
                     }`}
                   >
                     <span
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        isDone ? 'bg-[#00B578]' : isCurrent ? 'bg-[#00BFA5] animate-pulse' : 'bg-[#E8E8E8]'
+                        isDone ? 'bg-[#00B578]' : isCurrent ? 'bg-[#D9A441] animate-pulse' : 'bg-[#E8E8E8]'
                       }`}
                     />
                     {label}

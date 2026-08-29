@@ -1,6 +1,8 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Switch, Divider } from 'antd';
+import App from 'antd/es/app';
+import Switch from 'antd/es/switch';
+import Divider from 'antd/es/divider';
 import {
   ArrowLeftOutlined,
   BellOutlined,
@@ -9,7 +11,7 @@ import {
   LockOutlined,
   GlobalOutlined,
   DeleteOutlined,
-} from '@ant-design/icons';
+} from '@/components/icons';
 import { updateProfileVisibility } from '@/lib/api/user';
 import { useAppStore } from '@/store';
 
@@ -111,7 +113,7 @@ const SettingsPage = () => {
           action: (
             <button
               onClick={() => msg.info('修改密码功能即将上线')}
-              className="text-xs text-[#00BFA5] font-medium hover:text-[#00A88A] transition-colors"
+              className="text-xs text-[#D9A441] font-medium hover:text-[#A97E24] transition-colors"
             >
               修改
             </button>
