@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 面试记录页（真实后端对接：GET /interviews 分页列表）。
  *
  * 展示当前用户全部面试记录：进行中可继续、已完成看报告、已中断只读。
@@ -18,8 +18,9 @@ import {
   ReloadOutlined,
   PauseCircleOutlined,
   ClockCircleOutlined,
+  DeleteOutlined,
 } from '@/components/icons';
-import { getInterviewList, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
+import { getInterviewList, deleteInterview, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
 import type { ApiInterviewListItem } from '@/lib/api/interview';
 
 /** 状态标签样式（0-进行中 1-已完成 2-已中断） */
@@ -33,7 +34,7 @@ const PAGE_SIZE = 20;
 
 const HistoryPage = () => {
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const [items, setItems] = useState<ApiInterviewListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -58,13 +59,44 @@ const HistoryPage = () => {
     loadList(page);
   }, [page, loadList]);
 
-  /** 点击记录：进行中/已中断 → 会话页（恢复或展示中断态）；已完成 → 报告页 */
+  /** 点击记录：草稿(未启动)→设备检测路由；进行中(已启动)→会话页恢复；已中断→会话页(中断态)；已完成→报告页 */
   const handleOpen = (item: ApiInterviewListItem) => {
+    // 草稿态（题目已生成但未通过设备检测）：跳独立设备检测路由（URL 带 interviewId）
+    if (item.status === 0 && !item.is_started) {
+      navigate(`/dashboard/interview/device-check/${item.interview_id}`);
+      return;
+    }
     if (item.status === 0 || item.status === 2) {
       navigate(`/dashboard/interview/session/${item.interview_id}`);
       return;
     }
     navigate(`/dashboard/report/${item.interview_id}`);
+  };
+
+  /** 删除面试记录（软删除，任意状态可删；按状态给出确认文案，不影响统计） */
+  const handleDelete = (item: ApiInterviewListItem) => {
+    const draft = item.status === 0 && !item.is_started;
+    const hint = draft
+      ? '确定删除该待面试记录吗？删除后无法恢复。'
+      : item.status === 1
+        ? '确定删除该面试记录吗？删除后记录与报告将无法恢复（平均分统计仍保留该次成绩）。'
+        : '确定删除该面试记录吗？删除后无法恢复（平均分统计仍保留该次成绩）。';
+    modal.confirm({
+      title: '删除面试记录',
+      content: hint,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await deleteInterview(item.interview_id);
+          message.success('已删除该面试记录');
+          loadList(page);
+        } catch {
+          message.error('删除失败，请重试');
+        }
+      },
+    });
   };
 
   const formatDate = (iso: string | null) =>
@@ -113,7 +145,10 @@ const HistoryPage = () => {
       ) : (
         <div className="flex-1 overflow-y-auto space-y-3">
           {items.map((item) => {
-            const meta = STATUS_META[item.status] ?? STATUS_META[2];
+            const draft = item.status === 0 && !item.is_started;
+            const meta = draft
+              ? { label: '待开始', cls: 'bg-[#F7F8FA] text-[#666666]' }
+              : (STATUS_META[item.status] ?? STATUS_META[2]);
             const score = item.total_score;
             const scoreColor = score === null ? '#999999' : score >= 85 ? '#00B578' : score >= 70 ? '#D9A441' : score >= 60 ? '#FFAA00' : '#F53535';
             return (
@@ -165,7 +200,19 @@ const HistoryPage = () => {
                     )}
                   </div>
                 </div>
-                <RightOutlined className="text-[#E8E8E8] text-xs ml-4" />
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(item);
+                    }}
+                    className="w-7 h-7 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#F53535] hover:text-[#F53535] transition-colors"
+                    title={draft ? '删除该待面试记录' : '删除该面试记录'}
+                  >
+                    <DeleteOutlined className="text-xs" />
+                  </button>
+                  <RightOutlined className="text-[#E8E8E8] text-xs ml-1" />
+                </div>
               </div>
             );
           })}

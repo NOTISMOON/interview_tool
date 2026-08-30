@@ -10,7 +10,7 @@ export type InterviewType = 1 | 2;
 export type InterviewStatus = 0 | 1 | 2;
 
 /** 面试阶段（后端 Checkpoint phase） */
-export type InterviewPhase = 'answering' | 'analyzing' | 'summarizing' | 'completed' | 'aborted';
+export type InterviewPhase = 'not_started' | 'answering' | 'analyzing' | 'summarizing' | 'completed' | 'aborted';
 
 /** 当前题目（后端 QuestionOut） */
 export interface ApiInterviewQuestion {
@@ -100,6 +100,8 @@ export interface ApiInterviewListItem {
   question_count: number;
   answered_count: number;
   report_ready: boolean;
+  /** 是否已正式启动（False=草稿，设备检测前；历史页据此分流跳转） */
+  is_started: boolean;
   created_at: string;
   interview_time: string | null;
   total_duration: number | null;
@@ -111,6 +113,16 @@ export interface ApiInterviewListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+/** 面试统计响应（GET /interviews/stats，含软删除记录，删除不影响平均分） */
+export interface ApiInterviewStats {
+  /** 可见（未删除）记录总数，用于历史页分页 */
+  total: number;
+  /** 已完成面试次数（含已删记录） */
+  completed_count: number;
+  /** 已完成面试平均分（含已删记录，无则 null） */
+  avg_score: number | null;
 }
 
 /** 逐题详情（后端 InterviewQuestionDetail，仅已结束面试返回） */
@@ -205,6 +217,19 @@ export async function getInterviewState(
 }
 
 /**
+ * 设备检测通过后正式启动面试（后端草稿态 not_started → answering，幂等）。
+ * @param interviewId 面试会话ID
+ */
+export async function startInterview(interviewId: number): Promise<ApiInterviewState> {
+  const { data } = await request.post<ApiInterviewState>(
+    `/interviews/${interviewId}/start`,
+    null,
+    { timeout: 15000 },
+  );
+  return data;
+}
+
+/**
  * 提交回答：Fast Decision 即时判定，秒级返回下一题（v2，全量分析走异步 Worker）。
  * 幂等键 (interviewId, questionIndex)，重试安全。
  * @param interviewId 面试会话ID
@@ -264,6 +289,22 @@ export async function regenerateReport(interviewId: number): Promise<ApiReportSt
  */
 export async function abortInterview(interviewId: number, tabEpoch: number): Promise<void> {
   await request.post(`/interviews/${interviewId}/abort`, { tab_epoch: tabEpoch }, { timeout: 15000 });
+}
+
+/**
+ * 删除面试记录（软删除：草稿/进行中/已中断/已完成均可删，不影响统计）。
+ * @param interviewId 面试会话ID
+ */
+export async function deleteInterview(interviewId: number): Promise<void> {
+  await request.delete(`/interviews/${interviewId}`, { timeout: 15000 });
+}
+
+/**
+ * 查询面试统计（总次数/完成数/平均分，含软删除记录——删除不影响平均分）。
+ */
+export async function getInterviewStats(): Promise<ApiInterviewStats> {
+  const { data } = await request.get<ApiInterviewStats>('/interviews/stats', { timeout: 15000 });
+  return data;
 }
 
 /**

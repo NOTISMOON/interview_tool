@@ -16,6 +16,7 @@ const DashboardLayout = lazy(() => import('@/components/layout/DashboardLayout')
 
 const DashboardHome = lazy(() => import('@/pages/dashboard/HomePage'));
 const InterviewPage = lazy(() => import('@/pages/dashboard/interview/InterviewPage'));
+const InterviewDeviceCheck = lazy(() => import('@/pages/dashboard/interview/DeviceCheckPage'));
 const InterviewSession = lazy(() => import('@/pages/dashboard/interview/InterviewSessionPage'));
 const HistoryPage = lazy(() => import('@/pages/dashboard/interview/HistoryPage'));
 const ReportPage = lazy(() => import('@/pages/dashboard/interview/ReportPage'));
@@ -89,6 +90,7 @@ const App = () => {
       >
         <Route index element={<DashboardHome />} />
         <Route path="interview" element={<InterviewPage />} />
+        <Route path="interview/device-check/:id" element={<InterviewDeviceCheck />} />
         <Route path="interview/session/:id" element={<InterviewSession />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="report/:id" element={<ReportPage />} />

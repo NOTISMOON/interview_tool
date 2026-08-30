@@ -47,6 +47,10 @@ class Interview(Base):
         Integer, nullable=False, server_default=text("0"), comment="设备检测是否通过"
     )
     interview_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="面试完成时间")
+    is_deleted: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), comment="软删除标记 0-正常 1-已删除"
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="软删除时间")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), comment="创建时间"
     )

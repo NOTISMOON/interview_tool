@@ -12,9 +12,9 @@ import {
 } from '@/components/icons';
 import { useAppStore } from '@/store';
 import { getResumes } from '@/lib/api/resume';
-import { getInterviewList, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
+import { getInterviewList, getInterviewStats, INTERVIEW_TYPE_LABEL } from '@/lib/api/interview';
 import { getCheckinStatus, doCheckin } from '@/lib/api/checkin';
-import type { ApiInterviewListItem } from '@/lib/api/interview';
+import type { ApiInterviewListItem, ApiInterviewStats } from '@/lib/api/interview';
 import { useStaggerEntrance } from '@/hooks/useGsapAnimations';
 
 const DashboardHome = () => {
@@ -26,8 +26,10 @@ const DashboardHome = () => {
   const interviewListRef = useStaggerEntrance(0.06, 20, 0.4, 0.3);
   /** 简历数量（从后端 GET /resumes 拉取，仅取数量展示） */
   const [resumeCount, setResumeCount] = useState(0);
-  /** 最近面试记录（GET /interviews，工作台统计与最近列表） */
+  /** 最近面试记录（GET /interviews，最近列表展示） */
   const [interviews, setInterviews] = useState<ApiInterviewListItem[]>([]);
+  /** 面试统计（GET /interviews/stats，含软删除记录，删除不影响平均分） */
+  const [stats, setStats] = useState<ApiInterviewStats>({ total: 0, completed_count: 0, avg_score: null });
   /** 签到数据 */
   const [checkinData, setCheckinData] = useState({ signedIn: false, streak: 0, totalDays: 0 });
   const [checkingIn, setCheckingIn] = useState(false);
@@ -55,16 +57,17 @@ const DashboardHome = () => {
     getInterviewList(1, 100)
       .then((res) => setInterviews(res.items))
       .catch(() => {});
+    getInterviewStats()
+      .then(setStats)
+      .catch(() => {});
     getCheckinStatus()
       .then((res) => setCheckinData(res))
       .catch(() => {});
   }, []);
 
-  /** 已完成且有成绩的面试（统计与最近列表） */
-  const finished = interviews.filter((it) => it.status === 1 && it.total_score !== null);
-  const avgScore = finished.length > 0
-    ? Math.round(finished.reduce((s, r) => s + (r.total_score ?? 0), 0) / finished.length)
-    : null;
+  /** 面试统计：完成数与平均分（含软删除记录，删除不影响统计） */
+  const completedCount = stats.completed_count;
+  const avgScore = stats.avg_score !== null ? Math.round(stats.avg_score) : null;
 
   /** 根据当前时间返回问候语 */
   const getGreeting = (): string => {
@@ -134,7 +137,7 @@ const DashboardHome = () => {
           <div className="text-[12.5px] font-semibold text-[var(--color-rock)] mb-[14px] tracking-[0.3px]">本周统计</div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-[21px] font-extrabold text-[var(--color-brand)] leading-none mb-1">{finished.length}</div>
+              <div className="text-[21px] font-extrabold text-[var(--color-brand)] leading-none mb-1">{completedCount}</div>
               <div className="text-[11px] text-[var(--color-slate)]">完成面试</div>
             </div>
             <div>

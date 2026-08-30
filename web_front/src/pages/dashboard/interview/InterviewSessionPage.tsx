@@ -445,7 +445,10 @@ const InterviewSession = () => {
     return (
       <div className="fixed inset-0 z-[100] bg-[#232529] text-[#E8E8E8] flex flex-col items-center justify-center gap-4">
         <p className="text-sm text-[#999999]">{loadError}</p>
-        <button onClick={() => navigate('/dashboard/interview')} className="btn-ghost">
+        <button
+          onClick={() => navigate('/dashboard/interview')}
+          className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-transparent border border-[rgba(255,255,255,0.12)] text-[#999999] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#E8E8E8] transition-all"
+        >
           返回面试入口
         </button>
       </div>
@@ -504,7 +507,10 @@ const InterviewSession = () => {
         <h2 className="text-xl font-bold text-[#F7F8FA]">面试已中断</h2>
         <p className="text-sm text-[#666666]">本场面试已结束（主动放弃或超时），已答题目与评分已保留</p>
         <div className="flex gap-3">
-          <button onClick={() => navigate('/dashboard/history', { replace: true })} className="btn-ghost">
+          <button
+            onClick={() => navigate('/dashboard/history', { replace: true })}
+            className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-transparent border border-[rgba(255,255,255,0.12)] text-[#999999] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#E8E8E8] transition-all"
+          >
             查看面试记录
           </button>
           <button onClick={() => navigate('/dashboard/interview', { replace: true })} className="btn-flame">

@@ -31,8 +31,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.db.sync_session import SyncSessionLocal
 
 # ---- 配置 ----
+# 后端在容器内通过 localhost:8000 直接可达（E2E 脚本应在后端容器内运行）。
 BASE = "http://127.0.0.1:8000/api/v1"
-SECRET_KEY = "change-me-in-production"  # 与 api_server/.env 保持一致
+AUTH_URL = "http://127.0.0.1:8000/api/v1/auth"
 USER_ID = 1  # E2E测试用户A
 INTERVIEW_TYPE = 2  # 快速面试（5题，控制LLM时长）
 
@@ -49,15 +50,25 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         print(f"  [FAIL] {name} -> {detail}")
 
 
-def make_token(user_id: int) -> str:
-    """生成与后端一致的 JWT（HS256，sub 为字符串用户ID）。"""
-    return jwt.encode({"sub": str(user_id), "login": "test_a"}, SECRET_KEY, algorithm="HS256")
-
-
 def session_for(user_id: int) -> requests.Session:
-    """创建携带 access_token Cookie 的会话。"""
+    """通过 dev-login（DEBUG 环境）获取真实 HttpOnly Cookie 会话。
+
+    后端已启用单设备登录（jti 校验），手工签发 token 无法通过校验，
+    故走 dev-login 端点绕 OAuth 直签双 Token 并写 Cookie，最贴近真实登录链路。
+    """
     s = requests.Session()
-    s.cookies.set("access_token", make_token(user_id))
+    resp = s.get(f"{AUTH_URL}/dev-login?user_id={user_id}", timeout=10)
+    if resp.status_code != 200:
+        raise RuntimeError(f"dev-login 失败: {resp.status_code} {resp.text[:200]}")
+    # 生产 .env 的 COOKIE_SECURE=true：cookie 带 Secure 标志，requests 在纯 http 下
+    # 默认不会发送。E2E 在容器内走 http://localhost:8000，须去掉 Secure 标志强制携带。
+    access_token = s.cookies.get("access_token")
+    refresh_token = s.cookies.get("refresh_token")
+    s.cookies.clear()
+    s.cookies.set("access_token", access_token, domain="127.0.0.1", path="/", secure=False)
+    if refresh_token:
+        s.cookies.set("refresh_token", refresh_token, domain="127.0.0.1", path="/api/v1/auth", secure=False)
+    assert "access_token" in s.cookies, "dev-login 未设置 access_token Cookie"
     return s
 
 
@@ -139,17 +150,37 @@ def main() -> None:
         interview_id = created["interview_id"]
         print(f"  [INFO] 出题耗时 {elapsed:.1f}s, 题目数={created['total_questions']}")
         check("创建返回epoch=1", created["epoch"] == 1)
-        check("快速面试题量4~5", 4 <= created["total_questions"] <= 5, str(created["total_questions"]))
+        # 快速面试固定 9 题（§面试流程功能文档：2技术八股/4项目/1架构/2综合）
+        check("快速面试题量=9", created["total_questions"] == 9, str(created["total_questions"]))
         check("返回首题", created["current_question"] is not None)
 
-        # ---- 3. 状态查询：同tab幂等 ----
+        # ---- 3. 草稿态核验：创建后 phase=not_started（设备检测前，§3 新流程） ----
         resp = s.get(f"{BASE}/interviews/{interview_id}?tab_id=tab-A", timeout=10)
         state = resp.json()
         check("状态查询200", resp.status_code == 200, resp.text)
         check("同tab刷新epoch不变", state["epoch"] == 1, str(state.get("epoch")))
-        check("phase=answering", state["phase"] == "answering")
+        check("创建后phase=not_started(草稿)", state["phase"] == "not_started", str(state.get("phase")))
 
-        # ---- 4. 双开接管：新tab → epoch+1 ----
+        # 历史列表：草稿态 is_started=false（前端据此分流回设备检测步骤）
+        resp = s.get(f"{BASE}/interviews", timeout=10)
+        lst_item = next((it for it in resp.json()["items"] if it["interview_id"] == interview_id), None)
+        check("列表草稿is_started=false", lst_item is not None and lst_item["is_started"] is False, str(lst_item))
+
+        # ---- 4. 设备检测通过 → 正式启动（POST /start：not_started → answering，幂等） ----
+        resp = s.post(f"{BASE}/interviews/{interview_id}/start", timeout=15)
+        check("启动面试200", resp.status_code == 200, resp.text)
+        started = resp.json()
+        check("启动后phase=answering", started["phase"] == "answering", str(started.get("phase")))
+        check("启动后question_index=1", started["question_index"] == 1, str(started.get("question_index")))
+        # 幂等：重复 start 仍返回 answering（不会重复推进）
+        resp2 = s.post(f"{BASE}/interviews/{interview_id}/start", timeout=15)
+        check("启动幂等200+answering", resp2.status_code == 200 and resp2.json()["phase"] == "answering", resp2.text)
+        # 列表：启动后 is_started=true（前端据此直进面试间）
+        resp = s.get(f"{BASE}/interviews", timeout=10)
+        lst_item = next((it for it in resp.json()["items"] if it["interview_id"] == interview_id), None)
+        check("列表启动后is_started=true", lst_item is not None and lst_item["is_started"] is True, str(lst_item))
+
+        # ---- 5. 双开接管：新tab → epoch+1 ----
         resp = s.get(f"{BASE}/interviews/{interview_id}?tab_id=tab-B", timeout=10)
         check("新tab接管epoch=2", resp.json().get("epoch") == 2, resp.text)
         # 旧tab提交 → 409
@@ -164,7 +195,7 @@ def main() -> None:
         epoch = resp.json()["epoch"]
         check("A回归接管epoch=3", epoch == 3, str(epoch))
 
-        # ---- 5. 提交回答（v2：Fast Decision 秒级进下一题，全量分析异步 Worker） ----
+        # ---- 6. 提交回答（v2：Fast Decision 秒级进下一题，全量分析异步 Worker） ----
         answers_pool = {
             1: "Redis是内存数据库，数据在内存里，断电会丢，所以要持久化。",
             2: "我负责了AI面试平台的面试会话模块，用了FastAPI和Redis，实现了面试状态管理。",
@@ -204,10 +235,13 @@ def main() -> None:
             if body["next_question"]["is_follow_up"]:
                 follow_up_seen = True
             question_index = body["next_question"]["question_index"]
-            if total_answered > 12:  # 追问链兜底
+            # 追问链兜底：快速面试 9 基础题 + 每题至多 1 追问 = 上限 18，
+            # 25 足以覆盖正常链路，仅防 LLM 异常无限追问
+            if total_answered > 25:
+                check("追问链未失控(≤25)", False, f"answered={total_answered}")
                 break
 
-        # ---- 6. 幂等：重复提交已答题 ----
+        # ---- 7. 幂等：重复提交已答题 ----
         resp = s.post(
             f"{BASE}/interviews/{interview_id}/answers",
             json={"question_index": 1, "answer": "重复提交", "tab_epoch": epoch},
@@ -231,7 +265,7 @@ def main() -> None:
             check("报告含总评", len(report["summary"]) > 10)
             check("报告含改进建议", len(report["suggestions"]) >= 1)
 
-        # ---- 8. 题目落库核验 ----
+        # ---- 9. 题目落库核验 ----
         db = SyncSessionLocal()
         try:
             rows = db.execute(
@@ -256,7 +290,7 @@ def main() -> None:
         finally:
             db.close()
 
-        # ---- 9. 放弃链路（另建一场快速放弃） ----
+        # ---- 10. 放弃链路（另建一场快速放弃，草稿态直接放弃） ----
         resp = s.post(
             f"{BASE}/interviews",
             json={"resume_id": resume_id, "type": 2, "tab_id": "tab-C"},

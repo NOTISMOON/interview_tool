@@ -45,6 +45,7 @@ RELATED_TYPE_NAME_MAP: dict[int, str] = {
     1: "post",
     2: "report",
     3: "user",
+    4: "interview",
 }
 
 

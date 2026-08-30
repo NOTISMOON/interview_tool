@@ -64,6 +64,7 @@ _RESUME_CACHE_KEY = "resume:analysis:{resume_id}"
 _RESUME_CACHE_TTL = 7 * 24 * 3600
 
 # 面试阶段常量（§6.2）
+PHASE_NOT_STARTED = "not_started"
 PHASE_ANSWERING = "answering"
 PHASE_ANALYZING = "analyzing"
 PHASE_SUMMARIZING = "summarizing"
@@ -214,7 +215,7 @@ class InterviewService:
         now = datetime.now().isoformat()
         first = rows[0]
         checkpoint = {
-            "phase": PHASE_ANSWERING,
+            "phase": PHASE_NOT_STARTED,
             "question_index": 1,
             "current_question_id": first.id,
             "current_question": first.question_text,
@@ -295,6 +296,48 @@ class InterviewService:
         state = self._build_state(db, cache, interview)
         if epoch is not None:
             state["epoch"] = epoch
+        return state
+
+    def start_interview(
+        self, db: Session, cache: redis.Redis, user_id: int, interview_id: int
+    ) -> dict:
+        """设备检测通过后正式启动面试（草稿态 not_started → answering，§3）。
+
+        幂等：若已处于 answering 直接返回当前状态；已完成/中断面试不可再启动。
+
+        Args:
+            db: 数据库同步会话。
+            cache: 同步Redis客户端。
+            user_id: 当前用户ID。
+            interview_id: 面试会话ID。
+
+        Returns:
+            最新状态字典（phase=answering）。
+
+        Raises:
+            InterviewNotFoundError: 面试不存在或无权访问。
+            InterviewConflictError: 面试已完成/中断（409）。
+        """
+        interview = self._get_owned(db, user_id, interview_id)
+        if interview.status != INTERVIEW_STATUS_IN_PROGRESS:
+            raise InterviewConflictError(
+                "finished", self._build_state(db, cache, interview)
+            )
+        questions = list(interview_question_repository.list_by_interview(db, interview_id))
+        checkpoint = self._load_or_rebuild_checkpoint(db, cache, interview, questions)
+        if checkpoint.get("phase") == PHASE_NOT_STARTED:
+            # 草稿态推进为作答态：定位首题（§6.4 与全量重建同逻辑，无已答题）
+            checkpoint["phase"] = PHASE_ANSWERING
+            checkpoint["question_index"] = 1
+            if questions:
+                checkpoint["current_question_id"] = questions[0].id
+                checkpoint["current_question"] = questions[0].question_text
+            checkpoint["current_answer"] = ""
+            checkpoint["last_activity_at"] = datetime.now().isoformat()
+            isess.save_checkpoint_sync(cache, interview.id, checkpoint)
+            logger.info("面试正式启动: interview_id=%s", interview.id)
+        state = self._state_from(db, interview, checkpoint, questions)
+        state["epoch"] = isess.get_client_epoch_sync(cache, interview.id) or 1
         return state
 
     # ------------------------------------------------------------------
@@ -932,13 +975,61 @@ class InterviewService:
     # 面试记录列表 / 逐题详情（历史页与报告页对接）
     # ------------------------------------------------------------------
 
+    def delete_record(
+        self, db: Session, cache: redis.Redis, user_id: int, interview_id: int
+    ) -> None:
+        """软删除面试记录（草稿/进行中/已中断/已完成均可删除）。
+
+        仅标记 is_deleted=1，保留题目与报告行——控制台平均分/完成数统计
+        仍计入已删记录（用户要求删除不影响统计）。删除后清理 Redis
+        Checkpoint/租约/锁，并移除关联的面试就绪通知（消息不属于统计）。
+
+        Args:
+            db: 数据库同步会话。
+            cache: 同步Redis客户端。
+            user_id: 当前用户ID。
+            interview_id: 面试会话ID。
+
+        Raises:
+            InterviewNotFoundError: 面试不存在或无权访问。
+            InterviewConflictError: 删除并发冲突（409）。
+        """
+        interview = self._get_owned(db, user_id, interview_id)
+        if interview.is_deleted == 1:
+            raise InterviewConflictError("already_deleted", None)
+
+        token = isess.generate_lock_token()
+        if not isess.acquire_lock_sync(cache, interview_id, token):
+            raise InterviewConflictError("busy", None)
+        try:
+            from sqlalchemy import delete as sa_delete
+
+            from app.models.message import Message
+            # 软删除面试记录（保留题目/报告/总分，统计不受影响）
+            interview_repository.soft_delete(db, interview_id)
+            # 移除关联的面试就绪通知（related_type=4-interview，消息不属于统计）
+            db.execute(
+                sa_delete(Message).where(
+                    Message.user_id == user_id,
+                    Message.related_type == 4,
+                    Message.related_id == interview_id,
+                )
+            )
+            db.commit()
+        finally:
+            isess.clear_client_sync(cache, interview_id)
+            isess.delete_checkpoint_sync(cache, interview_id)
+            isess.release_lock_sync(cache, interview_id, token)
+        logger.info("软删除面试记录: interview_id=%s", interview_id)
+
     def list_interviews(
-        self, db: Session, user_id: int, page: int = 1, page_size: int = 20
+        self, db: Session, cache: redis.Redis, user_id: int, page: int = 1, page_size: int = 20
     ) -> dict:
         """分页查询用户面试记录（按ID倒序，含报告就绪标志）。
 
         Args:
             db: 数据库同步会话。
+            cache: 同步Redis客户端（草稿态判定）。
             user_id: 当前用户ID。
             page: 页码（从1开始）。
             page_size: 页大小。
@@ -968,6 +1059,16 @@ class InterviewService:
             questions = interview_question_repository.list_by_interview(db, it.id)
             base_count = len([q for q in questions if q.is_follow_up == 0])
             answered = len([q for q in questions if q.user_answer is not None])
+            # 进行中但为草稿态（设备检测前，§3）：标记 is_started=False 供前端分流
+            is_started = True
+            if it.status == INTERVIEW_STATUS_IN_PROGRESS:
+                cp = isess.load_checkpoint_sync(cache, it.id)
+                if cp is not None and cp.get("phase") == PHASE_NOT_STARTED:
+                    is_started = False
+                elif cp is None and answered == 0:
+                    # Checkpoint 缺失且未答过题：视为草稿（题目生成中/孤儿记录），
+                    # 避免误判"进行中"直接进面试间绕过设备检测（§3 状态保持）
+                    is_started = False
             items.append(
                 {
                     "interview_id": it.id,
@@ -978,6 +1079,7 @@ class InterviewService:
                     "question_count": base_count,
                     "answered_count": answered,
                     "report_ready": report_map.get(it.id, False),
+                    "is_started": is_started,
                     "created_at": it.created_at,
                     "interview_time": it.interview_time,
                     "total_duration": it.total_duration,
@@ -1024,6 +1126,26 @@ class InterviewService:
             for idx, q in enumerate(questions, start=1)
         ]
         return {"items": items, "total": len(items)}
+
+    # ------------------------------------------------------------------
+    # 面试统计（控制台平均分，含软删除记录，§统计口径：删除不影响统计）
+    # ------------------------------------------------------------------
+
+    def get_stats(self, db: Session, user_id: int) -> dict:
+        """统计用户面试数据（总次数/完成数/平均分）。
+
+        统计口径包含软删除记录：删除面试仅从历史列表移除，不改变平均分
+        与完成数（用户要求）。总次数为未删除可见记录数，用于历史页分页。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 当前用户ID。
+
+        Returns:
+            {"total": 可见记录总数, "completed_count": 已完成次数,
+             "avg_score": 平均分（含已删）}。
+        """
+        return interview_repository.get_stats(db, user_id)
 
     # ------------------------------------------------------------------
     # 内部工具
@@ -1131,10 +1253,10 @@ class InterviewService:
             Interview对象。
 
         Raises:
-            InterviewNotFoundError: 不存在或非本人面试。
+            InterviewNotFoundError: 不存在、非本人或已删除（软删除）。
         """
         interview = interview_repository.get_by_id(db, interview_id)
-        if interview is None or interview.user_id != user_id:
+        if interview is None or interview.user_id != user_id or interview.is_deleted == 1:
             raise InterviewNotFoundError("面试不存在")
         return interview
 
@@ -1196,14 +1318,16 @@ class InterviewService:
         if checkpoint is not None:
             return checkpoint
 
-        # 重建：定位第一道未答题目
+        # 重建：定位第一道未答题；无任何已答题视为草稿态（not_started），
+        # 保证题目生成中/孤儿记录进入设备检测而非直接进面试间（§3 状态保持）
+        answered_count = interview_question_repository.count_answered(db, interview.id)
         checkpoint = {
-            "phase": PHASE_ANSWERING,
+            "phase": PHASE_NOT_STARTED if answered_count == 0 else PHASE_ANSWERING,
             "question_index": len(questions),
             "current_question_id": questions[-1].id if questions else None,
             "current_question": questions[-1].question_text if questions else "",
             "current_answer": "",
-            "answered_count": 0,
+            "answered_count": answered_count,
             "base_question_count": len([q for q in questions if q.is_follow_up == 0]),
             "total_follow_up_used": len([q for q in questions if q.is_follow_up == 1]),
             "started_at": interview.created_at.isoformat() if interview.created_at else datetime.now().isoformat(),
@@ -1218,7 +1342,6 @@ class InterviewService:
                 checkpoint["current_question_id"] = q.id
                 checkpoint["current_question"] = q.question_text
                 break
-        checkpoint["answered_count"] = interview_question_repository.count_answered(db, interview.id)
         isess.save_checkpoint_sync(cache, interview.id, checkpoint)
         logger.info("Checkpoint丢失由MySQL重建: interview_id=%s question_index=%s", interview.id, checkpoint["question_index"])
         return checkpoint
@@ -1373,6 +1496,9 @@ class InterviewService:
     def _check_inactivity(self, db: Session, cache: redis.Redis, interview: Interview) -> None:
         """30分钟无活动自动中断（§21，读路径顺带检查）。
 
+        草稿态（not_started，题目已生成待设备检测）不受此限制：用户可能隔
+        数日才回来开始面试，故不按 30 分钟无活动自动中断。
+
         Args:
             db: 数据库同步会话。
             cache: 同步Redis客户端。
@@ -1380,6 +1506,9 @@ class InterviewService:
         """
         checkpoint = isess.load_checkpoint_sync(cache, interview.id)
         if checkpoint is None:
+            return
+        # 草稿态不参与无活动自动中断（§3：草稿互不影响，无时长限制）
+        if checkpoint.get("phase") == PHASE_NOT_STARTED:
             return
         last = checkpoint.get("last_activity_at")
         if not last:

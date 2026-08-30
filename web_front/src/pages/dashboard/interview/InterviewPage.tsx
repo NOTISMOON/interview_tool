@@ -1,19 +1,16 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import App from 'antd/es/app';
-import Steps from 'antd/es/steps';
 import {
   ArrowLeftOutlined,
-  ThunderboltOutlined,
   FileTextOutlined,
   PlusOutlined,
   CheckOutlined,
-  AudioOutlined,
-  VideoCameraOutlined,
   LoadingOutlined,
   DeleteOutlined,
   ReloadOutlined,
   ClockCircleOutlined,
+  ThunderboltOutlined,
 } from '@/components/icons';
 import { FileUpload } from '@/components/upload/FileUpload';
 import {
@@ -25,10 +22,6 @@ import {
 import type { ApiResume } from '@/lib/api/resume';
 import { createInterview, extractConflict } from '@/lib/api/interview';
 import type { InterviewType } from '@/lib/api/interview';
-
-/** 步骤条索引：0=选择简历, 1=AI 分析, 2=设备检测 */
-type StepIndex = 0 | 1 | 2;
-type DeviceState = 'idle' | 'testing' | 'ready' | 'error';
 
 /** 面试类型选项（对齐后端 type：1-完整 15题 / 2-快速 9题，均覆盖四维度） */
 const TYPE_OPTIONS: { value: InterviewType; title: string; desc: string }[] = [
@@ -52,38 +45,18 @@ const STATUS_TAG_CLASS: Record<number, string> = {
 };
 
 const InterviewPage = () => {
-  const [step, setStep] = useState<StepIndex>(0);
-  const [analysisStepIdx, setAnalysisStepIdx] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
   const [interviewType, setInterviewType] = useState<InterviewType>(1);
   const [resumes, setResumes] = useState<ApiResume[]>([]);
   const [resumesLoading, setResumesLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  /** 创建成功的面试ID（设备检测完成后跳转用） */
+  /** generating=题目生成中（进入分析动画）；done=生成完成待跳转；null=空闲 */
+  const [genState, setGenState] = useState<'generating' | 'done' | null>(null);
+  const [analysisStepIdx, setAnalysisStepIdx] = useState(0);
   const [createdInterviewId, setCreatedInterviewId] = useState<number | null>(null);
-
-  // 设备检测状态
-  const [micState, setMicState] = useState<DeviceState>('idle');
-  const [camState, setCamState] = useState<DeviceState>('idle');
-  const [volumeBars, setVolumeBars] = useState<number[]>(() => Array(20).fill(8));
-
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const volumeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-
-  // 组件卸载时释放摄像头/麦克风资源
-  useEffect(() => {
-    return () => {
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      if (volumeTimerRef.current) clearInterval(volumeTimerRef.current);
-    };
-  }, []);
 
   /** 拉取当前用户的简历列表（含解析状态，供选择/轮询） */
   const loadResumes = async () => {
@@ -103,6 +76,16 @@ const InterviewPage = () => {
     loadResumes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** 新上传但仍在解析中的简历：轮询状态直到就绪/失败 */
+  useEffect(() => {
+    if (!showUpload) return;
+    const hasParsing = resumes.some((r) => r.status === 0);
+    if (!hasParsing) return;
+    const timer = setInterval(loadResumes, 3000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showUpload, resumes]);
 
   const handleSelectResume = (id: number) => {
     setSelectedResumeId(id);
@@ -156,35 +139,23 @@ const InterviewPage = () => {
     }
   };
 
-  /** 新上传但仍在解析中的简历：轮询状态直到就绪/失败（蓝图§3.5 面试模块进度） */
-  useEffect(() => {
-    if (!showUpload) return;
-    const hasParsing = resumes.some((r) => r.status === 0);
-    if (!hasParsing) return;
-    const timer = setInterval(loadResumes, 3000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showUpload, resumes]);
-
   const canProceed = !showUpload && selectedResumeId !== null;
 
-  // STEP 1: 真实创建面试（后端预生成基础题，真实LLM 5~20秒），
-  // 动画与请求并行推进；成功记录ID进入设备检测，失败回退选择简历
+  /** 开始生成面试题：成功后直接跳设备检测路由（不驻留、不劫持，草稿互不影响） */
   const handleGenerate = async () => {
     if (!selectedResumeId) {
       message.warning('请先选择一份简历');
       return;
     }
-    setGenerating(true);
-    setStep(1);
+    setGenState('generating');
     setAnalysisStepIdx(0);
     try {
       const res = await createInterview(selectedResumeId, interviewType);
       setCreatedInterviewId(res.interview_id);
-      setGenerating(false);
+      setGenState('done');
     } catch (err) {
-      setGenerating(false);
-      setStep(0);
+      setGenState(null);
+      setCreatedInterviewId(null);
       const conflict = extractConflict(err);
       if (conflict?.code === 'analyzing') {
         message.warning('简历正在分析中，请稍后再试');
@@ -196,86 +167,23 @@ const InterviewPage = () => {
     }
   };
 
-  // STEP 2: 分析中动画推进，四个子步骤跑完且创建已成功后进入设备检测
+  // 生成完成 → 跳到独立设备检测路由（URL 带 interviewId，刷新/切页天然保持）
   useEffect(() => {
-    if (step !== 1) return;
-    if (analysisStepIdx >= ANALYSIS_STEPS.length) {
-      // 等待真实创建完成（LLM可能慢于动画）再进入设备检测
-      if (createdInterviewId !== null && !generating) {
-        const t = setTimeout(() => {
-          setStep(2);
-        }, 600);
-        return () => clearTimeout(t);
-      }
-      return;
+    if (genState === 'done' && createdInterviewId !== null) {
+      navigate(`/dashboard/interview/device-check/${createdInterviewId}`, { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genState, createdInterviewId]);
+
+  // 生成中动画推进（后台通知由后端兜底，用户切走也不丢）
+  useEffect(() => {
+    if (genState !== 'generating') return;
+    if (analysisStepIdx >= ANALYSIS_STEPS.length) return;
     const t = setTimeout(() => {
       setAnalysisStepIdx((i) => i + 1);
     }, 1400);
     return () => clearTimeout(t);
-  }, [step, analysisStepIdx, createdInterviewId, generating]);
-
-  // STEP 3: 麦克风检测
-  const testMicrophone = async () => {
-    setMicState('testing');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      mediaStreamRef.current = stream;
-
-      // 模拟音量条波动
-      if (volumeTimerRef.current) clearInterval(volumeTimerRef.current);
-      volumeTimerRef.current = setInterval(() => {
-        setVolumeBars(Array(20).fill(0).map(() => Math.floor(Math.random() * 30) + 6));
-      }, 120);
-
-      setTimeout(() => {
-        setMicState('ready');
-      }, 1800);
-    } catch {
-      setMicState('error');
-    }
-  };
-
-  // STEP 3: 摄像头检测
-  const testCamera = async () => {
-    setCamState('testing');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      // 合并到同一个 stream 引用，便于统一释放
-      if (!mediaStreamRef.current) {
-        mediaStreamRef.current = stream;
-      } else {
-        const existing = mediaStreamRef.current;
-        stream.getVideoTracks().forEach((t) => existing.addTrack(t));
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-      }
-      setCamState('ready');
-    } catch {
-      setCamState('error');
-    }
-  };
-
-  const bothReady = micState === 'ready' && camState === 'ready';
-
-  // STEP 3 -> 面试间：跳转真实面试会话页（session_id 即 interview_id）
-  const handleStart = () => {
-    if (createdInterviewId === null) return;
-    navigate(`/dashboard/interview/session/${createdInterviewId}`);
-  };
-
-  const deviceCardClass = (s: DeviceState) =>
-    `bg-[#F7F8FA] border-2 rounded-2xl p-6 text-center transition-all duration-300 ${
-      s === 'ready' ? 'border-[#00B578]' : s === 'error' ? 'border-[#F53535]' : s === 'testing' ? 'border-[#FFAA00]' : 'border-[#E8E8E8]'
-    }`;
-
-  const deviceStatusText = (s: DeviceState, label: { idle: string; testing: string; ready: string; error: string }) =>
-    label[s];
+  }, [genState, analysisStepIdx]);
 
   return (
     <div className="flex flex-col h-full">
@@ -289,30 +197,11 @@ const InterviewPage = () => {
           </button>
           <h1 className="text-xl font-bold text-[#232529]">AI 模拟面试</h1>
         </div>
-
-        <div className="bg-white border border-[#E8E8E8] rounded-2xl p-4 mb-5">
-          <Steps
-            current={step}
-            items={['选择简历', 'AI 分析', '设备检测'].map((t, i) => ({
-              title: (
-                <span
-                  style={{
-                    color: 'var(--color-ink)',
-                    opacity: i === step ? 1 : 0.85,
-                    fontWeight: i === step ? 600 : 400,
-                  }}
-                >
-                  {t}
-                </span>
-              ),
-            }))}
-          />
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
-        {/* ============ STEP 1: 选择简历 ============ */}
-        {step === 0 && (
+        {/* ============ 选择简历 + 生成面试题 ============ */}
+        {genState === null && (
           <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-3">
               <FileTextOutlined className="text-[#D9A441]" />
@@ -464,29 +353,23 @@ const InterviewPage = () => {
 
             <button
               onClick={handleGenerate}
-              disabled={generating || !canProceed}
+              disabled={!canProceed}
               className={`btn-flame btn-flame-lg mt-4 w-full ${!canProceed ? '!opacity-50 !cursor-not-allowed' : ''}`}
             >
-              {generating ? (
                 <span className="inline-flex items-center gap-2">
-                  <LoadingOutlined /> AI 正在解析简历...
+                <ThunderboltOutlined /> 开始生成面试题
                 </span>
-              ) : (
-                '开始生成面试题'
-              )}
             </button>
           </div>
         )}
 
-        {/* ============ STEP 2: AI 分析中（真实创建：LLM 预生成基础题） ============ */}
-        {step === 1 && (
+        {/* ============ 题目生成中（后台通知兜底，用户切走也不丢） ============ */}
+        {genState === 'generating' && (
           <div className="bg-white border border-[#E8E8E8] rounded-2xl p-10 text-center">
             <div className="w-16 h-16 mx-auto mb-5 rounded-full border-4 border-[#F2F3F5] border-t-[#D9A441] animate-spin" />
             <h2 className="text-lg font-bold text-[#232529] mb-2">AI 正在分析你的简历...</h2>
             <p className="text-sm text-[#666666] mb-6">
-              {analysisStepIdx >= ANALYSIS_STEPS.length && generating
-                ? '题目生成中，通常需要 5~20 秒，请稍候'
-                : '正在解析简历并生成个性化面试题，请稍候'}
+              正在解析简历并生成个性化面试题，通常需要 5~20 秒
             </p>
             <div className="flex flex-col gap-2.5 max-w-sm mx-auto">
               {ANALYSIS_STEPS.map((label, i) => {
@@ -510,113 +393,9 @@ const InterviewPage = () => {
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {/* ============ STEP 3: 设备检测 ============ */}
-        {step === 2 && (
-          <div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              {/* 麦克风检测 */}
-              <div className={deviceCardClass(micState)}>
-                <div className="text-4xl mb-3 text-[#666666]">
-                  <AudioOutlined />
-                </div>
-                <div className="text-[15px] font-bold text-[#232529] mb-1">麦克风检测</div>
-                <div
-                  className={`text-[13px] mb-3 ${
-                    micState === 'ready' ? 'text-[#00B578]' : micState === 'error' ? 'text-[#F53535]' : 'text-[#666666]'
-                  }`}
-                >
-                  {deviceStatusText(micState, {
-                    idle: '等待检测',
-                    testing: '正在检测...',
-                    ready: '✅ 麦克风正常',
-                    error: '❌ 无法访问麦克风，请检查权限',
-                  })}
-                </div>
-                <div className="w-full h-[120px] rounded-xl bg-[#232529] flex items-center justify-center mb-3 overflow-hidden">
-                  <div className="flex items-end justify-center gap-[3px] h-10 w-full px-4">
-                    {volumeBars.map((h, i) => (
-                      <div
-                        key={i}
-                        className="w-1 rounded-sm transition-all duration-100"
-                        style={{
-                          height: `${h}px`,
-                          background: micState === 'ready' ? '#00B578' : '#E8E8E8',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <button
-                  onClick={testMicrophone}
-                  disabled={micState === 'testing'}
-                  className="btn-ghost w-full !py-2 !text-sm"
-                >
-                  {micState === 'testing' ? '检测中...' : micState === 'ready' ? '重新测试' : '测试麦克风'}
-                </button>
-              </div>
-
-              {/* 摄像头检测 */}
-              <div className={deviceCardClass(camState)}>
-                <div className="text-4xl mb-3 text-[#666666]">
-                  <VideoCameraOutlined />
-                </div>
-                <div className="text-[15px] font-bold text-[#232529] mb-1">摄像头检测</div>
-                <div
-                  className={`text-[13px] mb-3 ${
-                    camState === 'ready' ? 'text-[#00B578]' : camState === 'error' ? 'text-[#F53535]' : 'text-[#666666]'
-                  }`}
-                >
-                  {deviceStatusText(camState, {
-                    idle: '等待检测',
-                    testing: '正在检测...',
-                    ready: '✅ 摄像头正常',
-                    error: '❌ 无法访问摄像头，请检查权限',
-                  })}
-                </div>
-                <div className="w-full h-[120px] rounded-xl bg-[#232529] flex items-center justify-center mb-3 overflow-hidden">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover rounded-xl"
-                    style={{ display: camState === 'ready' ? 'block' : 'none' }}
-                  />
-                  {camState !== 'ready' && (
-                    <span className="text-[#8A8F99] text-xs">摄像头预览</span>
-                  )}
-                </div>
-                <button
-                  onClick={testCamera}
-                  disabled={camState === 'testing'}
-                  className="btn-ghost w-full !py-2 !text-sm"
-                >
-                  {camState === 'testing' ? '检测中...' : camState === 'ready' ? '重新测试' : '测试摄像头'}
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white border border-[#E8E8E8] rounded-2xl p-6 text-center">
-              <p className="text-sm text-[#666666] mb-3">
-                面试将以<strong className="text-[#232529]">语音回答</strong>为主，请确保麦克风正常工作
+            <p className="text-xs text-[#999999] mt-6">
+              生成完成后将自动进入设备检测；若你离开了本页，可在消息中心或面试记录中找到该面试继续。
               </p>
-              <button
-                onClick={handleStart}
-                disabled={!bothReady}
-                className={`btn-flame btn-flame-lg ${!bothReady ? '!opacity-50 !cursor-not-allowed' : ''}`}
-              >
-                {bothReady ? (
-                  <span className="inline-flex items-center gap-2">
-                    <ThunderboltOutlined /> 开始面试
-                  </span>
-                ) : (
-                  '请先完成设备检测'
-                )}
-              </button>
-            </div>
           </div>
         )}
       </div>

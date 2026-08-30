@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import App from 'antd/es/app';
 import Dropdown from 'antd/es/dropdown';
@@ -171,6 +171,10 @@ const MessageDetailPage = () => {
   const handleActionClick = () => {
     if (type === 'dm') {
       navigate(`/dashboard/messages/chat/${detail.from_user?.id ?? ''}`);
+    } else if (type === 'interview') {
+      // 面试就绪通知：related.id 为 interviewId → 跳对应设备检测路由
+      const interviewId = detail.related?.id;
+      navigate(interviewId ? `/dashboard/interview/device-check/${interviewId}` : '/dashboard/interview');
     } else if (type === 'follow') {
       if (userLink) navigate(`/dashboard/user/${userLink}`);
     } else if (type === 'comment' || type === 'like' || type === 'follow_post') {

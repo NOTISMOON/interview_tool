@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Avatar from 'antd/es/avatar';
 import App from 'antd/es/app';
@@ -48,7 +48,7 @@ import type { PostListItem } from '@/types';
 import { useAppStore } from '@/store';
 import { FileUpload } from '@/components/upload/FileUpload';
 import { listPosts } from '@/lib/api/posts';
-import { getInterviewList } from '@/lib/api/interview';
+import { getInterviewStats } from '@/lib/api/interview';
 import { useUpload } from '@/hooks/useUpload';
 import {
   getResumes,
@@ -90,21 +90,16 @@ const ProfilePage = () => {
     }
   }, [location.state]);
 
-  /** 面试统计（GET /interviews：次数与平均分） */
+  /** 面试统计（GET /interviews/stats：次数与平均分，含软删除记录） */
   const [interviewCount, setInterviewCount] = useState(0);
   const [avgScore, setAvgScore] = useState<number | null>(null);
 
   // 拉取面试统计（30s 缓存，数据变化不频繁，避免每次进入重复请求）
   useEffect(() => {
-    cachedFetch(INTERVIEW_STATS_CACHE_KEY, 30000, () => getInterviewList(1, 100))
+    cachedFetch(INTERVIEW_STATS_CACHE_KEY, 30000, () => getInterviewStats())
       .then((res) => {
         setInterviewCount(res.total);
-        const finished = res.items.filter((it) => it.status === 1 && it.total_score !== null);
-        setAvgScore(
-          finished.length > 0
-            ? Math.round(finished.reduce((s, it) => s + (it.total_score ?? 0), 0) / finished.length)
-            : null,
-        );
+        setAvgScore(res.avg_score !== null ? Math.round(res.avg_score) : null);
       })
       .catch(() => {
         /* 加载失败静默 */
@@ -694,7 +689,7 @@ const ProfilePage = () => {
         title={
           <div className="flex items-center gap-2">
             <FileTextOutlined className="text-[#D9A441]" />
-            <span className="text-lg font-bold text-[#232529]">我的简历</span>
+            <span className="text-lg font-bold text-[var(--color-ink)]">我的简历</span>
           </div>
         }
         open={resumeModalOpen}
@@ -719,27 +714,27 @@ const ProfilePage = () => {
               {resumes.map((resume) => (
                 <div
                   key={resume.id}
-                  className="flex items-center gap-3 bg-[#F7F8FA] rounded-xl p-3 hover:bg-[#EEEEEE] transition-colors group"
+                  className="flex items-center gap-3 bg-[var(--color-surface-2)] border border-[var(--color-line)] rounded-xl p-3 hover:bg-[var(--color-surface-hover)] transition-colors group"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-[#F7EBD3] flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-[rgba(217,164,65,0.12)] flex items-center justify-center flex-shrink-0">
                     <FileTextOutlined className="text-[#D9A441] text-lg" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-[#232529] truncate">{resume.file_name}</p>
+                      <p className="text-sm font-medium text-[var(--color-ink)] truncate">{resume.file_name}</p>
                       <span
                         className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                           resume.status === 1
-                            ? 'bg-[#F7EBD3] text-[#00B578]'
+                            ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
                             : resume.status === 2
-                              ? 'bg-[#FDECEC] text-[#F53535]'
-                              : 'bg-[#FFF7E0] text-[#FFAA00]'
+                              ? 'bg-[var(--color-error-bg)] text-[var(--color-error)]'
+                              : 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
                         }`}
                       >
                         {RESUME_STATUS_LABEL[resume.status] ?? '未知'}
                       </span>
                     </div>
-                    <p className="text-xs text-[#999999] mt-0.5">
+                    <p className="text-xs text-[var(--color-slate)] mt-0.5">
                       {new Date(resume.created_at).toLocaleDateString('zh-CN', {
                         year: 'numeric',
                         month: '2-digit',
@@ -753,7 +748,7 @@ const ProfilePage = () => {
                     {resume.status === 2 && (
                       <button
                         onClick={() => handleRetryResume(resume)}
-                        className="w-8 h-8 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#FFAA00] hover:text-[#FFAA00] transition-colors"
+                        className="w-8 h-8 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] text-[var(--color-rock)] flex items-center justify-center hover:border-[#FFAA00] hover:text-[#FFAA00] transition-colors"
                         title="重新分析"
                       >
                         <ReloadOutlined className="text-sm" />
@@ -764,11 +759,11 @@ const ProfilePage = () => {
                       className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                         resume.status === 1
                           ? 'bg-[#D9A441] hover:bg-[#A97E24]'
-                          : 'bg-[#E8E8E8] cursor-not-allowed'
+                          : 'bg-[var(--color-surface-hover)] cursor-not-allowed'
                       }`}
                       title={resume.status === 1 ? '使用此简历去面试' : '简历尚未就绪'}
                     >
-                      <ThunderboltOutlined className="text-white text-sm" />
+                      <ThunderboltOutlined className={`${resume.status === 1 ? 'text-white' : 'text-[var(--color-slate)]'} text-sm`} />
                     </button>
                     <Popconfirm
                       title="确定要删除这份简历吗？"
@@ -778,7 +773,7 @@ const ProfilePage = () => {
                       okButtonProps={{ danger: true }}
                     >
                       <button
-                        className="w-8 h-8 rounded-lg bg-white border border-[#E8E8E8] flex items-center justify-center hover:border-[#F53535] hover:text-[#F53535] transition-colors"
+                        className="w-8 h-8 rounded-lg bg-[var(--color-surface)] border border-[var(--color-line)] text-[var(--color-rock)] flex items-center justify-center hover:border-[#F53535] hover:text-[#F53535] transition-colors"
                         title="删除简历"
                       >
                         <DeleteOutlined className="text-sm" />
@@ -790,8 +785,8 @@ const ProfilePage = () => {
             </div>
           )}
 
-          <div className="border-t border-[#E8E8E8] pt-4">
-            <p className="text-sm font-medium text-[#232529] mb-3 flex items-center gap-1.5">
+          <div className="border-t border-[var(--color-line)] pt-4">
+            <p className="text-sm font-medium text-[var(--color-ink)] mb-3 flex items-center gap-1.5">
               <PlusOutlined className="text-[#D9A441]" />上传新简历
             </p>
             <FileUpload

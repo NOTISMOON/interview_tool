@@ -22,7 +22,7 @@ class InterviewRepository:
     def list_by_user(
         self, db: Session, user_id: int, offset: int = 0, limit: int = 20
     ) -> list[Interview]:
-        """分页查询用户面试记录（按ID倒序，含进行中/已完成/已中断）。
+        """分页查询用户未删除的面试记录（按ID倒序，含进行中/已完成/已中断）。
 
         Args:
             db: 数据库同步会话。
@@ -31,11 +31,11 @@ class InterviewRepository:
             limit: 每页条数。
 
         Returns:
-            Interview列表。
+            Interview列表（不含软删除记录）。
         """
         stmt = (
             select(Interview)
-            .where(Interview.user_id == user_id)
+            .where(Interview.user_id == user_id, Interview.is_deleted == 0)
             .order_by(desc(Interview.id))
             .offset(offset)
             .limit(limit)
@@ -43,16 +43,18 @@ class InterviewRepository:
         return list(db.execute(stmt).scalars().all())
 
     def count_by_user(self, db: Session, user_id: int) -> int:
-        """统计用户面试记录总数（分页用）。
+        """统计用户未删除面试记录总数（分页用）。
 
         Args:
             db: 数据库同步会话。
             user_id: 用户ID。
 
         Returns:
-            面试记录总数。
+            面试记录总数（不含软删除）。
         """
-        stmt = select(func.count()).where(Interview.user_id == user_id)
+        stmt = select(func.count()).where(
+            Interview.user_id == user_id, Interview.is_deleted == 0
+        )
         return db.execute(stmt).scalar_one() or 0
 
     def create(self, db: Session, user_id: int, resume_id: int, interview_type: int) -> Interview:
@@ -155,6 +157,54 @@ class InterviewRepository:
             return
         interview.status = 2
         db.flush()
+
+    def soft_delete(self, db: Session, interview_id: int) -> None:
+        """软删除面试记录（is_deleted=1，保留题目/报告/总分，不影响统计）。
+
+        历史列表不再展示，但记录行与面试报告保留，控制台平均分统计仍计入。
+
+        Args:
+            db: 数据库同步会话。
+            interview_id: 面试会话ID。
+        """
+        interview = db.get(Interview, interview_id)
+        if interview is None:
+            return
+        interview.is_deleted = 1
+        interview.deleted_at = datetime.now()
+        db.flush()
+
+    def get_stats(self, db: Session, user_id: int) -> dict:
+        """统计用户面试数据（含软删除记录，供控制台平均分展示）。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户ID。
+
+        Returns:
+            {"total": 面试总次数, "completed_count": 已完成次数,
+             "avg_score": 已完成面试平均分（无则None）}。
+        """
+        stmt = select(
+            func.count(),
+            func.sum(Interview.total_score),
+            func.count(Interview.total_score),
+        ).where(
+            Interview.user_id == user_id,
+            Interview.status == INTERVIEW_STATUS_COMPLETED,
+            Interview.total_score.isnot(None),
+        )
+        row = db.execute(stmt).one()
+        total = db.execute(
+            select(func.count()).where(
+                Interview.user_id == user_id, Interview.is_deleted == 0
+            )
+        ).scalar_one() or 0
+        completed_count = int(row[0] or 0)
+        score_sum = float(row[1]) if row[1] is not None else 0.0
+        scored_count = int(row[2] or 0)
+        avg_score = round(score_sum / scored_count, 1) if scored_count > 0 else None
+        return {"total": total, "completed_count": completed_count, "avg_score": avg_score}
 
 
 interview_repository = InterviewRepository()

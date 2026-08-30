@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Tabs from 'antd/es/tabs';
 import App from 'antd/es/app';
@@ -91,6 +91,7 @@ function mapMessage(m: MessageResponse): SystemMessage {
       : undefined,
     createdAt: m.created_at,
     isRead: m.is_read,
+    relatedId: m.related?.id !== undefined && m.related?.id !== null ? String(m.related.id) : undefined,
   };
 }
 
@@ -244,6 +245,9 @@ const MessagesPage = () => {
     }
     if (msgItem.type === 'dm') {
       navigate(`/dashboard/messages/chat/${msgItem.fromUser?.id || 'u3'}`);
+    } else if (msgItem.type === 'interview') {
+      // 面试就绪通知：relatedId 为 interviewId → 跳对应设备检测路由
+      navigate(msgItem.relatedId ? `/dashboard/interview/device-check/${msgItem.relatedId}` : '/dashboard/interview');
     } else {
       navigate(`/dashboard/messages/${msgItem.id}`);
     }
