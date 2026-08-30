@@ -30,6 +30,11 @@ services:
       - LLM_BASE_URL=http://host.docker.internal:11434
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # 显式指定公共 DNS，绕开 Docker 内嵌 DNS 转发宿主机的不稳定链路，
+    # 避免容器内解析 github.com/gitee.com 出现间歇性 EAI_AGAIN（详见 docs/Debug总结/项目部署踩坑文档.md）
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
 
   # ============================================
   # Backend 实例 2（FastAPI）
@@ -59,9 +64,13 @@ services:
       - RABBITMQ_URL=amqp://admin:admin123@host.docker.internal:5672/
       - COOKIE_DOMAIN=
       - CORS_ORIGINS=["http://localhost:5645","http://localhost:5646","http://localhost:5173","http://xg-2.frp.one:31431","https://aiinterview.notismoon.top","http://aiinterview.notismoon.top"]
-      - LLM_BASE_URL=http://host.docker.internal:11434
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # 显式指定公共 DNS，绕开 Docker 内嵌 DNS 转发宿主机的不稳定链路，
+    # 避免容器内解析 github.com/gitee.com 出现间歇性 EAI_AGAIN（详见 docs/Debug总结/项目部署踩坑文档.md）
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
 
   # ============================================
   # MQ 消费者进程（单实例）
