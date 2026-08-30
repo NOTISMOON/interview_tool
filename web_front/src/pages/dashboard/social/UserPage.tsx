@@ -81,7 +81,7 @@ const UserPage = () => {
             followingCount: full.following_count,
             followersCount: full.followers_count,
             postsCount: full.posts_count,
-            isFollowing: false,
+            isFollowing: full.is_following,
             isCard: false,
           });
         } else {

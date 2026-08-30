@@ -16,6 +16,7 @@ import logging
 import redis
 from sqlalchemy.orm import Session
 
+from app.cache.follow_cache import follow_cache, DIRECTION_FOLLOWING
 from app.core.config import settings
 from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.user_repository import sync_user_repository
@@ -211,7 +212,7 @@ class UserService:
         if profile is None:
             return None
 
-        # 本人访问 → 完整公开资料
+        # 本人访问 → 完整公开资料（自己对自己不显示关注关系）
         if viewer_id is not None and viewer_id == target_user_id:
             return UserPublicProfileResponse.model_validate(profile)
 
@@ -225,7 +226,18 @@ class UserService:
             if not is_follower:
                 return UserCardResponse.model_validate(profile)
 
-        return UserPublicProfileResponse.model_validate(profile)
+        # 关注关系基于 Redis 判断（SET + SMISMEMBER，与关注/粉丝列表同源）
+        # 前置保障：与 follow_service 列表页一致，先确保 viewer 的 following SET
+        # 已回源，否则未回源时 SMISMEMBER 空返回会误报"已关注却显示未关注"。
+        is_following = False
+        if viewer_id is not None:
+            follow_cache.rebuild_set(cache_client, db, viewer_id, DIRECTION_FOLLOWING)
+            flags = follow_cache.batch_relation_flags(cache_client, viewer_id, [target_user_id])
+            is_following = flags[0]["is_following"]
+
+        resp = UserPublicProfileResponse.model_validate(profile)
+        resp.is_following = is_following
+        return resp
 
     def delete_account(self, db: Session, cache_client: redis.Redis, user_id: int) -> bool:
         """注销账号（软删除）：单事务内软删除用户、清理双向关注关系、修正计数并写注销事件。

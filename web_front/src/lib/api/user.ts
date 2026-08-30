@@ -62,6 +62,7 @@ export interface UserPublicProfileResponse {
   followers_count: number;
   posts_count: number;
   created_at: string;
+  is_following: boolean;
 }
 
 /** 受限卡片响应 */

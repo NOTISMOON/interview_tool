@@ -94,6 +94,7 @@ class UserPublicProfileResponse(BaseModel):
     followers_count: int
     posts_count: int
     created_at: datetime
+    is_following: bool = Field(False, description="当前访问者是否已关注该用户")
 
 
 class UserCardResponse(BaseModel):
