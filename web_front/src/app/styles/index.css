@@ -57,10 +57,11 @@
   --color-brand-hover: #E6AF4E;
   --color-brand-deep: #C99A3C;
   --color-brand-light: rgba(217, 164, 65, 0.14);
-  /* GitHub dark canvas 层级 */
-  --color-bg: #1b1c25;
+  /* GitHub dark canvas 层级（统一为微蓝画布：页面底最暗、卡片/侧栏逐级提亮，
+     修复此前 #1b1c25 暖灰比卡片还亮的"层级反转"，让卡片在暗色下真正浮起） */
+  --color-bg: #0d1117;
   --color-surface: #161b22;
-  --color-surface-2: #0d1117;
+  --color-surface-2: #12161f;
   --color-surface-hover: #1c2128;
   /* GitHub dark 文字阶梯 */
   --color-ink: #c9d1d9;
@@ -134,13 +135,34 @@
   .ant-empty-description { color: var(--color-ink) !important; }
   .ant-modal-content, .ant-dropdown-menu, .ant-popover-inner,
   .ant-modal-confirm-body-wrapper, .ant-select-dropdown,
-  .ant-picker-panel, .ant-drawer-content, .ant-message, .ant-notification {
+  .ant-picker-panel, .ant-drawer-content,
+  /* 注意：不能把 .ant-message / .ant-notification 外层容器也设背景，
+     .ant-message 是 fixed + left:0/right:0 的全宽容器，设背景会产生一条
+     宽度 100% 的深色盒子横跨屏幕。真正的卡片是内层 notice-content（下方单独处理）。 */
+  /* Modal/Popover 内层（header/body/footer/title）：统一深色表面，
+     否则 AntD 默认白色内层会在深色弹窗里露出"第二层背景" */
+  .ant-modal-header, .ant-modal-body, .ant-modal-footer,
+  .ant-popover-title, .ant-popover-inner-content,
+  .ant-select-dropdown .ant-select-item,
+  .ant-picker-dropdown .ant-picker-panel-container {
     background-color: var(--color-surface) !important;
     background: var(--color-surface) !important;
   }
   .ant-modal-confirm-title, .ant-modal-confirm-content, .ant-menu-item {
     color: var(--color-ink) !important;
   }
+  /* Select 下拉选项：统一背景后恢复选中/悬停态区分度 */
+  .ant-select-item-option-selected { background-color: var(--color-brand-light) !important; }
+  .ant-select-item-option-selected .ant-select-item-option-content { color: var(--color-brand) !important; }
+  .ant-select-item-option-active { background-color: var(--color-surface-hover) !important; }
+  /* Popconfirm / Modal 的主操作按钮：默认蓝 → 琥珀金品牌色（双色克制方案） */
+  .ant-btn-primary {
+    background-color: var(--color-brand) !important;
+    border-color: var(--color-brand) !important;
+    box-shadow: none !important;
+  }
+  .ant-btn-primary:hover { background-color: var(--color-brand-hover) !important; border-color: var(--color-brand-hover) !important; }
+  .ant-btn-primary:active { background-color: var(--color-brand-deep) !important; border-color: var(--color-brand-deep) !important; }
   .ant-message .ant-message-notice-content, .ant-notification-notice {
     background-color: var(--color-surface) !important;
     color: var(--color-ink) !important;
@@ -295,9 +317,13 @@ a {
 button {
   font-family: inherit;
   cursor: pointer;
-  border: none;
+  /* 重置按钮边框，但允许 .border/.border-2 等 Tailwind 类生效 */
+  border-width: 0;
+  border-style: solid;
   background: none;
 }
+button[class*="border"] { border-width: 1px !important; border-style: solid !important; }
+button[class*="border-2"] { border-width: 2px !important; border-style: solid !important; }
 
 input,
 textarea {
