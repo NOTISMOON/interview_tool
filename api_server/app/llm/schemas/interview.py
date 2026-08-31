@@ -27,10 +27,10 @@ class QuestionGenerationResult(BaseModel):
 
 
 class AnswerAnalysisResult(BaseModel):
-    """回答分析合并结果（单次 LLM 调用，§9.2）。
+    """回答分析合并结果（并行分析图聚合，§9.2）。
 
-    score 落库 ai_score，comment 落库 ai_comment；
-    follow_up_question 为预生成追问，是否启用由规则判定（§10）。
+    score 落库 ai_score，comment 落库 ai_comment。
+    追问生成由面试主图 fast_decision 负责，分析图不产出 follow_up_question。
     """
 
     correctness: str = Field(default="", description="是否切题、回答正确性简述")
@@ -41,7 +41,34 @@ class AnswerAnalysisResult(BaseModel):
     weaknesses: list[str] = Field(default_factory=list, description="薄弱点/缺失")
     score: int = Field(default=1, description="综合评分 1-5（落库 ai_score）")
     comment: str = Field(default="", description="综合评价（落库 ai_comment）")
-    follow_up_question: str | None = Field(None, description="预生成追问（可为 null）")
+
+
+class ContentAnalysisResult(BaseModel):
+    """并行分支·内容分析（切题性 + 要点 + 薄弱点）。"""
+
+    correctness: str = Field(default="", description="是否切题、内容是否正确（简述，一两句话）")
+    key_points: list[str] = Field(default_factory=list, description="回答覆盖到的要点列表")
+    weaknesses: list[str] = Field(default_factory=list, description="薄弱点或缺失列表（没有则空列表）")
+
+
+class TechnicalDepthResult(BaseModel):
+    """并行分支·技术深度评分。"""
+
+    technical_depth: int = Field(default=1, description="技术深度 1-5")
+
+
+class CompletenessLogicResult(BaseModel):
+    """并行分支·完整性与逻辑性评分。"""
+
+    completeness: int = Field(default=1, description="完整性 1-5")
+    logic: int = Field(default=1, description="逻辑性 1-5")
+
+
+class ScoringResult(BaseModel):
+    """并行分支·综合评分与评价。"""
+
+    score: int = Field(default=1, description="综合评分 1-5 分整数，综合各维度给出")
+    comment: str = Field(default="", description="面试官视角的综合评价（两三句话，可直接展示给候选人）")
 
 
 class FastDecisionResult(BaseModel):

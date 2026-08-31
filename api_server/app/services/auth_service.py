@@ -83,7 +83,6 @@ class AuthService:
                 try:
                     channel = f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}"
                     receivers = await redis.publish(
-                        channel,
                         json.dumps({
                             "kind": "session_kicked",
                             "message": "账号已在其他设备登录",

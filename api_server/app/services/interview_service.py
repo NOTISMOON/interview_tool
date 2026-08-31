@@ -49,13 +49,13 @@ from app.models.resume import (
     Resume,
 )
 from app.redis import interview_session as isess
-from app.redis.sync_client import SyncRedisClient
 from app.repositories.interview_question_repository import interview_question_repository
 from app.repositories.interview_repository import interview_repository
 from app.repositories.interview_report_repository import interview_report_repository
 from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.resume_repository import resume_repository
 from app.repositories.resume_work_experience_repository import resume_work_experience_repository
+from app.services.notification_service import notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -1540,22 +1540,16 @@ class InterviewService:
     def _publish_sse(self, user_id: int, event: dict) -> None:
         """经用户频道推送面试SSE事件（失败不阻断业务，§16）。
 
-        用同步 Redis 客户端直接 PUBLISH：订阅端（sse_manager 的异步
-        Pub/Sub 监听）不区分发布端客户端类型，同步发布无事件循环绑定
-        问题——此前用 asyncio.run + 异步客户端单例会在第二个事件循环
-        中复用绑定已关闭循环的连接，导致双开接管事件静默丢失。
+        复用 notification_service 的统一同步发布口径，避免手拼通道名。
 
         Args:
             user_id: 目标用户ID。
             event: 事件数据（含 kind 与 session_id）。
         """
-        channel = f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}"
         try:
-            SyncRedisClient.get_client().publish(
-                channel, json.dumps(event, ensure_ascii=False, default=str)
-            )
+            notification_service.publish_to_user_sync(user_id, event)
         except Exception:
-            logger.exception("面试SSE事件推送失败: user_id=%s channel=%s event=%s", user_id, channel, event.get("kind"))
+            logger.exception("面试SSE事件推送失败: user_id=%s event=%s", user_id, event.get("kind"))
 
 
 def interview_repository_hard_delete(db: Session, interview_id: int) -> None:

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # RabbitMQ配置（aio-pika 异步客户端，用于MQ中间件）
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672//"
     RABBITMQ_PREFETCH_COUNT: int = 8  # 消费者预取数量，控制并发与背压
+    # 面试回答分析消费者副本数（竞争消费者并发消费 interview.analysis，
+    # 提升全题排空吞吐，降低"答题结束瞬间多题排队"撞到报告等待上限的概率）
+    ANALYSIS_WORKERS: int = 3
 
     # JWT配置
     SECRET_KEY: str = "change-me-in-production"

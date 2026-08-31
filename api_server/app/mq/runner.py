@@ -22,7 +22,7 @@ from app.core.logging import setup_logging
 from app.mq.connection import MQConnection
 from app.mq.consumers import CONSUMER_REGISTRY
 from app.mq.outbox_relay import outbox_relay
-from app.mq.queues import declare_all_queues
+from app.mq.queues import QueueName, declare_all_queues
 from app.services.chat_flush import chat_flush_worker
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,14 @@ async def run_consumers() -> None:
     await declare_all_queues(channel)
     logger.info("MQ 拓扑声明完成（交换机/队列/绑定）")
 
-    # 实例化并启动所有消费者
-    consumers = [consumer_cls() for consumer_cls in CONSUMER_REGISTRY.values()]
+    # 实例化并启动所有消费者（面试分析消费者按 ANALYSIS_WORKERS 复制为
+    # 竞争消费者并发消费 interview.analysis，提升全题排空吞吐）
+    consumers: list = []
+    for consumer_cls in CONSUMER_REGISTRY.values():
+        if consumer_cls.queue_name is QueueName.INTERVIEW_ANALYSIS:
+            consumers.extend(consumer_cls() for _ in range(settings.ANALYSIS_WORKERS))
+        else:
+            consumers.append(consumer_cls())
     for consumer in consumers:
         await consumer.start()
 

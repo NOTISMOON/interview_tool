@@ -24,6 +24,7 @@ from app.models.message import (
     Message,
 )
 from app.redis.async_client import AsyncRedisClient
+from app.redis.sync_client import SyncRedisClient
 from app.repositories.message_repository import message_repository, sync_message_repository
 from app.schemas.message import FromUserInfo, MessageListResponse, MessageResponse, RelatedInfo, UnreadCountResponse
 
@@ -266,6 +267,18 @@ class NotificationService:
     # Pub/Sub 推送
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _user_channel(user_id: int) -> str:
+        """构造用户推送通道名（统一口径，避免各处手拼不一致）。
+
+        Args:
+            user_id: 目标用户ID。
+
+        Returns:
+            用户通道字符串，如 notify:push:100。
+        """
+        return f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}"
+
     async def publish_to_user(self, user_id: int, event_data: dict) -> None:
         """通过 Redis Pub/Sub 向指定用户推送 SSE 事件。
 
@@ -280,7 +293,7 @@ class NotificationService:
             event_data: 事件数据字典（含 kind、message 等字段）。
         """
         started_at = time.monotonic()
-        channel = f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}"
+        channel = self._user_channel(user_id)
         # 提取轻量上下文（不序列化整个消息体，避免日志膨胀）
         event_kind = event_data.get("kind") if isinstance(event_data, dict) else None
         message_id = None
@@ -341,6 +354,24 @@ class NotificationService:
             )
         except Exception:
             logger.exception("SSE广播发布失败 channel=%s", channel)
+
+    @staticmethod
+    def publish_to_user_sync(user_id: int, event_data: dict) -> None:
+        """通过同步 Redis 客户端向指定用户推送 SSE 事件。
+
+        供无法使用 async 的调用方（如 interview_service 历史同步路径）复用统一发布口径，
+        避免各处手拼通道名造成的冗余与不一致。
+
+        Args:
+            user_id: 目标用户ID。
+            event_data: 事件数据字典（含 kind 等字段）。
+        """
+        receivers = SyncRedisClient.get_client().publish(
+            f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}",
+            json.dumps(event_data, ensure_ascii=False, default=str),
+        )
+        if receivers == 0:
+            logger.warning("SSE推送(同步)无实例接收 user_id=%s 监听可能全部失效", user_id)
 
     # ------------------------------------------------------------------
     # 消息 -> 响应模型转换

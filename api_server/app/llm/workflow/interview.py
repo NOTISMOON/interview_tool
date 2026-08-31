@@ -23,9 +23,10 @@
     1. question_generation（创建时一次，批量出题）
     2. speech_correct（每次回答后，纠错语音识别文本，最小改动）
     3. fast_decision（每次回答后亚秒级，判定追问/下一题）
-异步路径另复用 analyze_answer（Worker 内单次合并全量分析+评分+追问预生成）。
+异步路径另用 AnswerAnalysisGraph（Worker 内 4 路并行分析后聚合），追问由主图生成。
 """
 
+import asyncio
 import json
 import logging
 from typing import TypedDict
@@ -37,18 +38,25 @@ from langgraph.graph import END, START, StateGraph
 from app.core.config import settings
 from app.llm.models import interview_model
 from app.llm.prompt import (
-    ANSWER_ANALYSIS_PROMPT,
+    COMPLETENESS_LOGIC_PROMPT,
+    CONTENT_ANALYSIS_PROMPT,
     FAST_DECISION_PROMPT,
     QUESTION_GENERATION_PROMPT,
     REPORT_SUMMARY_PROMPT,
+    SCORING_PROMPT,
     SPEECH_CORRECTION_PROMPT,
+    TECHNICAL_DEPTH_PROMPT,
 )
 from app.llm.schemas.interview import (
     AnswerAnalysisResult,
+    CompletenessLogicResult,
+    ContentAnalysisResult,
     FastDecisionResult,
     InterviewReportResult,
     QuestionGenerationResult,
+    ScoringResult,
     SpeechCorrectionResult,
+    TechnicalDepthResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -402,11 +410,142 @@ def generate_questions(resume_context: dict, interview_type: int) -> QuestionGen
 
 
 # --------------------------------------------------------------------------
-# 异步全量分析（§9，Worker 内单次合并调用；异步路径复用）
+# 异步回答分析图（§9，Worker 内执行；4 路并行分支后聚合，降低单题分析时延）
 # --------------------------------------------------------------------------
 
-def _analyze_answer_impl(question: str, answer: str, resume_context: dict) -> AnswerAnalysisResult:
-    """执行回答全量分析（单次合并 LLM：分析+评分+追问预生成）。
+
+class AnswerAnalysisState(TypedDict, total=False):
+    """回答分析图状态（每题一次，聚合节点产出最终结果）。
+
+    - 输入：question / answer / resume_context。
+    - 各并行分支各写一个字段：content / technical / completeness / scoring。
+    - aggregate 汇聚四个分支为 result。
+    """
+
+    question: str  # 当前题目文本
+    answer: str  # 用户回答文本
+    resume_context: dict  # 简历结构化上下文
+    content: ContentAnalysisResult  # 分支·内容分析
+    technical: TechnicalDepthResult  # 分支·技术深度
+    completeness: CompletenessLogicResult  # 分支·完整性与逻辑性
+    scoring: ScoringResult  # 分支·综合评分与评价
+    result: AnswerAnalysisResult  # 聚合结果
+
+
+def _structured_invoke(model: BaseChatModel, result_cls: type, prompt_str: str) -> object:
+    """以 json_mode 让模型输出指定结构，并校验返回类型。
+
+    Args:
+        model: 底层聊天模型实例。
+        result_cls: 期望的结构化输出 Pydantic 类。
+        prompt_str: 提示词文本。
+
+    Returns:
+        result_cls 的实例。
+
+    Raises:
+        ValueError: LLM 输出类型异常。
+    """
+    structured = model.with_structured_output(result_cls, method="json_mode")
+    result = structured.invoke(prompt_str)
+    if not isinstance(result, result_cls):
+        raise ValueError(f"LLM结构化输出类型异常: expected={result_cls.__name__} got={type(result)}")
+    return result
+
+
+def _content_analysis(state: AnswerAnalysisState) -> dict:
+    """分析图节点·内容分析：切题性 + 要点 + 薄弱点。"""
+    prompt = CONTENT_ANALYSIS_PROMPT.format(
+        question=state.get("question", ""),
+        answer=state.get("answer", ""),
+    )
+    return {"content": _structured_invoke(interview_model, ContentAnalysisResult, prompt)}
+
+
+def _technical_depth(state: AnswerAnalysisState) -> dict:
+    """分析图节点·技术深度评分。"""
+    prompt = TECHNICAL_DEPTH_PROMPT.format(
+        question=state.get("question", ""),
+        answer=state.get("answer", ""),
+    )
+    return {"technical": _structured_invoke(interview_model, TechnicalDepthResult, prompt)}
+
+
+def _completeness_logic(state: AnswerAnalysisState) -> dict:
+    """分析图节点·完整性与逻辑性评分。"""
+    prompt = COMPLETENESS_LOGIC_PROMPT.format(
+        question=state.get("question", ""),
+        answer=state.get("answer", ""),
+    )
+    return {"completeness": _structured_invoke(interview_model, CompletenessLogicResult, prompt)}
+
+
+def _scoring(state: AnswerAnalysisState) -> dict:
+    """分析图节点·综合评分与评价。"""
+    prompt = SCORING_PROMPT.format(
+        question=state.get("question", ""),
+        answer=state.get("answer", ""),
+        resume_context=json.dumps(state.get("resume_context") or {}, ensure_ascii=False, default=str),
+    )
+    return {"scoring": _structured_invoke(interview_model, ScoringResult, prompt)}
+
+
+def _aggregate(state: AnswerAnalysisState) -> dict:
+    """分析图节点·汇聚节点（等所有分支完成后执行），合并为 AnswerAnalysisResult。"""
+    content = state["content"]
+    technical = state["technical"]
+    completeness = state["completeness"]
+    scoring = state["scoring"]
+    result = AnswerAnalysisResult(
+        correctness=content.correctness,
+        technical_depth=technical.technical_depth,
+        completeness=completeness.completeness,
+        logic=completeness.logic,
+        key_points=content.key_points,
+        weaknesses=content.weaknesses,
+        score=scoring.score,
+        comment=scoring.comment,
+    )
+    return {"result": result}
+
+
+def build_answer_analysis_graph():
+    """构建并编译回答分析图（4 路并行扇出 + 汇聚）。
+
+    START 同时指向 4 个并行分支（扇出），4 个分支再汇聚到 aggregate（扇入，
+    汇聚节点会等待所有前驱完成）。同步 invoke 下并行分支在线程池并发执行。
+    """
+    builder = StateGraph(AnswerAnalysisState)
+    builder.add_node("content_analysis", _content_analysis)
+    builder.add_node("technical_depth", _technical_depth)
+    builder.add_node("completeness_logic", _completeness_logic)
+    builder.add_node("scoring", _scoring)
+    builder.add_node("aggregate", _aggregate)
+    # 扇出：四路并行分支
+    builder.add_edge(START, "content_analysis")
+    builder.add_edge(START, "technical_depth")
+    builder.add_edge(START, "completeness_logic")
+    builder.add_edge(START, "scoring")
+    # 扇入：四路均完成后进入聚合节点
+    builder.add_edge("content_analysis", "aggregate")
+    builder.add_edge("technical_depth", "aggregate")
+    builder.add_edge("completeness_logic", "aggregate")
+    builder.add_edge("scoring", "aggregate")
+    builder.add_edge("aggregate", END)
+    graph = builder.compile()
+    logger.info("回答分析图已编译（4 路并行分支）")
+    return graph
+
+
+answer_analysis_graph = build_answer_analysis_graph()
+
+
+def analyze_answer(question: str, answer: str, resume_context: dict) -> AnswerAnalysisResult:
+    """执行回答并行分析工作流图（同步入口）。
+
+    运行 AnswerAnalysisGraph：4 路并行 LLM 分支（内容/技术深度/完整逻辑/综合评分）
+    后聚合为 AnswerAnalysisResult。同步 invoke 下并行分支在线程池并发执行，
+    单题分析时延从"单次全量"降为"最慢分支"。
 
     Args:
         question: 当前题目文本。
@@ -414,33 +553,30 @@ def _analyze_answer_impl(question: str, answer: str, resume_context: dict) -> An
         resume_context: 简历结构化上下文。
 
     Returns:
-        AnswerAnalysisResult 分析+评分+追问预生成结果。
+        AnswerAnalysisResult 分析+评分结果（不含追问）。
 
     Raises:
-        Exception: LLM 调用失败（由 Worker 按 §21 重试/标记失败）。
+        Exception: 任一并行分支 LLM 调用失败时抛出（由 Worker 重试/标记失败）。
     """
-    prompt = ANSWER_ANALYSIS_PROMPT.format(
-        question=question,
-        answer=answer,
-        resume_context=json.dumps(resume_context, ensure_ascii=False, default=str),
+    state = answer_analysis_graph.invoke(
+        {
+            "question": question,
+            "answer": answer,
+            "resume_context": resume_context or {},
+        }
     )
-    model: BaseChatModel = interview_model
-    structured = model.with_structured_output(AnswerAnalysisResult, method="json_mode")
-    result = structured.invoke(prompt)
-    if not isinstance(result, AnswerAnalysisResult):
-        raise ValueError(f"LLM分析结果类型异常: {type(result)}")
+    result = state["result"]
     logger.info(
-        "回答全量分析完成: score=%s depth=%s follow_up=%s",
-        result.score, result.technical_depth, bool(result.follow_up_question),
+        "回答并行分析完成: score=%s depth=%s comments=%s",
+        result.score, result.technical_depth, len(result.comment),
     )
     return result
 
 
-def analyze_answer(question: str, answer: str, resume_context: dict) -> AnswerAnalysisResult:
-    """执行回答全量分析工作流（§9 单次合并调用；同步链路兼容入口）。
-
-    同步路径不再使用本方法（已改为 Fast Decision 即时判定 + 异步分析），
-    本方法供异步 Worker / 预留同步兜底使用。
+async def analyze_answer_parallel(
+    question: str, answer: str, resume_context: dict
+) -> AnswerAnalysisResult:
+    """异步执行回答并行分析工作流图（供异步 Worker 使用）。
 
     Args:
         question: 当前题目文本。
@@ -448,12 +584,12 @@ def analyze_answer(question: str, answer: str, resume_context: dict) -> AnswerAn
         resume_context: 简历结构化上下文。
 
     Returns:
-        AnswerAnalysisResult 分析+评分+追问预生成结果。
+        AnswerAnalysisResult 分析+评分结果。
 
     Raises:
-        Exception: LLM 调用失败。
+        Exception: 任一并行分支 LLM 调用失败时抛出。
     """
-    return _analyze_answer_impl(question, answer, resume_context)
+    return await asyncio.to_thread(analyze_answer, question, answer, resume_context)
 
 
 # --------------------------------------------------------------------------

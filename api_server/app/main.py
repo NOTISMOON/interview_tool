@@ -31,10 +31,14 @@ _scheduler = None
 async def lifespan(app: FastAPI):
     """应用生命周期管理，在启动和关闭时执行资源初始化与清理。"""
     global _scheduler
-    # 启动时：启动定时任务调度器 + SSE Manager 懒初始化
+    # 启动时：启动定时任务调度器 + Redis Pub/Sub 广播监听器（订阅时机确定化）
     _scheduler = create_scheduler()
     _scheduler.start()
     logger.info("定时任务调度器已启动")
+    # 启动即建立 SSE / 私信 WS 的 Redis Pub/Sub 订阅，避免"首连才订阅"的时机不确定
+    await sse_manager.start()
+    await chat_connection_manager.start()
+    logger.info("SSE 与私信 WS 的 Redis Pub/Sub 监听器已启动")
     yield
     # 关闭时：停止调度器 + 清理 SSE Manager 资源
     if _scheduler:

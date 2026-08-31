@@ -2,47 +2,38 @@
 
 管理所有 SSE 长连接的用户队列，通过 Redis Pub/Sub 实现跨实例广播：
     - 每个 API 实例维护本地 SSE 连接池（同一用户可存在多个队列，支持多标签页/多端）。
-    - 所有实例订阅 Redis Pub/Sub 通道（{prefix}:* 模式），
+    - 所有实例订阅 Redis Pub/Sub 通道（{prefix}:* 模式 + 广播通道），
       收到消息后查本地队列，仅持有目标用户连接的实例才实际写入 SSE 流。
     - 支持系统广播通道。
-    - Pub/Sub 监听异常时自动重连（指数退避）。
+    - 监听基础设施（订阅/重连/解码）复用 RedisPubSubListener 基类，
+      订阅在应用启动阶段由 main.py 显式 start() 建立，时机确定化。
 """
 
 import asyncio
-import json
 import logging
 from typing import Any
 
-import redis.asyncio as aioredis
-
 from app.core.config import settings
-from app.redis.async_client import AsyncRedisClient
+from app.services.redis_pubsub import RedisPubSubListener
 
 logger = logging.getLogger(__name__)
 
 
-class SSEManager:
+class SSEManager(RedisPubSubListener):
     """SSE 连接管理器（单例），维护用户 -> 队列列表 的映射。
 
     职责：
         - 建立/断开 SSE 连接时维护本地队列映射（每连接独立队列，多标签页互不干扰）。
-        - 订阅 Redis Pub/Sub，收到消息后推送到本地对应的所有队列。
-        - 监听异常时自动重连（指数退避，封顶60秒）。
-        - 提供 shutdown 方法清理资源。
+        - 基于 RedisPubSubListener 订阅 Redis Pub/Sub，收到消息后推送到本地对应队列。
+        - shutdown 时清理本地队列映射。
     """
-
-    # Pub/Sub 断线重连退避基数（秒），指数翻倍封顶60秒
-    RECONNECT_BACKOFF_BASE = 2
-    RECONNECT_BACKOFF_MAX = 60
 
     def __init__(self) -> None:
         """初始化 SSE 管理器。"""
+        super().__init__()
         # 用户 -> 队列列表：同一用户多个标签页/端各持有独立队列
         self._queues: dict[int, list[asyncio.Queue]] = {}
-        self._pubsub: aioredis.client.PubSub | None = None
-        self._listener_task: asyncio.Task | None = None
-        self._lock = asyncio.Lock()
-        self._running = False
+        self._queues_lock = asyncio.Lock()
 
     @property
     def push_channel_prefix(self) -> str:
@@ -54,8 +45,18 @@ class SSEManager:
         """系统广播通道名（来自配置）。"""
         return settings.NOTIFY_BROADCAST_CHANNEL
 
+    @property
+    def pattern_channels(self) -> list[str]:
+        """订阅的模式通道：{prefix}:* 匹配所有用户推送通道。"""
+        return [f"{self.push_channel_prefix}:*"]
+
+    @property
+    def exact_channels(self) -> list[str]:
+        """订阅的精确通道：系统广播通道。"""
+        return [self.broadcast_channel]
+
     async def connect(self, user_id: int) -> asyncio.Queue:
-        """为用户建立一条 SSE 连接，注册独立队列并确保 Pub/Sub 监听已启动。
+        """为用户建立一条 SSE 连接，注册独立队列并确保监听已启动。
 
         同一用户多次调用（多标签页/多端）返回不同队列实例，消息会复制到每个队列。
 
@@ -65,11 +66,9 @@ class SSEManager:
         Returns:
             本次连接专属的 asyncio.Queue 实例，SSE 端点从此队列读取事件。
         """
-        async with self._lock:
-            # 确保 Pub/Sub 监听已启动
-            if not self._running or self._listener_task is None or self._listener_task.done():
-                await self._start_listener()
-
+        # 幂等确保监听已启动（应用启动阶段已通过 start() 拉起，此处兜底保障）
+        await self.start()
+        async with self._queues_lock:
             queue = asyncio.Queue(maxsize=256)
             self._queues.setdefault(user_id, []).append(queue)
             logger.info("SSE 用户连接建立 user_id=%s 当前连接数=%s", user_id, len(self._queues[user_id]))
@@ -82,7 +81,7 @@ class SSEManager:
             user_id: 用户唯一标识。
             queue: connect 时返回的队列实例。
         """
-        async with self._lock:
+        async with self._queues_lock:
             queues = self._queues.get(user_id)
             if queues is None:
                 return
@@ -94,120 +93,37 @@ class SSEManager:
                 self._queues.pop(user_id, None)
             logger.info("SSE 用户连接断开 user_id=%s 剩余连接数=%s", user_id, len(queues))
 
-    async def _start_listener(self) -> None:
-        """启动 Redis Pub/Sub 监听任务（含自动重连循环，幂等：已运行时跳过）。"""
-        self._running = True
-        self._listener_task = asyncio.create_task(self._listen_loop(), name="sse-pubsub-listener")
-
-    async def _listen_loop(self) -> None:
-        """持续监听 Redis Pub/Sub 消息，异常时自动重连（指数退避）。"""
-        backoff = self.RECONNECT_BACKOFF_BASE
-        while self._running:
-            try:
-                redis_client = await AsyncRedisClient.get_client()
-                self._pubsub = redis_client.pubsub()
-                # 订阅模式通道：{prefix}:* 匹配所有用户推送通道
-                await self._pubsub.psubscribe(f"{self.push_channel_prefix}:*")
-                # 订阅系统广播通道
-                await self._pubsub.subscribe(self.broadcast_channel)
-                logger.info(
-                    "SSE Pub/Sub 监听已启动 channels=%s:*,%s",
-                    self.push_channel_prefix,
-                    self.broadcast_channel,
-                )
-                # 连接成功，重置退避
-                backoff = self.RECONNECT_BACKOFF_BASE
-
-                async for message in self._pubsub.listen():
-                    if message is None:
-                        continue
-                    await self._dispatch(message)
-            except asyncio.CancelledError:
-                logger.info("SSE Pub/Sub 监听任务已取消")
-                return
-            except Exception:
-                logger.exception("SSE Pub/Sub 监听异常，%s秒后重连", backoff)
-
-            # 清理失效连接后退避重试
-            if self._pubsub is not None:
-                try:
-                    await self._pubsub.close()
-                except Exception:
-                    pass
-                self._pubsub = None
-            if not self._running:
-                return
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, self.RECONNECT_BACKOFF_MAX)
-
-    async def _dispatch(self, message: dict[str, Any]) -> None:
-        """分发 Pub/Sub 消息到本地用户队列。
+    async def on_message(self, channel: str, payload: Any) -> None:
+        """处理一条 Pub/Sub 业务消息，分发给本地用户队列。
 
         Args:
-            message: Redis Pub/Sub 消息字典，含 type、channel、data 等字段。
+            channel: 已解码的通道名。
+            payload: 已解码的消息负载。
         """
-        # 过滤订阅控制消息（subscribe/psubscribe 确认帧，data 为订阅计数而非业务数据）
-        if message.get("type") in ("subscribe", "psubscribe", "unsubscribe", "punsubscribe"):
-            return
-
-        channel = message.get("channel", "")
-        data = message.get("data")
-
-        if data is None:
-            return
-
-        # 客户端开启 decode_responses=True 时 channel 为 str，未开启时为 bytes
-        if isinstance(channel, bytes):
-            channel_str = channel.decode("utf-8")
-        elif isinstance(channel, str):
-            channel_str = channel
-        else:
-            return
-
         # 系统广播：推送到所有本地队列
-        if channel_str == self.broadcast_channel:
+        if channel == self.broadcast_channel:
             try:
-                await self._broadcast_to_all(data)
+                await self._broadcast_to_all(payload)
             except Exception:
-                logger.exception("SSE系统广播处理异常 channel=%s", channel_str)
+                logger.exception("SSE系统广播处理异常 channel=%s", channel)
             return
 
         # 用户推送：从通道名解析 user_id
-        if channel_str.startswith(f"{self.push_channel_prefix}:"):
+        if channel.startswith(f"{self.push_channel_prefix}:"):
             try:
-                user_id_str = channel_str.split(":", 2)[-1]
-                user_id = int(user_id_str)
+                user_id = int(channel.split(":", 2)[-1])
             except (ValueError, IndexError):
-                logger.warning("无法解析Pub/Sub通道用户ID channel=%s", channel_str)
+                logger.warning("无法解析Pub/Sub通道用户ID channel=%s", channel)
                 return
 
             # session_kicked 事件记录 INFO 日志以便排查
-            payload_preview = self._decode(data)
-            if isinstance(payload_preview, dict) and payload_preview.get("kind") == "session_kicked":
-                logger.info(
-                    "SSE Pub/Sub 收到 session_kicked user_id=%s channel=%s",
-                    user_id, channel_str,
-                )
+            if isinstance(payload, dict) and payload.get("kind") == "session_kicked":
+                logger.info("SSE Pub/Sub 收到 session_kicked user_id=%s channel=%s", user_id, channel)
 
             try:
-                await self._push_to_user(user_id, data)
+                await self._push_to_user(user_id, payload)
             except Exception:
-                logger.exception("SSE用户推送处理异常 user_id=%s channel=%s", user_id, channel_str)
-
-    @staticmethod
-    def _decode(data: Any) -> Any:
-        """解码 Pub/Sub 消息体（bytes/str JSON -> 对象，解析失败退化为字符串）。"""
-        if isinstance(data, bytes):
-            try:
-                return json.loads(data.decode("utf-8"))
-            except json.JSONDecodeError:
-                return data.decode("utf-8")
-        if isinstance(data, str):
-            try:
-                return json.loads(data)
-            except json.JSONDecodeError:
-                return data
-        return data
+                logger.exception("SSE用户推送处理异常 user_id=%s channel=%s", user_id, channel)
 
     @staticmethod
     def _enqueue(queue: asyncio.Queue, user_id: int, data: Any) -> None:
@@ -232,18 +148,17 @@ class SSEManager:
             except (asyncio.QueueEmpty, asyncio.QueueFull):
                 pass
 
-    async def _push_to_user(self, user_id: int, data: Any) -> None:
+    async def _push_to_user(self, user_id: int, payload: Any) -> None:
         """将消息推送到指定用户的本地所有队列（多标签页各自收到完整副本）。
 
         Args:
             user_id: 目标用户ID。
-            data: 消息数据（JSON 字符串或字典）。
+            payload: 已解码的消息负载。
         """
         queues = self._queues.get(user_id)
         if not queues:
-            # 关键排查点：用户不在本实例属正常（多实例下由持有连接的实例投递），
-            # 但 session_kicked 事件需要 INFO 级以便排查
-            payload = self._decode(data)
+            # 用户不在本实例属正常（多实例下由持有连接的实例投递）；
+            # session_kicked 事件需要 INFO 级以便排查
             kind = payload.get("kind") if isinstance(payload, dict) else None
             if kind == "session_kicked":
                 logger.info("SSE推送 session_kicked 目标用户不在本实例，跳过 user_id=%s", user_id)
@@ -251,7 +166,6 @@ class SSEManager:
                 logger.debug("SSE推送目标用户不在本实例，跳过 user_id=%s local_users=%s", user_id, len(self._queues))
             return
 
-        payload = self._decode(data)
         kind = payload.get("kind") if isinstance(payload, dict) else None
         logger.debug(
             "SSE推送分发到本地队列 user_id=%s local_queues=%s kind=%s message_id=%s",
@@ -267,13 +181,12 @@ class SSEManager:
         for queue in queues:
             self._enqueue(queue, user_id, payload)
 
-    async def _broadcast_to_all(self, data: Any) -> None:
+    async def _broadcast_to_all(self, payload: Any) -> None:
         """将系统广播消息推送到所有本地用户队列。
 
         Args:
-            data: 广播消息数据。
+            payload: 已解码的广播消息负载。
         """
-        payload = self._decode(data)
         total_conn = sum(len(queues) for queues in self._queues.values())
         logger.info(
             "SSE系统广播分发 kind=%s local_users=%s local_connections=%s",
@@ -281,34 +194,15 @@ class SSEManager:
             len(self._queues),
             total_conn,
         )
-        for user_id, queues in self._queues.items():
+        for user_id, queues in list(self._queues.items()):
             for queue in queues:
                 self._enqueue(queue, user_id, payload)
 
     async def shutdown(self) -> None:
-        """关闭 SSE 管理器，停止监听任务并清理连接。"""
-        self._running = False
-        if self._listener_task is not None:
-            self._listener_task.cancel()
-            try:
-                await self._listener_task
-            except asyncio.CancelledError:
-                pass
-            self._listener_task = None
-
-        if self._pubsub is not None:
-            try:
-                await self._pubsub.punsubscribe()
-                await self._pubsub.unsubscribe()
-                await self._pubsub.close()
-            except Exception:
-                logger.exception("关闭Pub/Sub连接失败")
-            self._pubsub = None
-
-        # 清空所有队列映射（队列对象交由各 SSE 生成器的 finally 自然结束）
-        async with self._lock:
+        """关闭 SSE 管理器：停止监听任务并清理本地队列映射。"""
+        await super().shutdown()
+        async with self._queues_lock:
             self._queues.clear()
-
         logger.info("SSE 管理器已关闭")
 
 

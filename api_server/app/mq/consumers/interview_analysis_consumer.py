@@ -1,7 +1,7 @@
 """面试回答异步分析消费者。
 
 消费 interview.analysis.queue 消息（v2·分析异步化），对已答题目做
-全量分析+评分+能力画像渐进更新，并把结果落库到 interview_question 的
+并行分析+评分+能力画像渐进更新，并把结果落库到 interview_question 的
 ai_score / ai_comment（user_answer 与追问题已由同步路径先行落库）。
 
 payload（由 interview_service 提交回答时投递）：
@@ -19,7 +19,7 @@ import logging
 import time
 
 from app.db.sync_session import SyncSessionLocal
-from app.llm.workflow.interview import analyze_answer
+from app.llm.workflow.interview import analyze_answer_parallel
 from app.mq.consumer import BaseConsumer, MQMessage
 from app.mq.queues import QueueName
 from app.redis.async_client import AsyncRedisClient
@@ -39,7 +39,7 @@ _RESUME_CACHE_KEY = "resume:analysis:{resume_id}"
 class InterviewAnalysisConsumer(BaseConsumer):
     """面试回答异步分析消费者（独立 Worker 进程内运行，v2）。
 
-    消费 interview.analysis 事件，对单题做全量分析+评分，落库 ai_score/
+    消费 interview.analysis 事件，对单题做并行分析+评分，落库 ai_score/
     ai_comment 并渐进更新能力画像缓存。失败重试 N 次后置 ai_comment="分析
     失败"（ai_score=NULL）并告警，不 reject 消息（避免死信循环）。
     """
@@ -47,7 +47,7 @@ class InterviewAnalysisConsumer(BaseConsumer):
     queue_name = QueueName.INTERVIEW_ANALYSIS
 
     async def handle_message(self, message: MQMessage) -> None:
-        """处理单题异步分析：查题 → 幂等预检 → 全量 LLM 分析 → 落库。
+        """处理单题异步分析：查题 → 幂等预检 → 并行 LLM 分析 → 落库。
 
         Args:
             message: 入站消息，payload 含 interview/question/answer 字段。
@@ -82,13 +82,13 @@ class InterviewAnalysisConsumer(BaseConsumer):
         if resume_id:
             resume_context = await asyncio.to_thread(self._load_resume_context, resume_id)
 
-        # 全量分析（单次合并 LLM：分析+评分+追问预生成），失败重试后标记
+        # 并行分析（AnswerAnalysisGraph 4 路分支聚合），失败重试后标记
         analysis = None
         last_error: Exception | None = None
         for attempt in range(1, MAX_ANALYSIS_RETRIES + 1):
             try:
-                analysis = await asyncio.to_thread(
-                    analyze_answer, question_text, answer, resume_context
+                analysis = await analyze_answer_parallel(
+                    question_text, answer, resume_context
                 )
                 break
             except Exception as exc:  # noqa: BLE001 - 重试需吞掉LLM异常
