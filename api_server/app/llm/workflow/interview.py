@@ -29,7 +29,7 @@
 import asyncio
 import json
 import logging
-from typing import TypedDict
+from typing import Iterator, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.checkpoint.redis import RedisSaver
@@ -41,6 +41,7 @@ from app.llm.prompt import (
     COMPLETENESS_LOGIC_PROMPT,
     CONTENT_ANALYSIS_PROMPT,
     FAST_DECISION_PROMPT,
+    FOLLOW_UP_STREAM_PROMPT,
     QUESTION_GENERATION_PROMPT,
     REPORT_SUMMARY_PROMPT,
     SCORING_PROMPT,
@@ -102,6 +103,9 @@ class InterviewState(TypedDict, total=False):
     follow_up_total: int  # 全场追问总数（service 从 DB 统计回写）
     unanswered_base_after: int  # 当前基础题之后未答的基础题数（service 回写）
 
+    # 问题队列（T3.8/T3.9：发问顺序镜像；input 与全局状态均携带，Redis List 备份兜底）
+    question_queue: list[int]  # 待发问题目ID序列（队首在前）
+
 
 # --------------------------------------------------------------------------
 # checkpointer
@@ -131,13 +135,14 @@ interview_graph_checkpointer = build_checkpointer()
 # --------------------------------------------------------------------------
 
 def _init(state: InterviewState) -> InterviewState:
-    """节点 init：初始化基础题列表与计数值。"""
+    """节点 init：初始化基础题列表、问题队列与计数值。"""
     base = state.get("base_questions") or []
     return {
         "interview_id": state.get("interview_id"),
         "interview_type": state.get("interview_type", 1),
         "base_questions": base,
         "base_count": len(base),
+        "question_queue": state.get("question_queue") or [],
     }
 
 
@@ -304,11 +309,13 @@ def run_fast_decision(
     answer: str,
     follow_up_total: int,
     unanswered_base_after: int,
+    question_queue: list[int] | None = None,
 ) -> dict:
     """执行单轮 Fast Decision，即时返回下一题判定结果。
 
     以 (question_no, question_text, answer) 推进图状态并调用 fast_decision + route，
-    完整结果供 service 落库与响应组装。
+    完整结果供 service 落库与响应组装。question_queue 为 T3.8 问题队列（发问顺序
+    镜像），作为图输入/全局状态透传，由 service 侧以 Redis List 为准维护。
 
     Args:
         interview_id: 面试会话ID（thread_id）。
@@ -320,30 +327,32 @@ def run_fast_decision(
         answer: 用户回答文本。
         follow_up_total: 全场当前追问总数（用于终止判断，由图状态保留）。
         unanswered_base_after: 当前基础题之后未答的基础题数。
+        question_queue: 问题队列（待发问题目ID序列，队首在前）；None 不携带。
 
     Returns:
-        {"next_action", "follow_up_question", "corrected_text"}。
+        {"next_action", "follow_up_question", "corrected_text", "question_queue"}。
     """
+    input_state: InterviewState = {
+        "interview_id": interview_id,
+        "interview_type": interview_type,
+        "resume_context": resume_context,
+        "base_questions": base_questions,
+        "question_no": question_no,
+        "question_text": question_text,
+        "answer": answer,
+        "follow_up_total": follow_up_total,
+        "unanswered_base_after": unanswered_base_after,
+    }
+    if question_queue is not None:
+        input_state["question_queue"] = question_queue
     # RedisSaver 基于 redis-py 连接池，天然线程安全，无需额外互斥锁
-    result = interview_graph.invoke(
-        {
-            "interview_id": interview_id,
-            "interview_type": interview_type,
-            "resume_context": resume_context,
-            "base_questions": base_questions,
-            "question_no": question_no,
-            "question_text": question_text,
-            "answer": answer,
-            "follow_up_total": follow_up_total,
-            "unanswered_base_after": unanswered_base_after,
-        },
-        config=_thread_config(interview_id),
-    )
+    result = interview_graph.invoke(input_state, config=_thread_config(interview_id))
     # speech_correct 节点已把 state.answer 覆写为纠错后文本（未纠错时等于原文）
     return {
         "next_action": result["next_action"],
         "follow_up_question": result.get("follow_up_question"),
         "corrected_text": result.get("answer") or "",
+        "question_queue": result.get("question_queue") or [],
     }
 
 
@@ -359,6 +368,120 @@ def invalidate_checkpoint(interview_id: int) -> None:
         interview_graph_checkpointer.delete_thread(str(interview_id))
     except Exception:
         logger.exception("清除面试图检查点失败: interview_id=%s", interview_id)
+
+
+# --------------------------------------------------------------------------
+# 流式追问生成（v3·判题链重构，见 BUG5 文档阶段三/优化计划 P1）
+# --------------------------------------------------------------------------
+
+# 追问 NONE 判定标记（模型回答到位时的输出）
+FOLLOW_UP_NONE_MARKERS = {"NONE", "none", "None", "无", "无需", "无需追问", "不需要追问"}
+
+
+def resume_follow_up_subset(resume_context: dict) -> dict:
+    """裁剪简历上下文为追问用子集（P0：减少 prompt 输入 token）。
+
+    只保留追问判题实际需要的部分：技能列表（前 12）、项目经历（前 3，
+    description 截断 120 字）、工作经历（前 2）——丢弃 education 等无关大字段。
+
+    Args:
+        resume_context: 简历结构化上下文字典。
+
+    Returns:
+        精简后的上下文字典。
+    """
+    projects = []
+    for p in (resume_context.get("projects") or [])[:3]:
+        item = dict(p or {})
+        desc = str(item.get("description") or "")
+        if len(desc) > 120:
+            item["description"] = f"{desc[:120]}…"
+        projects.append(item)
+    return {
+        "skills": (resume_context.get("skills") or [])[:12],
+        "projects": projects,
+        "work_experience": (resume_context.get("work_experience") or [])[:2],
+    }
+
+
+def generate_follow_up_stream(
+    question: str,
+    answer: str,
+    resume_context: dict,
+) -> Iterator[str]:
+    """流式生成追问文本（单次 LLM，输出为纯文本追问问题或 NONE）。
+
+    由 Answer Consumer 在判题阶段逐 token 收集，同时经 SSE（judge_stream 增量
+    事件）推给前端打字机展示；收集完成后由服务层判定 NONE/追问。抛 LLM 异常时
+    由服务层按 analysis_fail_count 兜底。
+
+    Args:
+        question: 当前题目文本。
+        answer: 用户回答（纠错后或原文）。
+        resume_context: 简历结构化上下文（内部裁剪为追问子集）。
+
+    Yields:
+        LLM 输出的文本增量（逐 chunk）。
+    """
+    subset = resume_follow_up_subset(resume_context)
+    prompt = FOLLOW_UP_STREAM_PROMPT.format(
+        question=question,
+        answer=answer[:2000],  # 防超长回答撑爆上下文
+        resume_context=json.dumps(subset, ensure_ascii=False, default=str),
+    )
+    for chunk in interview_model.stream(prompt):
+        content = getattr(chunk, "content", None)
+        if content:
+            yield content
+
+
+def is_follow_up_none(text: str) -> bool:
+    """判断流式收集结果是否表示"无需追问"（NONE）。
+
+    Args:
+        text: 流式收集的完整输出（已 strip）。
+
+    Returns:
+        True=无需追问，应走下一基础题。
+    """
+    if not text:
+        return True
+    return text.upper() in FOLLOW_UP_NONE_MARKERS or text.upper().startswith("NONE")
+
+
+def correct_speech_text(question: str, transcript: str, resume_context: dict) -> str:
+    """回答文本规整（P1 统一调用：语音转写+键盘修正混合输入安全）。
+
+    仅修正确认的识别错误（同音/近音/术语），对纯键盘输入原样返回（无错误特征
+    不误伤）；失败或空输出回退原文，绝不阻塞判题。
+
+    Args:
+        question: 当前题目文本。
+        transcript: 用户回答原文（语音转写可含键盘修正）。
+        resume_context: 简历结构化上下文（内部仅取技能列表）。
+
+    Returns:
+        规整后文本（异常/空回退原文）。
+    """
+    raw = (transcript or "").strip()
+    if not raw:
+        return transcript or ""
+    prompt = SPEECH_CORRECTION_PROMPT.format(
+        question=question,
+        resume_context=json.dumps(
+            {"skills": (resume_context.get("skills") or [])[:12]},
+            ensure_ascii=False, default=str,
+        ),
+        transcript=raw,
+    )
+    model: BaseChatModel = interview_model
+    structured = model.with_structured_output(SpeechCorrectionResult, method="json_mode")
+    try:
+        result = structured.invoke(prompt)
+        corrected = result.corrected_text.strip() if isinstance(result, SpeechCorrectionResult) else ""
+    except Exception:
+        corrected = ""
+    return corrected or raw
 
 
 # --------------------------------------------------------------------------

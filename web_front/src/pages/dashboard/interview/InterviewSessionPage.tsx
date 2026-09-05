@@ -32,7 +32,7 @@ import type {
   ApiInterviewQuestion,
   ApiReportStatus,
 } from '@/lib/api/interview';
-import { subscribeSSE } from '@/lib/sseBus';
+import { subscribeSSE, subscribeSSEStatus } from '@/lib/sseBus';
 import { TAB_ID } from '@/lib/tabId';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 
@@ -46,6 +46,15 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 /** 报告轮询间隔与轮询提示阈值 */
 const REPORT_POLL_INTERVAL = 3000;
 const REPORT_POLL_HINT_ROUNDS = 40;
+/** 判题等待轮询超时（秒，v3）：> LLM_TIMEOUT(120s)+排队缓冲，超时回退作答重提 */
+const JUDGE_WAIT_TIMEOUT = 150;
+/** SSE 在线但长时间未收到 judged（事件丢失/后端卡住的兜底检测），超过后降级轮询防卡死 */
+const SSE_STALL_MS = 90 * 1000;
+/** busy 退避重试延时序列（2s/4s/8s，最多 3 次，T1.2） */
+const BUSY_RETRY_DELAYS = [2000, 4000, 8000];
+
+/** 延时等待（退避重试用；卸载后由 unmountedRef 跳过后续 setState） */
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** 页面本地阶段（后端 Checkpoint phase 的超集） */
 type SessionPhase =
@@ -53,7 +62,8 @@ type SessionPhase =
   | 'recovering' // 分析中刷新恢复（轮询等待）
   | 'thinking' // 思考倒计时
   | 'answering' // 作答（语音/键盘）
-  | 'submitting' // 提交中（Fast Decision 即时判定，秒级）
+  | 'submitting' // 提交中（毫秒级受理）
+  | 'judging' // v3：受理后判题中（轮询/SSE 等待下一题）
   | 'summary' // 单题提交后的轻量过渡（loading，异步分析已在后台，追问不暴露）
   | 'summarizing' // 报告生成中
   | 'completed' // 完成
@@ -75,10 +85,29 @@ const InterviewSession = () => {
   // ===== 后端状态 =====
   const [epoch, setEpoch] = useState<number>(1);
   const [phase, setPhase] = useState<SessionPhase>('loading');
+  /** 当前阶段镜像（SSE judged 等异步回调读取最新值，避免闭包过期） */
+  const phaseRef = useRef<SessionPhase>('loading');
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
   const [currentQuestion, setCurrentQuestion] = useState<ApiInterviewQuestion | null>(null);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** 判题等待已耗时（秒）：judging/recovering 轮询时实时刷新，避免等待无反馈 */
+  const [waitSeconds, setWaitSeconds] = useState(0);
+  /** 实时通道（SSE）连接状态：open=已建立（判题结果实时直达），closed=重连/断开（轮询兜底） */
+  const [sseStatus, setSseStatus] = useState<'connecting' | 'open' | 'closed'>('closed');
+  useEffect(() => subscribeSSEStatus(setSseStatus), []);
+  /** 判题等待轮询是否启用（仅 SSE 断开/降级后为 true；SSE 在线时 false 靠 judged 直达） */
+  const [pollActive, setPollActive] = useState(false);
+  /** 当前题目 id 镜像（applyState 同题去重守卫，避免 SSE judged 与轮询竞态重复启动） */
+  const questionIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    questionIdRef.current = currentQuestion?.question_id ?? null;
+  }, [currentQuestion]);
+  /** P2 题目卡打字机：当前题目已展示字数 */
+  const [typedLen, setTypedLen] = useState(0);
 
   // ===== 单题作答 =====
   const [thinkingLeft, setThinkingLeft] = useState(THINKING_SECONDS);
@@ -98,6 +127,12 @@ const InterviewSession = () => {
   const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** SSE 在线时 judged 卡死兜底计时器（超时降级轮询，防事件丢失静默等待） */
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 组件卸载标志（异步退避重试/轮询期间卸载则不再 setState，T1.2） */
+  const unmountedRef = useRef(false);
+  /** 提交快照（回答文本 + 作答时长）：失败回退时恢复，防止用户输入丢失（T1.5） */
+  const submitSnapshotRef = useRef<{ text: string; sec: number } | null>(null);
 
   // ===== 语音识别 =====
   const speech = useSpeechRecognition();
@@ -115,8 +150,12 @@ const InterviewSession = () => {
     pollTimerRef.current = null;
   }, []);
 
-  useEffect(() => () => {
-    clearTimers();
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      clearTimers();
+    };
   }, [clearTimers]);
 
   // ------------------------------------------------------------------
@@ -172,6 +211,19 @@ const InterviewSession = () => {
     const t = setTimeout(() => startThinking(), 500);
     return () => clearTimeout(t);
   }, [phase, startThinking]);
+
+  /** 换题/回退时重置题目打字机 */
+  const questionText = currentQuestion?.question_text ?? '';
+  useEffect(() => {
+    setTypedLen(0);
+  }, [currentQuestion?.question_id]);
+
+  /** P2：题目卡打字机推进（thinking 期间逐字展示，进入作答即完整显示） */
+  useEffect(() => {
+    if (phase !== 'thinking' || typedLen >= questionText.length) return;
+    const t = setTimeout(() => setTypedLen((p) => Math.min(p + 2, questionText.length)), 24);
+    return () => clearTimeout(t);
+  }, [typedLen, phase, questionText]);
 
   /** 提交前停止计时与识别 */
   const beforeSubmit = useCallback(() => {
@@ -250,25 +302,61 @@ const InterviewSession = () => {
         break;
       case 'answering':
       default:
+        // 同题去重守卫（SSE judged 与 3s 轮询竞态可能同一 state 双 apply）：
+        // 已在当前题作答/思考中则不重启倒计时与打字机，仅元数据已同步上方字段
+        if (
+          (phaseRef.current === 'thinking' || phaseRef.current === 'answering') &&
+          state.current_question &&
+          state.current_question.question_id === questionIdRef.current
+        ) {
+          return;
+        }
         startThinking();
         break;
     }
   }, [startReportPolling, startThinking]);
 
-  /** 恢复轮询：analyzing 状态下等待后端完成或回退作答 */
+  /** 判题等待调度（v3.1）：SSE 在线时**不轮询**（judged 直达切题），
+   *  仅 SSE 断开（closed）才启动 3s 兜底轮询；SSE 在线但 90s 未收 judged
+   *  （事件丢失/后端卡住）自动降级轮询防卡死。 */
   useEffect(() => {
-    if (phase !== 'recovering') return;
+    if (phase !== 'judging' && phase !== 'recovering') return;
+    setWaitSeconds(0);
+    setPollActive(false); // 先关闭轮询，依 SSE 状态重开（避免上次残留开启导致 SSE 在线也轮询）
+    if (sseStatus === 'open') {
+      // SSE 在线：完全依赖 judged；超时兜底降级轮询
+      if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+      stallTimerRef.current = setTimeout(() => setPollActive(true), SSE_STALL_MS);
+    } else {
+      setPollActive(true);
+    }
+    return () => {
+      if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, sseStatus]);
+
+  /** 判题等待轮询执行（仅 pollActive=true 时，即 SSE 断开或降级后）：
+   *  等待后端 analyzing → answering/summarizing；超时回退作答态重新提交。 */
+  useEffect(() => {
+    if (!pollActive) return;
+    if (phase !== 'judging' && phase !== 'recovering') return;
     let elapsed = 0;
+    setWaitSeconds(0);
     pollTimerRef.current = setInterval(async () => {
+      if (unmountedRef.current) return;
       elapsed += 3;
+      setWaitSeconds(elapsed);
       try {
         const state = await getInterviewState(interviewId);
         if (state.phase !== 'analyzing') {
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
           applyState(state);
-        } else if (elapsed >= 60) {
-          // 长时间未恢复（服务重启等）：回退作答重新提交（幂等保证不重跑）
+        } else if (elapsed >= JUDGE_WAIT_TIMEOUT) {
+          // 长时间未判题完成（消息丢失/服务重启）：回退作答重新提交
+          // （受理 analyzing 残留超时会由后端重新受理重投，T3.5 兜底）
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          message.info('判题等待超时，已为你保留输入，请重新提交');
           startThinking();
         }
       } catch {
@@ -279,7 +367,7 @@ const InterviewSession = () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  }, [phase, pollActive]);
 
   /** 挂载：激活租约 + 拉取状态恢复（§5.6/§15） */
   useEffect(() => {
@@ -310,16 +398,51 @@ const InterviewSession = () => {
   useEffect(() => {
     if (!interviewId) return;
     const unsubscribe = subscribeSSE((data) => {
-      // 仅处理本面试的接管事件，且接管者不是自己（自己触发 epoch+1 时
-      // 广播会回环到自己，凭事件体 tab_id 过滤避免自降级）
+      // 仅处理本面试的事件（session_id 过滤，避免收到其他会话/通知事件误触发）
+      if (Number(data.session_id) !== interviewId) return;
+      // 双开接管（§16 taken_over）：接管者不是自己时降级只读
       if (
         data.kind === 'interview:taken_over' &&
-        Number(data.session_id) === interviewId &&
         data.tab_id !== TAB_ID
       ) {
         setTakenOver(true);
         clearTimers();
         speech.stop();
+      }
+      // v3 判题完成（T3.4）：SSE 为主通道——事件已携带下一题数据，
+      // 直接进入下一题（零额外请求，网络面板不再出现"像轮询"的 getInterviewState）；
+      // 仅事件缺数据时才回退一次拉取兜底（SSE 抖动场景由 3s 轮询续接）
+      if (
+        data.kind === 'interview:judged' &&
+        (phaseRef.current === 'judging' || phaseRef.current === 'recovering')
+      ) {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        const judged = data as {
+          phase?: 'answering' | 'analyzing' | 'summarizing';
+          next_question?: ApiInterviewQuestion | null;
+        };
+        if (judged.phase === 'summarizing') {
+          // 全部题目完成 → 直接进入报告轮询
+          startReportPolling();
+          return;
+        }
+        if (judged.next_question) {
+          // 下一题（追问或基础题）已在事件内 → 直接切换，模拟流式由 summary→thinking 打字机呈现
+          setCurrentQuestion(judged.next_question);
+          setPhase('summary');
+          return;
+        }
+        // 兜底：事件缺下一题数据时拉取一次权威状态
+        getInterviewState(interviewId)
+          .then((state) => {
+            if (unmountedRef.current) return;
+            // 竞态保护：judged 已到但后端 checkpoint 尚未推进到 answering/summarizing
+            if (state.phase === 'analyzing') return;
+            applyState(state);
+          })
+          .catch(() => {
+            // 单次拉取失败忽略，后续轮询兜底
+          });
       }
     });
     return unsubscribe;
@@ -344,68 +467,118 @@ const InterviewSession = () => {
   }, [applyState, interviewId, message]);
 
   // ------------------------------------------------------------------
-  // 提交回答（§8.4：校验→幂等→LLM→落库；409 分类处理）
+  // 提交回答（§8.4；T1.2 busy 退避重试 / T1.5 失败保留输入 / T1.3 文案区分）
   // ------------------------------------------------------------------
+
+  /** T1.5：失败回退时恢复提交快照（回答文本 + 作答时长），避免用户输入丢失 */
+  const restoreSubmitSnapshot = useCallback(() => {
+    const snap = submitSnapshotRef.current;
+    if (!snap) return;
+    speech.setTranscript(snap.text);
+    setAnswerSec(snap.sec);
+  }, [speech]);
+
   const handleSubmit = useCallback(async () => {
     if (!currentQuestion || !transcript.trim()) {
       message.warning('回答内容为空，请先作答');
       return;
     }
     beforeSubmit();
+    // T1.5：提交前快照回答与时长；任何失败回退均恢复，不丢用户输入
+    submitSnapshotRef.current = { text: transcript.trim(), sec: answerSec };
     setPhase('submitting');
-    try {
-      const res = await submitAnswer(
-        interviewId,
-        currentQuestion.question_index,
-        transcript.trim(),
-        epoch,
-        answerSec,
-      );
-      // 仅非幂等计入本地统计；已答题数以服务端 answered_count 为准
-      if (!res.duplicated) {
-        statsRef.current.answered += 1;
-        statsRef.current.totalSec += answerSec;
-      }
-      setAnsweredCount(statsRef.current.answered);
-      // v2：Fast Decision 即时返回 → 提交后立即进入下一题（不暴露追问，loading 过渡）
-      if (res.phase === 'summarizing' || !res.next_question) {
-        startReportPolling();
-      } else {
-        setCurrentQuestion(res.next_question);
-        setPhase('summary'); // 轻量过渡，随即进入思考/作答
-      }
-    } catch (err) {
-      const conflict = extractConflict(err);
-      if (conflict?.reason === 'epoch_mismatch') {
-        setTakenOver(true);
+    // T1.2：busy 自动退避重试（2s/4s/8s 最多 3 次），期间保持"提交中"；
+    // 全部失败后回退作答态交还用户重新提交。
+    for (let attempt = 0; attempt <= BUSY_RETRY_DELAYS.length; attempt += 1) {
+      if (unmountedRef.current) return;
+      try {
+        const res = await submitAnswer(
+          interviewId,
+          currentQuestion.question_index,
+          transcript.trim(),
+          epoch,
+          answerSec,
+        );
+        // 提交成功：快照作废（进入下一题时 startThinking 才清空输入，T1.5 仅失败回退适用）
+        submitSnapshotRef.current = null;
+        // 仅非幂等计入本地统计；已答题数以服务端 answered_count 为准
+        if (!res.duplicated) {
+          statsRef.current.answered += 1;
+          statsRef.current.totalSec += answerSec;
+        }
+        setAnsweredCount(statsRef.current.answered);
+        // 提交成功：立即清空作答面板（T1.5 仅失败回退恢复快照；成功路径不留上一题文本残留）
+        speech.setTranscript('');
+        // v3 受理化：已受理判题中（accepted/analyzing）→ 进入 judging 轮询，
+        // 后端 Answer Consumer 异步判题，SSE judged / 3s 轮询感知完成（T3.4）
+        if (res.accepted || res.phase === 'analyzing') {
+          setPhase('judging');
+          return;
+        }
+        // 幂等复用（duplicated）：后端已有下一题，直接进入
+        if (res.phase === 'summarizing' || !res.next_question) {
+          startReportPolling();
+        } else {
+          setCurrentQuestion(res.next_question);
+          setPhase('summary'); // 轻量过渡，随即进入思考/作答
+        }
         return;
-      }
-      if (conflict?.reason === 'version_mismatch' && conflict.latest_state) {
-        message.warning('状态已变化，已为你同步最新进度');
-        applyState(conflict.latest_state);
-        return;
-      }
-      if (conflict?.reason === 'busy') {
-        message.warning('操作过于频繁，请稍候重试');
+      } catch (err) {
+        const conflict = extractConflict(err);
+        if (conflict?.reason === 'epoch_mismatch') {
+          setTakenOver(true);
+          return;
+        }
+        if (conflict?.reason === 'version_mismatch' && conflict.latest_state) {
+          message.warning('状态已变化，已为你同步最新进度');
+          applyState(conflict.latest_state);
+          return;
+        }
+        if (conflict?.reason === 'finished' && conflict.latest_state) {
+          applyState(conflict.latest_state);
+          return;
+        }
+        if (conflict?.reason === 'busy') {
+          // 锁仍被持有 → 退避重试；耗尽则回退作答态并保留输入
+          if (attempt < BUSY_RETRY_DELAYS.length) {
+            await sleep(BUSY_RETRY_DELAYS[attempt]);
+            continue;
+          }
+          restoreSubmitSnapshot();
+          message.warning('当前作答过于频繁，答案已为您保留，请重新提交');
+          setPhase('answering');
+          return;
+        }
+        // T1.3：非冲突失败，区分超时/断网/业务异常，统一保留输入回退作答态
+        restoreSubmitSnapshot();
+        const errCode = (err as { code?: string })?.code;
+        if (errCode === 'ECONNABORTED') {
+          message.warning('网络较慢，答案正在后台处理，请稍候点击重试');
+        } else if (errCode === 'ERR_NETWORK') {
+          message.error('网络异常，请检查网络后重试');
+        } else {
+          message.error('分析服务异常，请重试提交');
+        }
         setPhase('answering');
         return;
       }
-      if (conflict?.reason === 'finished' && conflict.latest_state) {
-        applyState(conflict.latest_state);
-        return;
-      }
-      // LLM 失败（502等）：回退作答允许重试（后端幂等，同题连续2次自动跳过）
-      message.error('分析服务异常，请重试提交');
-      setPhase('answering');
     }
-  }, [answerSec, applyState, beforeSubmit, currentQuestion, epoch, interviewId, message, startReportPolling, transcript]);
+  }, [
+    answerSec, applyState, beforeSubmit, currentQuestion, epoch, interviewId,
+    message, restoreSubmitSnapshot, startReportPolling, transcript,
+  ]);
 
   /** feedback → 下一题 / 进入报告等待（v2 已移除 feedback 停留，本方法删除） */
 
   // ------------------------------------------------------------------
-  // 退出/放弃（§21 abort）
+  // 退出/放弃（§21 abort）。已完成/中断时左上角返回键直接回面试入口，不再弹"放弃"
   // ------------------------------------------------------------------
   const handleExit = useCallback(() => {
+    // 已完成/中断/总结阶段：直接返回（总结期已答完全部题目，报告后台生成，无需"放弃"）
+    if (phase === 'completed' || phase === 'aborted' || phase === 'summarizing') {
+      navigate('/dashboard/interview', { replace: true });
+      return;
+    }
     modal.confirm({
       title: '退出面试',
       content: '确定要放弃本次面试吗？已完成的回答将保留，但不会生成报告。',
@@ -423,7 +596,7 @@ const InterviewSession = () => {
         navigate('/dashboard/interview', { replace: true });
       },
     });
-  }, [clearTimers, epoch, interviewId, navigate, speech]);
+  }, [clearTimers, epoch, interviewId, navigate, phase, speech]);
 
   const formatTime = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -582,6 +755,12 @@ const InterviewSession = () => {
                 </div>
               )}
               <button
+                onClick={() => navigate('/dashboard', { replace: true })}
+                className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-transparent border border-[rgba(255,255,255,0.12)] text-[#999999] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#E8E8E8] transition-all"
+              >
+                返回工作台
+              </button>
+              <button
                 onClick={() => navigate('/dashboard/interview', { replace: true })}
                 className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-transparent border border-[rgba(255,255,255,0.12)] text-[#999999] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#E8E8E8] transition-all"
               >
@@ -634,8 +813,13 @@ const InterviewSession = () => {
         </button>
         <div className="flex items-center gap-2.5">
           <span
-            className="w-2 h-2 rounded-full bg-[#E6AF4E]"
-            style={{ boxShadow: '0 0 8px rgba(230,175,78,0.5)', animation: 'room-dot-pulse 2s infinite' }}
+            className="w-2 h-2 rounded-full"
+            style={{
+              background: sseStatus === 'open' ? '#4ADE80' : sseStatus === 'connecting' ? '#E6AF4E' : '#F53535',
+              boxShadow: sseStatus === 'open' ? '0 0 8px rgba(74,222,128,0.5)' : 'none',
+              animation: sseStatus === 'open' ? 'room-dot-pulse 2s infinite' : 'none',
+            }}
+            title={sseStatus === 'open' ? '实时通道已连接' : '实时通道断开/重连中，判题结果由轮询兜底'}
           />
           <span className="text-[15px] font-semibold text-[#E8E8E8] tracking-wide">
             面试进行中 · {progressLabel}
@@ -657,7 +841,12 @@ const InterviewSession = () => {
             </span>
           </div>
           <h2 className="text-[22px] font-semibold leading-relaxed text-[#F7F8FA] tracking-wide relative z-[1]">
-            {currentQuestion.question_text}
+            {phase === 'thinking' && typedLen < questionText.length
+              ? questionText.slice(0, typedLen)
+              : questionText}
+            {phase === 'thinking' && typedLen < questionText.length && (
+              <span className="inline-block w-[2px] h-[22px] ml-0.5 align-middle bg-[#E6AF4E] animate-pulse" />
+            )}
           </h2>
           <div
             className="absolute -top-20 left-1/2 -translate-x-1/2 pointer-events-none"
@@ -781,13 +970,25 @@ const InterviewSession = () => {
           </div>
         )}
 
-        {/* 提交中：Fast Decision 即时判定，秒级进下一题 */}
+        {/* 判题中（v3.1 受理化）：答案已受理，后端异步判题，等待下一题。
+            追问预览已废弃（v1.3）：判题完成由 judged 直接带下一题，只打印一次 */}
+        {phase === 'judging' && (
+          <div className="flex flex-col items-center gap-5 w-full">
+            <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
+            <p className="text-[16px] font-semibold text-[#F7F8FA]">答案已提交，AI 正在组织下一题…</p>
+            <p className="text-[13px] text-[#666666] mt-1">
+              {waitSeconds > 0 ? `已等待 ${waitSeconds}s · 判题时间视回答长度而定` : '判题完成将自动进入下一题'}
+            </p>
+          </div>
+        )}
+
+        {/* 提交中：毫秒级受理后即转入判题中 */}
         {phase === 'submitting' && (
           <div className="flex flex-col items-center gap-5 w-full">
             <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
             <div className="text-center">
-              <p className="text-[16px] font-semibold text-[#F7F8FA]">正在判定下一题…</p>
-              <p className="text-[13px] text-[#666666] mt-1">回答已收录，即将进入下一题</p>
+              <p className="text-[16px] font-semibold text-[#F7F8FA]">正在提交…</p>
+              <p className="text-[13px] text-[#666666] mt-1">回答已上传，正在提交判题</p>
             </div>
           </div>
         )}
@@ -804,7 +1005,7 @@ const InterviewSession = () => {
         {phase === 'recovering' && (
           <div className="flex flex-col items-center gap-5 w-full">
             <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
-            <p className="text-[15px] text-[#999999]">正在恢复上一次的分析结果…</p>
+            <p className="text-[15px] text-[#999999]">正在恢复上一次的分析结果…（已等待 {waitSeconds}s）</p>
           </div>
         )}
 
@@ -816,6 +1017,12 @@ const InterviewSession = () => {
               <p className="text-[17px] font-semibold text-[#F7F8FA]">所有题目已完成</p>
               <p className="text-[14px] text-[#666666] mt-1.5">AI 正在后台生成你的面试报告，完成后将通过消息通知你，可先离开稍后查看</p>
             </div>
+            <button
+              onClick={() => navigate('/dashboard', { replace: true })}
+              className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-[15px] font-semibold bg-transparent border border-[rgba(255,255,255,0.12)] text-[#999999] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#E8E8E8] transition-all"
+            >
+              返回工作台
+            </button>
           </div>
         )}
       </div>

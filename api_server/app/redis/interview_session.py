@@ -274,3 +274,87 @@ def delete_checkpoint_sync(client, session_id: int) -> None:
         session_id: 面试会话ID。
     """
     client.delete(checkpoint_key(session_id))
+
+
+# --------------------------------------------------------------------------
+# ④ 问题队列镜像（T3.8/T3.9：Redis List 备份恢复，防漏题）
+# --------------------------------------------------------------------------
+
+_QUEUE_PREFIX = "interview:q:"
+
+
+def queue_key(session_id: int) -> str:
+    """构造问题队列键。
+
+    Args:
+        session_id: 面试会话ID。
+
+    Returns:
+        Redis 键字符串。
+    """
+    return f"{_QUEUE_PREFIX}{session_id}"
+
+
+def init_queue(
+    client, session_id: int, question_ids: list[int], ttl: int = DEFAULT_CHECKPOINT_TTL
+) -> None:
+    """面试正式启动时初始化问题队列：基础题按发问顺序入队（T3.8）。
+
+    Args:
+        client: 同步 Redis 客户端。
+        session_id: 面试会话ID。
+        question_ids: 基础题ID列表（发问顺序）。
+        ttl: 队列有效期（秒）。
+    """
+    if not question_ids:
+        return
+    key = queue_key(session_id)
+    client.delete(key)
+    client.rpush(key, *[str(qid) for qid in question_ids])
+    client.expire(key, ttl)
+
+
+def enqueue_head(
+    client, session_id: int, question_id: int, ttl: int = DEFAULT_CHECKPOINT_TTL
+) -> None:
+    """追问生成后插入队首（lpush，队首即下一题，T3.8）。
+
+    Args:
+        client: 同步 Redis 客户端。
+        session_id: 面试会话ID。
+        question_id: 追问题ID。
+        ttl: 队列有效期（秒）。
+    """
+    key = queue_key(session_id)
+    client.lpush(key, str(question_id))
+    client.expire(key, ttl)
+
+
+def remove_from_queue(client, session_id: int, question_id: int) -> None:
+    """从队列移除指定题（当前题处理完成后出队）。
+
+    Args:
+        client: 同步 Redis 客户端。
+        session_id: 面试会话ID。
+        question_id: 题目ID。
+    """
+    client.lrem(queue_key(session_id), 0, str(question_id))
+
+
+def queue_ids(client, session_id: int) -> list[int]:
+    """读取队列全部题目ID（审计/恢复核对用）。
+
+    Args:
+        client: 同步 Redis 客户端。
+        session_id: 面试会话ID。
+
+    Returns:
+        题目ID列表（队首在前）。
+    """
+    raw = client.lrange(queue_key(session_id), 0, -1)
+    return [int(x) for x in raw] if raw else []
+
+
+def delete_queue(client, session_id: int) -> None:
+    """删除问题队列（面试完成/中断/删除后清理，释放 Redis 空间）。"""
+    client.delete(queue_key(session_id))

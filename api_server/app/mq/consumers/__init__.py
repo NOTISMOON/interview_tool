@@ -11,6 +11,7 @@ from app.mq.consumers.follow_consumer import FollowCacheSyncConsumer
 from app.mq.consumers.follow_post_consumer import FollowPostNotifyConsumer
 from app.mq.consumers.interaction_consumer import InteractionCacheSyncConsumer
 from app.mq.consumers.interview_analysis_consumer import InterviewAnalysisConsumer
+from app.mq.consumers.interview_answer_consumer import InterviewAnswerConsumer
 from app.mq.consumers.interview_consumer import (
     InterviewReportConsumer,
     InterviewResumeParseConsumer,
@@ -23,6 +24,7 @@ CONSUMER_REGISTRY: dict[str, type] = {
     "InterviewResumeParseConsumer": InterviewResumeParseConsumer,
     "InterviewReportConsumer": InterviewReportConsumer,
     "InterviewAnalysisConsumer": InterviewAnalysisConsumer,
+    "InterviewAnswerConsumer": InterviewAnswerConsumer,
     "FollowCacheSyncConsumer": FollowCacheSyncConsumer,
     "CommentCacheSyncConsumer": CommentCacheSyncConsumer,
     "InteractionCacheSyncConsumer": InteractionCacheSyncConsumer,
@@ -41,6 +43,7 @@ __all__ = [
     "FollowPostNotifyConsumer",
     "InteractionCacheSyncConsumer",
     "InterviewAnalysisConsumer",
+    "InterviewAnswerConsumer",
     "InterviewReportConsumer",
     "InterviewResumeParseConsumer",
     "NotificationConsumer",

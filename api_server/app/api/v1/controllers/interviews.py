@@ -5,7 +5,7 @@ SSE 只做通知不承载数据。冲突响应（409）携带最新状态供前�
 """
 
 import redis
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_redis
@@ -299,20 +299,21 @@ def start_interview(
 @router.post(
     "/{interview_id}/answers",
     response_model=AnswerSubmitResponse,
-    summary="提交回答",
+    summary="提交回答（v3·受理化）",
 )
 def submit_answer(
     req: AnswerSubmitRequest,
-    background_tasks: BackgroundTasks,
     interview_id: int = Path(..., ge=1, description="面试会话ID"),
     payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
     cache: redis.Redis = Depends(get_redis),
 ) -> AnswerSubmitResponse:
-    """提交回答：同步返回分析摘要+评分+下一题（或summarizing，§8.4/§9）。
+    """提交回答（T3.2 受理化）：校验 + checkpoint analyzing + 投递事件，毫秒级返回"已受理"。
 
-    幂等键 (interview_id, question_index)：已分析的题直接返回既有结果；
-    全部题目完成后经后台任务生成最终报告（§13.1）。
+    判题/落库/推进全部由 Answer Consumer（interview.answer.submitted 队列）异步完成：
+    请求线程不再调 LLM、不再写业务表；前端收到 accepted/phase=analyzing 后轮询等待。
+
+    幂等键 (interview_id, question_index)：已落库题直接返回既有结果（超时重试安全）。
 
     Args:
         interview_id: 面试会话ID。
@@ -320,13 +321,12 @@ def submit_answer(
         payload: JWT认证载荷。
         db: 数据库同步会话。
         cache: 同步Redis客户端。
-        background_tasks: FastAPI后台任务（报告异步生成）。
 
     Returns:
-        AnswerSubmitResponse: 分析摘要+评分+下一题。
+        AnswerSubmitResponse: 已受理（accepted=True/phase=analyzing）或幂等既有结果。
 
     Raises:
-        HTTPException: 面试不存在404；冲突409（含最新状态）；分析失败502。
+        HTTPException: 面试不存在404；真冲突409（epoch/version/finished）。
     """
     try:
         result = interview_service.submit_answer(
@@ -337,14 +337,6 @@ def submit_answer(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="面试不存在")
     except InterviewConflictError as exc:
         _raise_conflict(exc)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="回答分析服务异常，请稍后重试",
-        )
-    # 最后一题分析完 → 后台生成报告（BackgroundTasks，操作锁保护，§13.1）
-    if result["phase"] == "summarizing":
-        background_tasks.add_task(interview_service.generate_report_background, cache, interview_id)
     return AnswerSubmitResponse(**result)
 
 

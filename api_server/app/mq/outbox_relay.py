@@ -50,6 +50,7 @@ EVENT_EXCHANGE_MAP: dict[str, tuple[ExchangeName, str]] = {
     "resume.parse": (ExchangeName.INTERVIEW, "interview.resume.parse"),
     "interview.analysis": (ExchangeName.INTERVIEW, "interview.analysis"),
     "interview.report.generate": (ExchangeName.INTERVIEW, "interview.report.generate"),
+    "interview.answer.submitted": (ExchangeName.INTERVIEW, "interview.answer.submitted"),
 }
 
 # 清理任务执行间隔（秒）

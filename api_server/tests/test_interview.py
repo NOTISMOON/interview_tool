@@ -42,6 +42,8 @@ _DDL_STATEMENTS = [
         follow_up_count INTEGER NOT NULL DEFAULT 0,
         device_check_passed INTEGER NOT NULL DEFAULT 0,
         interview_time DATETIME,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -116,6 +118,20 @@ _DDL_STATEMENTS = [
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE outbox_event (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type VARCHAR(64) NOT NULL,
+        aggregate_type VARCHAR(64) NOT NULL,
+        aggregate_id VARCHAR(64) NOT NULL,
+        payload JSON,
+        status INTEGER NOT NULL DEFAULT 0,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at DATETIME,
+        published_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 ]
 
 
@@ -127,19 +143,27 @@ class FakeRedis:
     """
 
     def __init__(self) -> None:
-        """初始化字符串存储。"""
+        """初始化字符串/列表存储与TTL记录。"""
         self.strings: dict[str, str] = {}
+        self.lists: dict[str, list[str]] = {}
+        self.ttls: dict[str, int] = {}
 
     def set(self, key: str, value: str, nx: bool = False, ex: int | None = None) -> bool:
         """SET语义：nx=True时键已存在返回False。"""
         if nx and key in self.strings:
             return False
         self.strings[key] = value
+        if ex is not None:
+            self.ttls[key] = ex
         return True
 
     def get(self, key: str) -> str | None:
         """GET语义。"""
         return self.strings.get(key)
+
+    def exists(self, *keys: str) -> int:
+        """EXISTS语义（T2.2 同题处理中标记判定）。"""
+        return sum(1 for k in keys if k in self.strings or k in self.lists)
 
     def delete(self, *keys: str) -> int:
         """DELETE语义，返回实际删除数。"""
@@ -148,11 +172,52 @@ class FakeRedis:
             if key in self.strings:
                 del self.strings[key]
                 removed += 1
+            if key in self.lists:
+                del self.lists[key]
+                removed += 1
         return removed
 
     def setex(self, key: str, seconds: int, value: str) -> bool:
         """SETEX语义（TTL仅记录不实现过期）。"""
         self.strings[key] = value
+        self.ttls[key] = seconds
+        return True
+
+    def rpush(self, key: str, *values: object) -> int:
+        """RPUSH语义（问题队列初始化入队）。"""
+        self.lists.setdefault(key, []).extend(str(v) for v in values)
+        return len(self.lists[key])
+
+    def lpush(self, key: str, *values: object) -> int:
+        """LPUSH语义（追问插入队首）。"""
+        self.lists.setdefault(key, [])
+        self.lists[key] = [str(v) for v in values] + self.lists[key]
+        return len(self.lists[key])
+
+    def lrange(self, key: str, start: int, end: int) -> list[str]:
+        """LRANGE语义（队列审计/恢复）。"""
+        items = self.lists.get(key, [])
+        if not items:
+            return []
+        n = len(items)
+        s = start if start >= 0 else max(n + start, 0)
+        e = end if end >= 0 else n + end
+        return items[s : e + 1]
+
+    def lrem(self, key: str, count: int = 0, value: str = "") -> int:
+        """LREM语义（当前题出队；仅支持 count=0 全删。"""
+        lst = self.lists.get(key)
+        if lst is None:
+            return 0
+        target = str(value)
+        kept = [x for x in lst if x != target]
+        removed = len(lst) - len(kept)
+        self.lists[key] = kept
+        return removed
+
+    def expire(self, key: str, seconds: int) -> bool:
+        """记录键的TTL（仅记录不实现过期）。"""
+        self.ttls[key] = seconds
         return True
 
     def eval(self, script: str, numkeys: int, *keys_and_args: object) -> object:
@@ -270,11 +335,11 @@ def stub_llm(monkeypatch: pytest.MonkeyPatch) -> dict:
 
     默认行为：
         - 出题 3 道基础题；
-        - Fast Decision：回答优秀 → next_base（不追问）；
+        - 流式追问生成：输出 NONE（不追问，走下一基础题/结束）；
         - 报告 85 分。
     全量分析已异步化，同步路径不再调用 analyze_answer。
     """
-    calls: dict = {"questions": [], "decisions": [], "reports": 0}
+    calls: dict = {"questions": [], "follow_ups": [], "reports": 0}
 
     def _fake_generate_questions(resume_context: dict, interview_type: int) -> QuestionGenerationResult:
         """返回3道固定基础题。"""
@@ -287,22 +352,21 @@ def stub_llm(monkeypatch: pytest.MonkeyPatch) -> dict:
             ]
         )
 
-    def _fake_run_fast_decision(
-        interview_id: int, interview_type: int, resume_context: dict, base_questions: list,
-        question_no: int, question_text: str, answer: str, follow_up_total: int,
-        unanswered_base_after: int,
-    ) -> dict:
-        """返回固定 Fast Decision 结果（可通过 holder 调整）。"""
-        calls["decisions"].append({"question_no": question_no, "answer": answer})
-        behavior = calls.get("decision_behavior") or {
-            "next_action": "next_base",
-            "follow_up_question": None,
-            "technical_depth_hint": 3,
-        }
-        return {
-            "next_action": behavior.get("next_action", "next_base"),
-            "follow_up_question": behavior.get("follow_up_question"),
-        }
+    def _fake_follow_up_stream(
+        question: str, answer: str, resume_context: dict,
+    ):
+        """返回固定流式追问输出：默认 NONE；可通过 calls["follow_up_behavior"] 调整。
+
+        behavior: {"text": "..."} → 流式输出追问文本；text 为 None/缺省 → NONE。
+        """
+        calls["follow_ups"].append({"question": question, "answer": answer})
+        behavior = calls.get("follow_up_behavior") or {"text": None}
+        text = behavior.get("text")
+        if not text:
+            yield "NONE"
+            return
+        for ch in text:
+            yield ch
 
     def _fake_generate_report(resume_context: dict, records: list) -> InterviewReportResult:
         """返回固定报告。"""
@@ -318,7 +382,8 @@ def stub_llm(monkeypatch: pytest.MonkeyPatch) -> dict:
         )
 
     monkeypatch.setattr(isvc, "generate_questions", _fake_generate_questions)
-    monkeypatch.setattr(isvc, "run_fast_decision", _fake_run_fast_decision)
+    monkeypatch.setattr(isvc, "generate_follow_up_stream", _fake_follow_up_stream)
+    monkeypatch.setattr(isvc, "correct_speech_text", lambda question, transcript, resume_context: transcript)
     monkeypatch.setattr(isvc, "generate_report", _fake_generate_report)
     # SSE推送桩化（避免测试内起事件循环连Redis）
     monkeypatch.setattr(isvc.interview_service, "_publish_sse", lambda *a, **k: None)
@@ -339,10 +404,21 @@ def _create_interview(client: TestClient, resume_id: int, tab_id: str = "tab-A",
 
 
 def _submit(client: TestClient, interview_id: int, question_index: int, answer: str, epoch: int) -> object:
-    """测试辅助：提交回答，返回原始响应对象。"""
+    """测试辅助：提交回答（v3·受理化），返回原始响应对象。"""
     return client.post(
         f"/api/v1/interviews/{interview_id}/answers",
         json={"question_index": question_index, "answer": answer, "tab_epoch": epoch},
+    )
+
+
+def _consume(cache: FakeRedis, interview_id: int, question_index: int, answer: str, epoch: int) -> bool:
+    """测试辅助：模拟 Answer Consumer 异步编排（判题/追问/落库/推进）。
+
+    请求线程已毫秒返回"已受理"；本函数在测试内同步执行 Consumer 侧编排，
+    以便断言落库与 checkpoint 结果。
+    """
+    return isvc.interview_service.process_answer_submitted(
+        cache, interview_id, question_index, answer, epoch, None
     )
 
 
@@ -369,10 +445,16 @@ class TestCreateInterview:
         ).fetchall()
         assert [r[0] for r in rows] == [1, 2, 3]
         assert all(r[1] == 0 for r in rows)
-        # Checkpoint 初始化（§6.2）
+        # Checkpoint 初始化（§6.2）：创建为草稿态 not_started（设备检测前，BUG3 后）
+        checkpoint = isess.load_checkpoint_sync(fake_redis, 1)
+        assert checkpoint["phase"] == "not_started"
+        assert checkpoint["question_index"] == 1
+        assert checkpoint["base_question_count"] == 3
+        # 设备检测后正式启动 → answering（BUG3：started_at 在启动时重置）
+        resp = client.post("/api/v1/interviews/1/start")
+        assert resp.status_code == 200, resp.text
         checkpoint = isess.load_checkpoint_sync(fake_redis, 1)
         assert checkpoint["phase"] == "answering"
-        assert checkpoint["question_index"] == 1
         assert checkpoint["base_question_count"] == 3
 
     def test_create_resume_analyzing_conflict(self, client: TestClient, db_session: Session, stub_llm: dict) -> None:
@@ -432,22 +514,31 @@ class TestSubmitAnswer:
     """提交回答测试。"""
 
     def test_submit_answer_normal_flow(
-        self, client: TestClient, db_session: Session, ready_resume: int, stub_llm: dict,
+        self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
+        ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试正常提交：user_answer 落库、Fast Decision 返回下一题（§8/§12）。
+        """测试正常提交（v3 受理化）：受理 accepted → Consumer 消费后落库推进（§8/§12）。
 
-        全量分析已异步化：同步响应 analysis 标记"分析中"（score=0），
-        ai_score/ai_comment 由异步 Worker 后补（此处桩化投递，不验证）。
+        请求线程毫秒返回"已受理"（phase=analyzing、next_question=null）；判题/落库/推进
+        由 Answer Consumer 异步完成（测试内以 _consume 同步模拟）。
         """
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
         resp = _submit(client, iid, 1, "GIL是全局解释器锁", epoch)
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        # 同步路径不再返回实时评分（分析异步化）
-        assert body["analysis"]["score"] == 0
-        assert body["phase"] == "answering"
-        assert body["next_question"]["question_index"] == 2
+        # 受理态：不再返回评分与下一题（判题在消费端）
+        assert body["accepted"] is True
+        assert body["phase"] == "analyzing"
+        assert body["next_question"] is None
+        # 模拟 Consumer 消费：判题 + 落库 + 推进
+        assert _consume(fake_redis, iid, 1, "GIL是全局解释器锁", epoch) is True
+        # 消费后幂等重发：拿到既有结果与下一题
+        second = _submit(client, iid, 1, "重发", epoch)
+        assert second.status_code == 200
+        body2 = second.json()
+        assert body2["duplicated"] is True
+        assert body2["next_question"]["question_index"] == 2
         # user_answer 逐题落库（§14.2）；ai_score 待 Worker 后补（此时为 NULL）
         row = db_session.execute(
             text("SELECT user_answer, ai_score, ai_comment FROM interview_question WHERE interview_id=:i AND question_no=1"),
@@ -458,19 +549,20 @@ class TestSubmitAnswer:
         assert row[2] is None
 
     def test_submit_answer_idempotent(
-        self, client: TestClient, ready_resume: int, stub_llm: dict,
+        self, client: TestClient, fake_redis: FakeRedis, ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试幂等：已作答题重复提交直接返回既有结果，不重跑 Fast Decision（§5.9）。"""
+        """测试幂等（v3）：已落库题重复提交直接返回既有结果，不重跑 Fast Decision（§5.9）。"""
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        first = _submit(client, iid, 1, "答案A", epoch).json()
-        llm_calls_before = len(stub_llm["decisions"])
+        _submit(client, iid, 1, "答案A", epoch)
+        assert _consume(fake_redis, iid, 1, "答案A", epoch) is True
+        llm_calls_before = len(stub_llm["follow_ups"])
         second = _submit(client, iid, 1, "答案A重发", epoch)
         assert second.status_code == 200
         body = second.json()
         assert body["duplicated"] is True
         assert body["analysis"]["score"] == 0  # ai_score 未异步落库 → 待补充
-        assert len(stub_llm["decisions"]) == llm_calls_before  # 未重跑Fast Decision
+        assert len(stub_llm["follow_ups"]) == llm_calls_before  # 未重跑追问生成
 
     def test_submit_answer_epoch_mismatch(
         self, client: TestClient, ready_resume: int, stub_llm: dict,
@@ -490,15 +582,16 @@ class TestSubmitAnswer:
     ) -> None:
         """测试面试已结束后重试已答题仍返回幂等结果（§5.9超时重试安全）。
 
-        最后一题分析完面试即转status=1且租约被清理，前端超时重发必须
-        拿到幂等响应而不是409 finished。
+        最后一题判题完成转 status=1 且租约被清理，前端超时重发必须
+        拿到幂等响应而不是 409 finished。
         """
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
         for idx in (1, 2, 3):
             resp = _submit(client, iid, idx, f"回答{idx}", epoch)
             assert resp.status_code == 200
-        # 面试已完成（后台报告任务在TestClient内同步执行完毕）
+            assert _consume(fake_redis, iid, idx, f"回答{idx}", epoch) is True
+        # 面试已完成（末期消费内 finish + 投递报告事件）
         retry = _submit(client, iid, 3, "最后一题超时重发", epoch)
         assert retry.status_code == 200
         body = retry.json()
@@ -515,33 +608,73 @@ class TestSubmitAnswer:
         assert resp.status_code == 409
         assert resp.json()["detail"]["reason"] == "version_mismatch"
 
-    def test_submit_answer_lock_busy(
-        self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
+    def test_submit_answer_lock_not_blocking_accept(
+        self, client: TestClient, fake_redis: FakeRedis,
         ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试操作锁被占时返回409 busy（并发互斥，§5.4）。"""
+        """测试操作锁占用不再阻塞受理（v3，T3.7）：提交链路 409 busy 消失。
+
+        受理接口不持操作锁（只做校验+投事件）；判题/推进才短持锁（在消费端）。
+        """
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        # 预置他人持有的操作锁
+        # 预置他人持有的操作锁（不影响受理）
         isess.acquire_lock_sync(fake_redis, iid, "other-token")
         resp = _submit(client, iid, 1, "并发回答", epoch)
-        assert resp.status_code == 409
-        assert resp.json()["detail"]["reason"] == "busy"
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["accepted"] is True
+        assert body["phase"] == "analyzing"
+        # 消费端短持锁推进仍可正常完成（锁由已提交请求释放）
+        assert _consume(fake_redis, iid, 1, "并发回答", epoch) is True
+
+    def test_submit_same_question_repeat_accepts_without_redundant_event(
+        self, client: TestClient, fake_redis: FakeRedis,
+        ready_resume: int, stub_llm: dict, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """测试同题重复提交（T3.5）：analyzing 去重返回"已受理"，不重复投递事件。
+
+        前端超时/重试场景：同题已受理判题中 → 直接 accepted（前端继续轮询），
+        不再产生第二份判题工作，回归幂等语义。
+        """
+        events: list[str] = []
+        original = isvc.sync_outbox_repository.insert_event
+
+        def _counting(db, event_type, aggregate_type, aggregate_id, payload):
+            """计数投递事件并转调真实实现。"""
+            events.append(event_type)
+            return original(db, event_type, aggregate_type, aggregate_id, payload)
+
+        monkeypatch.setattr(isvc.sync_outbox_repository, "insert_event", _counting)
+        created = _create_interview(client, ready_resume)
+        iid, epoch = created["interview_id"], created["epoch"]
+        first = _submit(client, iid, 1, "第一次提交", epoch)
+        assert first.status_code == 200
+        assert first.json()["accepted"] is True
+        assert events.count("interview.answer.submitted") == 1
+        # 同题重复提交：analyzing 去重 → 仍返回已受理，不新增事件
+        second = _submit(client, iid, 1, "第一次提交重试", epoch)
+        assert second.status_code == 200
+        body = second.json()
+        assert body["accepted"] is True
+        assert events.count("interview.answer.submitted") == 1
 
     def test_follow_up_rule_triggered(
         self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
         ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试追问判定通过：Fast Decision 判定追问 → 追问落库作为下一题（§10/§11）。"""
-        stub_llm["decision_behavior"] = {
-            "next_action": "follow_up",
-            "follow_up_question": "Redis持久化机制RDB与AOF的区别？",
+        """测试追问判定通过（v3）：Consumer 判题产出追问并落库作为下一题（§10/§11）。"""
+        stub_llm["follow_up_behavior"] = {
+            "text": "Redis持久化机制RDB与AOF的区别？",
         }
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        resp = _submit(client, iid, 1, "因为Redis是内存数据库", epoch)
+        _submit(client, iid, 1, "因为Redis是内存数据库", epoch)
+        assert _consume(fake_redis, iid, 1, "因为Redis是内存数据库", epoch) is True
+        # 消费后重发同题：幂等复用，next 为已落库的追问题
+        resp = _submit(client, iid, 1, "重发", epoch)
         body = resp.json()
-        # 追问题作为下一题返回（is_follow_up标记）
+        assert body["duplicated"] is True
         assert body["next_question"]["is_follow_up"] is True
         assert body["next_question"]["question_no"] == 1  # 与父题同号
         assert "持久化" in body["next_question"]["question_text"]
@@ -558,31 +691,37 @@ class TestSubmitAnswer:
         assert checkpoint["total_follow_up_used"] == 1
 
     def test_follow_up_rule_not_triggered_when_answer_strong(
-        self, client: TestClient, db_session: Session, ready_resume: int, stub_llm: dict,
+        self, client: TestClient, fake_redis: FakeRedis, ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试回答优秀（depth>2且无薄弱点）不追问，直接下一题（§10）。"""
+        """测试回答优秀不追问，直接下一题（§10）。"""
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        resp = _submit(client, iid, 1, "完整且深入的回答", epoch)
+        _submit(client, iid, 1, "完整且深入的回答", epoch)
+        assert _consume(fake_redis, iid, 1, "完整且深入的回答", epoch) is True
+        resp = _submit(client, iid, 1, "重发", epoch)
         body = resp.json()
+        assert body["duplicated"] is True
         assert body["next_question"]["is_follow_up"] is False
         assert body["next_question"]["question_index"] == 2
 
     def test_follow_up_per_base_limit(
-        self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
+        self, client: TestClient, fake_redis: FakeRedis,
         ready_resume: int, stub_llm: dict,
     ) -> None:
         """测试每道基础题最多追问1次：追问回答再薄弱也不二次追问（§10）。"""
-        stub_llm["decision_behavior"] = {
-            "next_action": "follow_up",
-            "follow_up_question": "再次追问？",
+        stub_llm["follow_up_behavior"] = {
+            "text": "再次追问？",
         }
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        first = _submit(client, iid, 1, "浅回答", epoch).json()
+        _submit(client, iid, 1, "浅回答", epoch)
+        assert _consume(fake_redis, iid, 1, "浅回答", epoch) is True
+        first = _submit(client, iid, 1, "重发", epoch).json()
         assert first["next_question"]["is_follow_up"] is True
         # 回答追问题（题序2）后：per_base=1 已满 → 不再追问，进入下一基础题
-        second = _submit(client, iid, 2, "追问的浅回答", epoch).json()
+        _submit(client, iid, 2, "追问的浅回答", epoch)
+        assert _consume(fake_redis, iid, 2, "追问的浅回答", epoch) is True
+        second = _submit(client, iid, 2, "重发", epoch).json()
         assert second["next_question"]["is_follow_up"] is False
         assert second["next_question"]["question_no"] == 2  # 下一基础题
 
@@ -590,17 +729,16 @@ class TestSubmitAnswer:
         self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
         ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试全部题目答完：响应phase=summarizing、status=1（§12/§13.1）。
-
-        TestClient会同步执行BackgroundTasks，故答完最后一题后报告后台
-        任务随即完成，Checkpoint可能已推进至completed（属正常链路）。
-        """
+        """测试全部题目答完：末期消费进入 summarizing、status=1（§12/§13.1）。"""
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
         for idx in (1, 2, 3):
             resp = _submit(client, iid, idx, f"回答{idx}", epoch)
             assert resp.status_code == 200
-        body = resp.json()
+            assert _consume(fake_redis, iid, idx, f"回答{idx}", epoch) is True
+        # 末期消费后幂等重发：phase=summarizing、next 为空
+        body = _submit(client, iid, 3, "重发", epoch).json()
+        assert body["duplicated"] is True
         assert body["phase"] == "summarizing"
         assert body["next_question"] is None
         status_row = db_session.execute(
@@ -625,35 +763,34 @@ class TestSubmitAnswer:
 
         calls = {"n": 0}
 
-        def _flaky(
-            interview_id: int, interview_type: int, resume_context: dict, base_questions: list,
-            question_no: int, question_text: str, answer: str, follow_up_total: int,
-            unanswered_base_after: int,
-        ):
-            """前两次抛异常，第三次正常返回 next_base。"""
+        def _flaky_stream(question: str, answer: str, resume_context: dict):
+            """流式追问生成：前两次抛异常，第三次正常输出 NONE。"""
             calls["n"] += 1
             if calls["n"] <= 2:
                 raise RuntimeError("LLM超时")
-            return {"next_action": "next_base", "follow_up_question": None}
+            yield "NONE"
 
         monkeypatch.setattr(isvc, "generate_questions", lambda ctx, t: QuestionGenerationResult(
             questions=[GeneratedQuestion(question_text="Q1", question_type=1, category=1),
                        GeneratedQuestion(question_text="Q2", question_type=1, category=1)]
         ))
-        monkeypatch.setattr(isvc, "run_fast_decision", _flaky)
+        monkeypatch.setattr(isvc, "generate_follow_up_stream", _flaky_stream)
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
 
-        # 第一次失败 → 502，phase回退answering可重试
+        # 第一次受理 + 消费：追问流式生成失败（未达跳过阈值）→ 消费返回 False，
+        # checkpoint 回退 answering 允许重新受理
         resp1 = _submit(client, iid, 1, "答案", epoch)
-        assert resp1.status_code == 502
+        assert resp1.status_code == 200
+        assert resp1.json()["accepted"] is True
+        assert _consume(fake_redis, iid, 1, "答案", epoch) is False
         checkpoint = isess.load_checkpoint_sync(fake_redis, iid)
         assert checkpoint["phase"] == "answering"
-        # 第二次失败 → Fast Decision 跳过追问继续，user_answer 仍落库
+        # 重新受理（answering → 可再投事件）→ 第二次消费：失败达阈值 → 跳过追问继续落库
         resp2 = _submit(client, iid, 1, "答案", epoch)
         assert resp2.status_code == 200
-        body = resp2.json()
-        assert body["next_question"]["question_index"] == 2
+        assert resp2.json()["accepted"] is True
+        assert _consume(fake_redis, iid, 1, "答案", epoch) is True
         row = db_session.execute(
             text("SELECT ai_score, ai_comment, user_answer FROM interview_question "
                  "WHERE interview_id=:i AND question_no=1"), {"i": iid},
@@ -663,6 +800,8 @@ class TestSubmitAnswer:
         # 第三次成功：Fast Decision 正常返回 next_base
         resp3 = _submit(client, iid, 2, "第二题答案", epoch)
         assert resp3.status_code == 200
+        assert resp3.json()["accepted"] is True
+        assert _consume(fake_redis, iid, 2, "第二题答案", epoch) is True
 
 
 # --------------------------------------------------------------------------
@@ -706,15 +845,18 @@ class TestStateAndRecovery:
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
         _submit(client, iid, 1, "第一题回答", epoch)
+        assert _consume(fake_redis, iid, 1, "第一题回答", epoch) is True
         # 模拟Redis故障丢失Checkpoint
         fake_redis.strings.pop(isess.checkpoint_key(iid), None)
+        fake_redis.delete(isess.queue_key(iid))  # 队列一并丢失，验证 MySQL 重建兜底
         resp = client.get(f"/api/v1/interviews/{iid}")
         body = resp.json()
         assert body["question_index"] == 2  # 重建到第2题
         assert body["current_question"]["question_index"] == 2
-        # 重建后可继续提交
+        # 重建后可继续受理作答
         cont = _submit(client, iid, 2, "第二题回答", epoch)
         assert cont.status_code == 200
+        assert cont.json()["accepted"] is True
 
 
 # --------------------------------------------------------------------------
@@ -732,6 +874,7 @@ class TestAbort:
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
         _submit(client, iid, 1, "已有回答", epoch)
+        assert _consume(fake_redis, iid, 1, "已有回答", epoch) is True
         resp = client.post(f"/api/v1/interviews/{iid}/abort", json={"tab_epoch": epoch})
         assert resp.status_code == 204
         status_row = db_session.execute(
@@ -759,6 +902,9 @@ class TestAbort:
 
         created = _create_interview(client, ready_resume)
         iid = created["interview_id"]
+        # 先正式启动（草稿态 not_started 不参与无活动自动中断，§3；BUG3 后）
+        resp = client.post(f"/api/v1/interviews/{iid}/start")
+        assert resp.status_code == 200, resp.text
         # 将Checkpoint最后活动时间改写为35分钟前
         checkpoint = isess.load_checkpoint_sync(fake_redis, iid)
         checkpoint["last_activity_at"] = (
@@ -794,13 +940,14 @@ class TestReport:
             )
         db_session.commit()
 
-    def _finish_interview(self, client: TestClient, resume_id: int) -> int:
-        """测试辅助：答完3题使面试进入summarizing。"""
+    def _finish_interview(self, client: TestClient, fake_redis: FakeRedis, resume_id: int) -> int:
+        """测试辅助：受理并消费完3题，使面试进入summarizing（v3）。"""
         created = _create_interview(client, resume_id)
         iid, epoch = created["interview_id"], created["epoch"]
         for idx in (1, 2, 3):
             resp = _submit(client, iid, idx, f"回答{idx}", epoch)
             assert resp.status_code == 200
+            assert _consume(fake_redis, iid, idx, f"回答{idx}", epoch) is True
         return iid
 
     def test_report_generation_and_query(
@@ -811,7 +958,7 @@ class TestReport:
 
         模拟异步分析已补齐评分后生成报告，避免 _wait_analysis_complete 长时间轮询。
         """
-        iid = self._finish_interview(client, ready_resume)
+        iid = self._finish_interview(client, fake_redis, ready_resume)
         self._simulate_async_analysis(db_session, iid)
         # 直接同步执行后台任务（测试内不依赖线程）
         isvc.interview_service.generate_report_background(fake_redis, iid)
@@ -843,7 +990,7 @@ class TestReport:
         GET /report 惰性兜底触发后台生成线程；因 ai_score 未补齐会在
         _wait_analysis_complete 内等待 60s，故此处先模拟补齐以免测试挂起。
         """
-        iid = self._finish_interview(client, ready_resume)
+        iid = self._finish_interview(client, fake_redis, ready_resume)
         self._simulate_async_analysis(db_session, iid)
         resp = client.get(f"/api/v1/interviews/{iid}/report")
         assert resp.status_code == 200
@@ -871,21 +1018,20 @@ class TestReport:
 # --------------------------------------------------------------------------
 
 class TestV2AsyncAnalysis:
-    """v2：提交回答即时返回下一题 + 异步分析 outbox 投递 / end 终止。"""
+    """v3·受理化：受理事件投递 + Consumer 判题 / end 终止 / 追问防御回归。"""
 
-    def test_submit_dispatches_async_analysis_outbox(
+    def test_submit_dispatches_answer_submitted_outbox(
         self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
         ready_resume: int, stub_llm: dict, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """测试提交回答后投递 interview.analysis outbox 事件（§5.1）。
+        """测试受理接口投递 interview.answer.submitted outbox 事件（T3.1）。
 
-        不桩化 _dispatch_async_analysis（恢复真实投递），桩化 outbox insert_event
-        捕获 payload，校验投递时机与事件类型。report 前补齐等待仍桩化以免挂起。
+        桩化 outbox insert_event 捕获事件列表，校验受理事件类型与 payload。
         """
-        captured: dict = {}
+        events: list[dict] = []
         monkeypatch.setattr(
             isvc.sync_outbox_repository, "insert_event",
-            lambda db, event_type, aggregate_type, aggregate_id, payload: captured.update(
+            lambda db, event_type, aggregate_type, aggregate_id, payload: events.append(
                 {
                     "event_type": event_type,
                     "aggregate_type": aggregate_type,
@@ -893,11 +1039,6 @@ class TestV2AsyncAnalysis:
                     "payload": payload,
                 }
             ) or 1,
-        )
-        # 恢复 stub_llm 桩化的真实 _dispatch_async_analysis（否则 outbox 不会被写）
-        monkeypatch.setattr(
-            isvc.interview_service, "_dispatch_async_analysis",
-            isvc.InterviewService._dispatch_async_analysis.__get__(isvc.interview_service),
         )
         monkeypatch.setattr(isvc.interview_service, "_wait_analysis_complete", lambda *a, **k: None)
 
@@ -905,28 +1046,32 @@ class TestV2AsyncAnalysis:
         iid, epoch = created["interview_id"], created["epoch"]
         resp = _submit(client, iid, 1, "关于GIL的回答", epoch)
         assert resp.status_code == 200
-        # outbox 事件正确投递（与 user_answer 同事务）
-        assert captured["event_type"] == "interview.analysis"
+        assert resp.json()["accepted"] is True
+        # 受理即投递 answer.submitted 事件（请求线程不再等判题）
+        captured = events[0]
+        assert captured["event_type"] == "interview.answer.submitted"
         assert captured["aggregate_type"] == "interview"
         assert captured["aggregate_id"] == str(iid)
         payload = captured["payload"]
         assert payload["interview_id"] == iid
         assert payload["answer"] == "关于GIL的回答"
         assert payload["priority_ref"].startswith(f"interview:{iid}:q")
+        # 受理请求本身不再产生 analysis 事件（判题在消费端）
+        assert len(events) == 1
 
     def test_finish_dispatches_report_generation_outbox(
         self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
         ready_resume: int, stub_llm: dict, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """测试末题答完进入 summarizing 时投递 report 生成 outbox 事件（§13.1）。
+        """测试末题消费进入 summarizing 时投递 report 生成 outbox 事件（§13.1）。
 
-        不桩化 _dispatch_report_generation（恢复真实投递），桩化 outbox insert_event
-        捕获 payload，校验末题 finish 与 report 事件同事务投递（MQ 异步化）。
+        桩化 outbox insert_event 捕获事件列表，断言末题 finish 同事务投递
+        interview.report.generate（MQ 异步化链路不变）。
         """
-        captured: dict = {}
+        events: list[dict] = []
         monkeypatch.setattr(
             isvc.sync_outbox_repository, "insert_event",
-            lambda db, event_type, aggregate_type, aggregate_id, payload: captured.update(
+            lambda db, event_type, aggregate_type, aggregate_id, payload: events.append(
                 {
                     "event_type": event_type,
                     "aggregate_type": aggregate_type,
@@ -935,26 +1080,36 @@ class TestV2AsyncAnalysis:
                 }
             ) or 1,
         )
-        # 恢复 stub_llm 桩化的真实 _dispatch_report_generation（否则 outbox 不会被写）
+        monkeypatch.setattr(isvc.interview_service, "_wait_analysis_complete", lambda *a, **k: None)
+        # stub_llm 默认桩化了两类 outbox 投递；本用例恢复真实投递以捕获 report 事件
+        monkeypatch.setattr(
+            isvc.interview_service, "_dispatch_async_analysis",
+            isvc.InterviewService._dispatch_async_analysis.__get__(isvc.interview_service),
+        )
         monkeypatch.setattr(
             isvc.interview_service, "_dispatch_report_generation",
             isvc.InterviewService._dispatch_report_generation.__get__(isvc.interview_service),
         )
-        monkeypatch.setattr(isvc.interview_service, "_wait_analysis_complete", lambda *a, **k: None)
 
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
         for idx in (1, 2, 3):
             resp = _submit(client, iid, idx, f"对第{idx}题的回答", epoch)
             assert resp.status_code == 200
+            assert _consume(fake_redis, iid, idx, f"对第{idx}题的回答", epoch) is True
         # 末题 finish：report 事件正确投递（与 finish 同事务）
-        assert captured["event_type"] == "interview.report.generate"
+        report_events = [e for e in events if e["event_type"] == "interview.report.generate"]
+        assert report_events, events
+        captured = report_events[0]
         assert captured["aggregate_type"] == "interview"
         assert captured["aggregate_id"] == str(iid)
         payload = captured["payload"]
         assert payload["interview_id"] == iid
         assert payload["user_id"] == 1
         assert payload["resume_id"] == ready_resume
+        # 每题消费均投递 analysis 事件（3 题）
+        analysis_events = [e for e in events if e["event_type"] == "interview.analysis"]
+        assert len(analysis_events) == 3
 
     def test_fast_decision_end_terminates(
         self, client: TestClient, db_session: Session, fake_redis: FakeRedis,
@@ -963,31 +1118,34 @@ class TestV2AsyncAnalysis:
         """测试 Fast Decision 判定 end 且无剩余基础题 → summarizing（§12/§四）。
 
         路由节点防御：fast 判 end 但仍有未答基础题时回退 next_base（防误中断）；
-        因此只有末题（unanswered_after=0）才真正终止。答完全部可见 end 生效。
+        只有末题（unanswered_after=0）才真正终止。
         """
-        stub_llm["decision_behavior"] = {"next_action": "end", "follow_up_question": None}
+        stub_llm["follow_up_behavior"] = {"text": None}  # NONE：无追问（问尽由规则判定）
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        # 前两题：fast 判 end 但仍有剩余基础题 → 路由回退 next_base，继续
-        r1 = _submit(client, iid, 1, "对第一题的回答", epoch).json()
-        assert r1["phase"] == "answering"
-        assert r1["next_question"]["question_index"] == 2
-        r2 = _submit(client, iid, 2, "对第二题的回答", epoch).json()
-        assert r2["phase"] == "answering"
-        # 末题：fast 判 end 且无剩余 → summarizing
+        for idx in (1, 2, 3):
+            resp = _submit(client, iid, idx, f"对第{idx}题的回答", epoch)
+            assert resp.status_code == 200
+            assert resp.json()["accepted"] is True
+            assert _consume(fake_redis, iid, idx, f"对第{idx}题的回答", epoch) is True
+        # 末题：fast 判 end 且无剩余 → summarizing（消费后幂等复用可见）
         r3 = _submit(client, iid, 3, "对第三题的回答", epoch).json()
+        assert r3["duplicated"] is True
         assert r3["phase"] == "summarizing"
         assert r3["next_question"] is None
 
     def test_follow_up_without_text_falls_back_to_next_base(
-        self, client: TestClient, ready_resume: int, stub_llm: dict,
+        self, client: TestClient, fake_redis: FakeRedis,
+        ready_resume: int, stub_llm: dict,
     ) -> None:
-        """测试 Fast 判 follow_up 但无追问文本 → 回退下一基础题（§四防御）。"""
-        stub_llm["decision_behavior"] = {"next_action": "follow_up", "follow_up_question": None}
+        """测试追问生成输出为空/无文本 → 回退下一基础题（NONE 语义）。"""
+        stub_llm["follow_up_behavior"] = {"text": None}  # NONE：无追问
         created = _create_interview(client, ready_resume)
         iid, epoch = created["interview_id"], created["epoch"]
-        resp = _submit(client, iid, 1, "浅回答", epoch)
-        body = resp.json()
+        _submit(client, iid, 1, "浅回答", epoch)
+        assert _consume(fake_redis, iid, 1, "浅回答", epoch) is True
+        body = _submit(client, iid, 1, "重发", epoch).json()
+        assert body["duplicated"] is True
         assert body["next_question"]["is_follow_up"] is False
         assert body["next_question"]["question_index"] == 2
 

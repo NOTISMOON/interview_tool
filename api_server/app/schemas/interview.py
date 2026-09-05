@@ -73,14 +73,15 @@ class AnswerAnalysisOut(BaseModel):
 
 
 class AnswerSubmitResponse(BaseModel):
-    """提交回答响应模型（分析摘要+评分+下一题或summarizing，§3.4）。"""
+    """提交回答响应模型（v3·受理化：accepted=True 表示已受理判题中）。"""
 
     interview_id: int = Field(..., description="面试会话ID")
     question_index: int = Field(..., description="本次已答题目题序")
-    analysis: AnswerAnalysisOut = Field(..., description="本题主观分析摘要与评分")
+    analysis: AnswerAnalysisOut = Field(..., description="本题分析摘要（受理态为判题中占位）")
     duplicated: bool = Field(False, description="是否命中幂等直接返回既有结果")
-    phase: str = Field(..., description="下一阶段 answering/summarizing")
-    next_question: QuestionOut | None = Field(None, description="下一题（追问或下一基础题）")
+    accepted: bool = Field(False, description="是否已受理（判题中，等待异步结果）")
+    phase: str = Field(..., description="下一阶段 answering/analyzing/summarizing")
+    next_question: QuestionOut | None = Field(None, description="下一题（判题完成后由轮询/SSE 获取）")
 
 
 class AbortRequest(BaseModel):

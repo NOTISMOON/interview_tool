@@ -19,6 +19,7 @@ class QueueName(str, Enum):
     INTERVIEW_RESUME_PARSE = "interview.resume.parse.queue"  # 简历解析任务队列
     INTERVIEW_REPORT_GENERATE = "interview.report.queue"  # 面试报告生成队列
     INTERVIEW_ANALYSIS = "interview.analysis.queue"  # 面试回答异步分析队列（v2）
+    INTERVIEW_ANSWER_SUBMITTED = "interview.answer.submitted.queue"  # 面试回答受理队列（v3·提交落库MQ化）
 
     # 通知业务队列
     NOTIFICATION_DELIVER = "notification.deliver.queue"  # 通知投递队列
@@ -93,6 +94,11 @@ QUEUE_BINDINGS: list[QueueBinding] = [
         queue=QueueName.INTERVIEW_ANALYSIS,
         exchange=ExchangeName.INTERVIEW,
         routing_key="interview.analysis",
+    ),
+    QueueBinding(
+        queue=QueueName.INTERVIEW_ANSWER_SUBMITTED,
+        exchange=ExchangeName.INTERVIEW,
+        routing_key="interview.answer.submitted",
     ),
     QueueBinding(
         queue=QueueName.NOTIFICATION_DELIVER,

@@ -20,6 +20,40 @@ export type SSEHandler = (data: Record<string, unknown>) => void;
 /** 当前订阅者集合 */
 const handlers = new Set<SSEHandler>();
 
+/** SSE 连接状态（供 UI 展示"实时通道"指示，诊断"是否走 SSE"） */
+export type SSEStatus = 'connecting' | 'open' | 'closed';
+const statusHandlers = new Set<(s: SSEStatus) => void>();
+let lastStatus: SSEStatus = 'closed';
+
+/** 通知所有状态订阅者（去重，避免重复渲染） */
+function emitStatus(status: SSEStatus): void {
+  if (status === lastStatus) return;
+  lastStatus = status;
+  statusHandlers.forEach((cb) => {
+    try {
+      cb(status);
+    } catch {
+      // 单个订阅者异常不影响其他订阅者
+    }
+  });
+}
+
+/** 查询当前 SSE 连接状态（首次调用前为 closed） */
+export function getSSEStatus(): SSEStatus {
+  const s = source;
+  if (!s) return 'closed';
+  return s.readyState === EventSource.OPEN ? 'open' : s.readyState === EventSource.CONNECTING ? 'connecting' : 'closed';
+}
+
+/** 订阅 SSE 连接状态变化（实时通道指示用），返回退订函数 */
+export function subscribeSSEStatus(cb: (s: SSEStatus) => void): () => void {
+  statusHandlers.add(cb);
+  cb(lastStatus);
+  return () => {
+    statusHandlers.delete(cb);
+  };
+}
+
 /** 单例 EventSource（首个订阅者出现时懒建立） */
 let source: EventSource | null = null;
 
@@ -78,10 +112,14 @@ function ensureConnection(): void {
     source.addEventListener('system_broadcast', (event) =>
       dispatchRaw('system_broadcast', (event as MessageEvent).data),
     );
-    // onerror 留空：EventSource 内置断线自动重连
-    source.onerror = () => undefined;
+    // 连接状态通知（"实时通道"指示）：open=已建立，error=断线重连中/失败
+    source.onopen = () => emitStatus('open');
+    source.onerror = () => {
+      emitStatus(source?.readyState === EventSource.CONNECTING ? 'connecting' : 'closed');
+    };
   } catch {
     source = null;
+    emitStatus('closed');
   }
 }
 

@@ -58,13 +58,14 @@ export interface ApiAnswerAnalysis {
   weaknesses: string[];
 }
 
-/** 提交回答响应（后端 AnswerSubmitResponse） */
+/** 提交回答响应（v3 受理化：accepted=true / phase=analyzing 表示已受理、判题中） */
 export interface ApiAnswerSubmitResponse {
   interview_id: number;
   question_index: number;
   analysis: ApiAnswerAnalysis;
   duplicated: boolean;
-  phase: 'answering' | 'summarizing';
+  accepted?: boolean;
+  phase: 'answering' | 'analyzing' | 'summarizing';
   next_question: ApiInterviewQuestion | null;
 }
 
@@ -230,8 +231,9 @@ export async function startInterview(interviewId: number): Promise<ApiInterviewS
 }
 
 /**
- * 提交回答：Fast Decision 即时判定，秒级返回下一题（v2，全量分析走异步 Worker）。
- * 幂等键 (interviewId, questionIndex)，重试安全。
+ * 提交回答（v3 受理化）：毫秒级返回"已受理"（accepted/phase=analyzing）。
+ * 判题/落库/推进由后端 Answer Consumer 异步完成，前端轮询/SSE 感知判题完成。
+ * 幂等键 (interviewId, questionIndex)，超时重发安全。
  * @param interviewId 面试会话ID
  * @param questionIndex 所答题目题序（状态版本token）
  * @param answer 回答文本（语音转写或键盘输入）
@@ -253,7 +255,7 @@ export async function submitAnswer(
       tab_epoch: tabEpoch,
       ...(answerDuration !== undefined ? { answer_duration: answerDuration } : {}),
     },
-    { timeout: 30000 },
+    { timeout: 15000 },
   );
   return data;
 }
