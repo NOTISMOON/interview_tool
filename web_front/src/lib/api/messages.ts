@@ -92,7 +92,7 @@ export async function deleteMessage(messageId: number): Promise<{ ok: boolean }>
   return data;
 }
 
-/** 构建 SSE 流连接 URL（前端直接使用 EventSource） */
+/** 构建 SSE 流连接 URL（前端直接使用 EventSource，与原 API 同源） */
 export function buildSSEUrl(sinceId?: number): string {
   const base = request.defaults.baseURL || '';
   const params = new URLSearchParams();
