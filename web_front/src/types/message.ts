@@ -35,6 +35,7 @@ export interface SystemMessage {
   isRead: boolean;
   createdAt: string;
   relatedId?: string;
+  relatedType?: number; // 后端关联实体类型：2=report（报告就绪），4=interview（面试题目已生成）
   fromUser?: {
     id: string;
     name: string;

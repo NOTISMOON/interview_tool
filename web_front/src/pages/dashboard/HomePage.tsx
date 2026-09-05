@@ -223,13 +223,18 @@ const DashboardHome = () => {
                 <div
                   key={item.interview_id}
                   className="flex items-center gap-[14px] p-3 rounded-[9px] hover:bg-[var(--color-surface-2)] transition-colors cursor-pointer"
-                  onClick={() =>
+                  onClick={() => {
+                    // 草稿态（题目已生成但未通过设备检测）：跳设备检测，避免绕过检测直接作答
+                    if (item.status === 0 && !item.is_started) {
+                      navigate(`/dashboard/interview/device-check/${item.interview_id}`);
+                      return;
+                    }
                     navigate(
                       item.status === 0
                         ? `/dashboard/interview/session/${item.interview_id}`
                         : `/dashboard/report/${item.interview_id}`,
-                    )
-                  }
+                    );
+                  }}
                 >
                   <div
                     className="w-[46px] h-[46px] rounded-[13px] flex items-center justify-center text-[15px] font-extrabold flex-shrink-0"

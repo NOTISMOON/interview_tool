@@ -172,9 +172,15 @@ const MessageDetailPage = () => {
     if (type === 'dm') {
       navigate(`/dashboard/messages/chat/${detail.from_user?.id ?? ''}`);
     } else if (type === 'interview') {
-      // 面试就绪通知：related.id 为 interviewId → 跳对应设备检测路由
-      const interviewId = detail.related?.id;
-      navigate(interviewId ? `/dashboard/interview/device-check/${interviewId}` : '/dashboard/interview');
+      // 面试类通知按关联类型分流：report → 查看报告；interview → 去面试（题目已生成）
+      const isReport = detail.related?.type_name === 'report';
+      const targetId = detail.related?.id;
+      if (!targetId) return;
+      navigate(
+        isReport
+          ? `/dashboard/report/${targetId}`
+          : `/dashboard/interview/device-check/${targetId}`,
+      );
     } else if (type === 'follow') {
       if (userLink) navigate(`/dashboard/user/${userLink}`);
     } else if (type === 'comment' || type === 'like' || type === 'follow_post') {
@@ -195,7 +201,7 @@ const MessageDetailPage = () => {
       case 'follow': return '查看主页';
       case 'follow_post': return '查看帖子';
       case 'dm': return '查看私信';
-      case 'interview': return '查看面试';
+      case 'interview': return detail.related?.type_name === 'report' ? '查看报告' : '去面试';
       default: return '查看详情';
     }
   };
@@ -260,6 +266,23 @@ const MessageDetailPage = () => {
           </div>
           <h4 className="text-sm font-semibold text-[#232529] mb-1">面试报告已生成</h4>
           <p className="text-xs text-[#666666] line-clamp-2">点击查看详细分析和建议</p>
+        </div>
+      );
+    }
+
+    // 面试题目已生成（非报告类关联）：提供"去面试"入口卡片
+    if (type === 'interview' && detail.related?.type_name !== 'report' && detail.related?.id) {
+      return (
+        <div
+          className="bg-white border border-[#E8E8E8] rounded-2xl p-4 hover:shadow-sm hover:border-[#D9A441]/30 transition-all cursor-pointer"
+          onClick={() => navigate(`/dashboard/interview/device-check/${detail.related!.id!}`)}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <span className="tag tag-flame">AI 面试</span>
+            <span className="text-xs text-[#999999]">题目已生成</span>
+          </div>
+          <h4 className="text-sm font-semibold text-[#232529] mb-1">面试题目已生成</h4>
+          <p className="text-xs text-[#666666] line-clamp-2">点击进入设备检测后即可开始作答</p>
         </div>
       );
     }

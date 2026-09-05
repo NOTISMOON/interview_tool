@@ -92,6 +92,7 @@ function mapMessage(m: MessageResponse): SystemMessage {
     createdAt: m.created_at,
     isRead: m.is_read,
     relatedId: m.related?.id !== undefined && m.related?.id !== null ? String(m.related.id) : undefined,
+    relatedType: m.related?.type,
   };
 }
 
@@ -245,10 +246,9 @@ const MessagesPage = () => {
     }
     if (msgItem.type === 'dm') {
       navigate(`/dashboard/messages/chat/${msgItem.fromUser?.id || 'u3'}`);
-    } else if (msgItem.type === 'interview') {
-      // 面试就绪通知：relatedId 为 interviewId → 跳对应设备检测路由
-      navigate(msgItem.relatedId ? `/dashboard/interview/device-check/${msgItem.relatedId}` : '/dashboard/interview');
     } else {
+      // 其余类型（含 interview 题目生成/报告就绪）统一进入消息详情页，
+      // 详情页按关联类型提供"去面试 / 查看报告"入口（避免列表直接跳转错位）
       navigate(`/dashboard/messages/${msgItem.id}`);
     }
   };

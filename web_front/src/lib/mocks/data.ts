@@ -1,4 +1,4 @@
-﻿import type { InterviewQuestion, InterviewReport, UserBrief, SystemMessage, DmConversation } from '@/types';
+import type { InterviewQuestion, InterviewReport, UserBrief, SystemMessage, DmConversation } from '@/types';
 
 export const mockFollowingList: UserBrief[] = [
   { id: 'u2', nickname: '上岸的鱼', avatar: '', bio: '已拿到大厂 offer，分享面试经验', isFollowing: true },

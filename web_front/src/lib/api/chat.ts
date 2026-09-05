@@ -79,19 +79,26 @@ export interface WSNewMessage {
 // REST API
 // ============================================================
 
+// 私信接口统一超时：首建会话/历史拉取偶发较慢，全局默认 5s 不足，显式放宽到 15s
+const CHAT_REQUEST_TIMEOUT = 15000;
+
 /** 查询当前用户私信会话列表 */
 export async function getChatConversations(): Promise<ChatConversationListResponse> {
-  const { data } = await request.get<ChatConversationListResponse>('/chat/conversations');
+  const { data } = await request.get<ChatConversationListResponse>('/chat/conversations', {
+    timeout: CHAT_REQUEST_TIMEOUT,
+  });
   return data;
 }
 
-/** 获取或创建与某用户的会话 */
+/** 获取或创建与某用户的会话（首次创建走 DB 写路径，放宽超时避免误判失败） */
 export async function createChatConversation(
   userId: number,
 ): Promise<CreateConversationResponse> {
-  const { data } = await request.post<CreateConversationResponse>('/chat/conversations', {
-    user_id: userId,
-  });
+  const { data } = await request.post<CreateConversationResponse>(
+    '/chat/conversations',
+    { user_id: userId },
+    { timeout: CHAT_REQUEST_TIMEOUT },
+  );
   return data;
 }
 
@@ -103,7 +110,7 @@ export async function getChatMessages(
 ): Promise<ChatMessageListResponse> {
   const { data } = await request.get<ChatMessageListResponse>(
     `/chat/conversations/${conversationId}/messages`,
-    { params: { cursor: cursor || 0, size } },
+    { params: { cursor: cursor || 0, size }, timeout: CHAT_REQUEST_TIMEOUT },
   );
   return data;
 }
@@ -114,6 +121,7 @@ export async function markChatConversationRead(
 ): Promise<{ ok: boolean; count: number }> {
   const { data } = await request.put<{ ok: boolean; count: number }>(
     `/chat/conversations/${conversationId}/read`,
+    { timeout: CHAT_REQUEST_TIMEOUT },
   );
   return data;
 }
@@ -124,6 +132,7 @@ export async function hideChatConversation(
 ): Promise<{ ok: boolean }> {
   const { data } = await request.put<{ ok: boolean }>(
     `/chat/conversations/${conversationId}/hide`,
+    { timeout: CHAT_REQUEST_TIMEOUT },
   );
   return data;
 }
@@ -134,6 +143,7 @@ export async function deleteChatConversation(
 ): Promise<{ ok: boolean }> {
   const { data } = await request.delete<{ ok: boolean }>(
     `/chat/conversations/${conversationId}`,
+    { timeout: CHAT_REQUEST_TIMEOUT },
   );
   return data;
 }
