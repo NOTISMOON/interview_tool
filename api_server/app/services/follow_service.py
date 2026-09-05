@@ -16,6 +16,7 @@ import redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.cache.feed_cache import feed_cache
 from app.cache.follow_cache import (
     DIRECTION_FOLLOWERS,
     DIRECTION_FOLLOWING,
@@ -23,6 +24,7 @@ from app.cache.follow_cache import (
 )
 from app.models.user_activity import ACTIVITY_TYPE_FOLLOW
 from app.repositories.outbox_repository import sync_outbox_repository
+from app.repositories.post_repository import post_repository
 from app.repositories.user_repository import sync_user_repository
 from app.schemas.user import (
     FollowItemResponse,
@@ -191,6 +193,24 @@ class FollowService:
         user_service.invalidate_profile_cache(cache_client, following_id)
         # 同步移除缓存成员（幂等空操作安全），保证取关后立即刷新不可见
         follow_cache.apply_unfollow_change(cache_client, follower_id, following_id)
+        # Feed 清理：取关后该作者此前已 Push 进我收件箱的帖子（TTL 7 天）
+        # 与已合并进主 Feed 缓存的帖子仍会继续出现，需显式移除并失效缓存（BUG2）。
+        # 主 Feed 缓存失效必须无条件先执行：即使查作者帖子 ID 失败，
+        # 下次读 Feed 也会走"缓存 miss → DB 重建"，重建只拉当前关注列表。
+        try:
+            feed_cache.invalidate_feed(cache_client, follower_id)
+        except Exception:
+            logger.exception("取关后失效Feed主缓存失败 follower_id=%s", follower_id)
+        try:
+            unfollowed_post_ids = post_repository.list_post_ids_by_author(db, following_id)
+            if unfollowed_post_ids:
+                feed_cache.remove_posts_from_inbox(cache_client, follower_id, unfollowed_post_ids)
+        except Exception:
+            logger.exception(
+                "取关后清理收件箱缓存失败 follower_id=%s following_id=%s",
+                follower_id,
+                following_id,
+            )
         logger.info("取关成功 follower_id=%s following_id=%s", follower_id, following_id)
 
     # ------------------------------------------------------------------

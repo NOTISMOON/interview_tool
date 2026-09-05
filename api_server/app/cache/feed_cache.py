@@ -210,6 +210,27 @@ class FeedCache:
         except Exception:
             logger.exception("清空Feed收件箱失败 user_id=%s", user_id)
 
+    def remove_posts_from_inbox(
+        self, cache_client: redis.Redis, user_id: int, post_ids: list[int]
+    ) -> None:
+        """从用户收件箱移除指定帖子（取关后移除被取关作者的帖子）。
+
+        收件箱 ZSET 只存 post_id，无法按作者直接过滤，
+        由调用方先查该作者帖子ID再调用（与收件箱容量1000对齐，limit=1000）。
+
+        Args:
+            cache_client: 同步Redis客户端。
+            user_id: 当前用户ID（收件箱属主，即取关者）。
+            post_ids: 待移除的帖子ID列表。
+        """
+        if not post_ids:
+            return
+        key = KEY_FEED_INBOX.format(user_id=user_id)
+        try:
+            cache_client.zrem(key, *[str(pid) for pid in post_ids])
+        except Exception:
+            logger.exception("移除收件箱帖子失败 user_id=%s post_ids=%s", user_id, post_ids[:10])
+
 
 # 模块级单例
 feed_cache = FeedCache()

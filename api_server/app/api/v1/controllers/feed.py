@@ -107,6 +107,15 @@ def get_feed(
     posts_map = post_repository.batch_get_by_ids(db, post_ids)
     ordered_posts = [posts_map[pid] for pid in post_ids if pid in posts_map]
 
+    # 读路径兜底过滤（BUG2）：缓存仅存 post_id、可能残留已取关作者的帖子
+    # （如旧代码时期产生的脏缓存 / 清理失败的并发窗口）。以当前关注关系
+    # 为准过滤作者，保证任何缓存状态下都不会返回已取关人的帖子。
+    following_ids = set(sync_user_repository.get_following_ids(db, user_id))
+    if following_ids:
+        ordered_posts = [p for p in ordered_posts if p.author_id in following_ids]
+    else:
+        ordered_posts = []
+
     # 组装响应
     items = [_assemble_feed_item(db, p, user_id) for p in ordered_posts]
 

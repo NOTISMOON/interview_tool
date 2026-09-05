@@ -141,6 +141,25 @@ class PostRepository:
         stmt = stmt.limit(limit)
         return list(db.execute(stmt).scalars().all())
 
+    def list_post_ids_by_author(self, db: Session, author_id: int, limit: int = 1000) -> list[int]:
+        """查询指定作者最近发布的帖子ID（取关后清理粉丝收件箱用）。
+
+        Args:
+            db: 数据库同步会话。
+            author_id: 作者用户ID。
+            limit: 最多返回的帖子数（与收件箱容量 1000 对齐）。
+
+        Returns:
+            该作者正常状态帖子的ID列表（按ID倒序取最近 limit 条）。
+        """
+        stmt = (
+            select(Post.id)
+            .where(Post.status == POST_STATUS_NORMAL, Post.author_id == author_id)
+            .order_by(Post.id.desc())
+            .limit(limit)
+        )
+        return list(db.execute(stmt).scalars().all())
+
     def count_posts(self, db: Session, *, author_id: int | None = None) -> int:
         """统计帖子总数。
 
