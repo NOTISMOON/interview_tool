@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import App from 'antd/es/app';
 import Switch from 'antd/es/switch';
@@ -18,7 +18,7 @@ import { useAppStore } from '@/store';
 const SettingsPage = () => {
   const navigate = useNavigate();
   const { message: msg, modal } = App.useApp();
-  const { user, deleteAccount, logout } = useAppStore();
+  const { user, deleteAccount } = useAppStore();
   const [emailNotify, setEmailNotify] = useState(true);
   const [pushNotify, setPushNotify] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);

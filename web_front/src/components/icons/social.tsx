@@ -3,7 +3,7 @@
  * 导出名与 @ant-design/icons 保持一致，便于直接替换 import 来源。
  */
 import type { IconProps } from './Svg';
-import { Svg, SvgFilled, BRAND } from './Svg';
+import { Svg, SvgFilled } from './Svg';
 
 /** 用户 */
 export function UserOutlined(props: IconProps) {

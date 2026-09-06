@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import App from 'antd/es/app';
 import Tabs from 'antd/es/tabs';
@@ -15,8 +15,6 @@ import {
   LikeOutlined,
   MessageOutlined,
   PlusOutlined,
-  BulbOutlined,
-  QuestionCircleOutlined,
   PictureOutlined,
   CloseOutlined,
   LoadingOutlined,

@@ -1,14 +1,12 @@
-﻿import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store';
 import { useHeroEntrance, useScrollReveal } from '@/hooks/useGsapAnimations';
 import {
   PlayCircleOutlined,
-  FileTextOutlined,
   BarChartOutlined,
   SyncOutlined,
   ThunderboltOutlined,
   RightOutlined,
-  CheckCircleOutlined,
   ThunderboltFilled,
 } from '@/components/icons';
 

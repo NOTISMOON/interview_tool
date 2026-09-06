@@ -1,9 +1,8 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Avatar from 'antd/es/avatar';
 import App from 'antd/es/app';
 import Spin from 'antd/es/spin';
-import Empty from 'antd/es/empty';
 import {
   ArrowLeftOutlined,
   StarFilled,

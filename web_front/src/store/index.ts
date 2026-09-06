@@ -7,8 +7,6 @@ import {
   updateMyProfile as updateMyProfileApi,
   updateProfileVisibility as updateProfileVisibilityApi,
   deleteAccount as deleteAccountApi,
-  followUser as followUserApi,
-  unfollowUser as unfollowUserApi,
 } from '@/lib/api/user';
 import type { UserProfileResponse, UserUpdateRequest } from '@/lib/api/user';
 
