@@ -78,7 +78,7 @@ class RedisLock:
                 lock.release()
 
     Args:
-        name: 锁名称（Redis key 前缀）
+        name: 锁名称（拼接在 "lock:" 前缀之后构成 Redis key）
         timeout: 锁超时时间（秒），默认 30 秒
         retry_count: 获取锁失败时的重试次数，默认 0（不重试）
         retry_interval: 重试间隔（秒），默认 0.5 秒

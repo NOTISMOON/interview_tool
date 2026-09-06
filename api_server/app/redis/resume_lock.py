@@ -72,20 +72,6 @@ def acquire_sync(client, resume_id: int, task_uuid: str, ttl: int = DEFAULT_TTL)
     return bool(client.set(lock_key(resume_id), task_uuid, nx=True, ex=ttl))
 
 
-def verify_sync(client, resume_id: int, task_uuid: str) -> bool:
-    """校验当前锁值是否等于任务uuid（Worker 提交前防重复写入）。
-
-    Args:
-        client: 同步 Redis 客户端。
-        resume_id: 简历ID。
-        task_uuid: 期望的任务标识。
-
-    Returns:
-        锁存在且值匹配返回True，否则False。
-    """
-    return client.get(lock_key(resume_id)) == task_uuid
-
-
 def release_sync(client, resume_id: int, task_uuid: str) -> bool:
     """释放简历分析锁（仅当锁值匹配时删除）。
 

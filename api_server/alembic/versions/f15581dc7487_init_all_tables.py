@@ -1,4 +1,4 @@
-"""init_all_tables
+"""normalize_existing_schema（新建 comment 表替代旧 post_comment，并统一各表列注释/索引/表注释，不新建其余表）
 
 Revision ID: f15581dc7487
 Revises: 
@@ -419,7 +419,7 @@ def upgrade() -> None:
     op.alter_column('resume', 'parsed_education',
                existing_type=mysql.JSON(),
                comment='解析出的教育经历数组',
-               existing_comment='解析出的教育经历数组（支持多段，元素含 school/degree/major/year）',
+               existing_comment='解析出的教育经历数组（支持多段，元素含 school/degree/major/duration）',
                existing_nullable=True)
     op.alter_column('resume', 'created_at',
                existing_type=mysql.DATETIME(),
@@ -932,7 +932,7 @@ def downgrade() -> None:
                existing_server_default=sa.text('CURRENT_TIMESTAMP'))
     op.alter_column('resume', 'parsed_education',
                existing_type=mysql.JSON(),
-               comment='解析出的教育经历数组（支持多段，元素含 school/degree/major/year）',
+               comment='解析出的教育经历数组（支持多段，元素含 school/degree/major/duration）',
                existing_comment='解析出的教育经历数组',
                existing_nullable=True)
     op.alter_column('resume', 'status',

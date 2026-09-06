@@ -12,7 +12,7 @@ class StsTokenRequest(BaseModel):
     """STS 临时密钥申请请求模型。"""
 
     file_name: str = Field(..., min_length=1, max_length=255, description="原始文件名（用于提取扩展名）")
-    file_type: str = Field(..., description="文件用途：resume（简历）/ image（图片）")
+    file_type: str = Field(..., description="文件用途：resume/avatar/post_image")
     file_size: int = Field(..., gt=0, description="文件大小（字节）")
     content_type: str = Field(..., max_length=100, description="文件MIME类型")
 
@@ -78,7 +78,7 @@ class UploadRecordResponse(BaseModel):
     """上传记录响应模型（列表项）。"""
 
     upload_id: int = Field(..., description="上传记录ID")
-    file_type: str = Field(..., description="文件用途：resume/avatar")
+    file_type: str = Field(..., description="文件用途：resume/image（avatar/post_image 均归为 image）")
     file_name: str = Field(..., description="原始文件名")
     file_size: int = Field(..., description="文件大小（字节）")
     content_type: str = Field(..., description="MIME类型")

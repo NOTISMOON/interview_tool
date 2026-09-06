@@ -29,7 +29,7 @@ class UploadRepository:
         Args:
             db: 数据库同步会话。
             user_id: 上传用户ID。
-            file_type: 文件用途（resume/avatar）。
+            file_type: 文件用途（resume/image）。
             file_name: 原始文件名。
             file_size: 文件大小（字节）。
             content_type: MIME类型。

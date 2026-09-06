@@ -37,22 +37,6 @@ class ProfileVisibilityUpdateRequest(BaseModel):
     visibility_phone: int | None = Field(None, ge=0, le=1, description="手机号可见")
 
 
-class UserSettingsResponse(BaseModel):
-    """用户设置响应模型。"""
-
-    model_config = {"from_attributes": True}
-
-    email_notify: int
-    push_notify: int
-    sound_enabled: int
-    public_profile: int
-    visibility_gender: int
-    visibility_birthday: int
-    visibility_bio: int
-    visibility_location: int
-    visibility_phone: int
-
-
 class UserProfileResponse(BaseModel):
     """个人信息响应模型（仅本人可见，含敏感字段）。"""
 

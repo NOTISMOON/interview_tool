@@ -55,7 +55,7 @@ app = FastAPI(
 )
 
 # 中间件注册顺序说明：Starlette栈结构中后注册者位于最外层。
-# Auth先注册位于内层、CORS后注册位于最外层，确保Auth返回的302重定向响应也能被CORS补全响应头。
+# Auth先注册位于内层、CORS后注册位于最外层，确保Auth返回的401 JSON响应也能被CORS补全跨域响应头。
 app.add_middleware(AuthMiddleware)
 
 # CORS中间件配置：allow_credentials=True时origins不能用通配符，必须明确白名单

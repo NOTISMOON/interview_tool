@@ -5,9 +5,8 @@
       （使用 tencentcloud-sdk-python，策略限定到用户目录，最小权限）。
     - head_object(): HEAD Object 校验文件完整性（纯 HTTP + COS XML API 签名实现）。
     - delete_object(): 删除 COS 文件（纯 HTTP + 签名实现）。
-    - generate_presigned_url(): 生成预签名访问 URL（签名放查询参数，无需请求头）。
 
-说明: HEAD/DELETE/预签名未引入 cos-python-sdk-v5，直接按 COS XML API 签名规范
+说明: HEAD/DELETE/PUT 未引入 cos-python-sdk-v5，直接按 COS XML API 签名规范
     （q-sign-algorithm=sha1）用 requests + hmac 实现，减少依赖。
 """
 
@@ -17,7 +16,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 import requests
 from tencentcloud.common import credential
@@ -211,33 +210,6 @@ class CosClient:
             logger.error("PUT Object失败: key=%s status=%s body=%s", cos_key, response.status_code, response.text[:300])
             raise CosError(f"PUT Object失败: HTTP {response.status_code}")
         return response.headers.get("ETag", "").strip('"')
-
-    def generate_presigned_url(self, cos_key: str, expires: int = 3600) -> str:
-        """生成 GET 预签名访问 URL（签名放查询参数，浏览器可直接访问）。
-
-        Args:
-            cos_key: COS 对象 Key。
-            expires: 有效期（秒），默认3600。
-
-        Returns:
-            带签名的完整访问 URL 字符串。
-        """
-        url = self._build_object_url(cos_key)
-        now = int(time.time())
-        key_time = f"{now};{now + expires}"
-        # 预签名URL：headers与params均参与空串签名（q-header-list/q-url-param-list为空）
-        # 签名路径必须与URL中实际发送的编码后路径一致
-        signature = self._calc_signature("get", self._path_from_url(url), "", "", key_time)
-        params = {
-            "q-sign-algorithm": "sha1",
-            "q-ak": settings.COS_SECRET_ID,
-            "q-sign-time": key_time,
-            "q-key-time": key_time,
-            "q-header-list": "",
-            "q-url-param-list": "",
-            "q-signature": signature,
-        }
-        return f"{url}?{urlencode(params)}"
 
     def get_appid(self) -> str:
         """从 Bucket 名称解析腾讯云 APPID（bucket 命名规范：{name}-{appid}）。

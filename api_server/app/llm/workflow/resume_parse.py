@@ -41,13 +41,13 @@ class ResumeParseState(TypedDict, total=False):
     """简历解析工作流状态。"""
 
     cos_key: str  # COS对象Key（用于扩展名判断与日志）
-    file_url: str  # 公开访问线上链接（须可匿名GET，.pdf/.docx 均直连解析）
+    file_url: str  # 公开访问线上链接（须可匿名GET，.pdf 直连解析，.docx 下载到临时文件解析）
     text: str  # 提取出的纯文本
     extraction: ResumeExtraction  # LLM结构化提取结果
 
 
 def load_document(state: ResumeParseState) -> ResumeParseState:
-    """节点1：文件加载与文本提取（.pdf/.docx 均直连线上链接）。
+    """节点1：文件加载与文本提取（.pdf 直连线上链接；.docx 下载字节到临时文件后本地解析）。
 
     Args:
         state: 工作流状态（含 cos_key / file_url）。
@@ -140,7 +140,7 @@ resume_parse_graph = build_resume_parse_graph()
 def parse_resume(cos_key: str, file_url: str) -> ResumeExtraction:
     """同步执行简历解析工作流（Worker内经 asyncio.to_thread 调用）。
 
-    PDF/DOCX 均传公开 file_url 直连各自加载器。
+    PDF 直连 PyPDFLoader；DOCX 从 file_url 下载到临时文件后本地解析（均基于公开 file_url）。
 
     Args:
         cos_key: COS对象Key（决定文件类型与加载策略）。

@@ -37,7 +37,7 @@ class UploadRecord(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="上传用户ID")
-    file_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="文件用途：resume/avatar")
+    file_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="文件用途：resume/image（avatar/post_image 均归为 image）")
     file_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="原始文件名")
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="文件大小（字节）")
     content_type: Mapped[str] = mapped_column(String(100), nullable=False, comment="MIME类型")

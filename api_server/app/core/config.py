@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     OUTBOX_POLL_INTERVAL: float = 0.5  # Relay轮询间隔（秒）
     OUTBOX_BATCH_SIZE: int = 100  # 单批扫描与投递条数
     OUTBOX_MAX_RETRY: int = 5  # 投递最大重试次数，超限置死信
-    OUTBOX_RETRY_BASE_DELAY: int = 5  # 重试退避基数（秒），实际延迟=base*2^retry_count
+    OUTBOX_RETRY_BASE_DELAY: int = 5  # 重试退避基数（秒），实际延迟=base*2^(retry_count+1)
     OUTBOX_RETENTION_DAYS: int = 7  # 已发布事件保留天数，清理任务超期删除
     OUTBOX_CLEANUP_BATCH: int = 5000  # 清理任务单批DELETE上限
     OUTBOX_DEACTIVATED_PAYLOAD_LIMIT: int = 50000  # 注销事件payload中ID列表截断上限
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     NOTIFY_BROADCAST_CHANNEL: str = "notify:broadcast"  # 系统公告通道
 
     # ---- 通知业务 ----
-    NOTIFICATION_LIKE_COMBINE_WINDOW_SECONDS: int = 86400  # 点赞合并窗口：24h同一人多次点赞只1条通知
+    NOTIFICATION_LIKE_COMBINE_WINDOW_SECONDS: int = 86400  # 预留：点赞合并窗口（当前未实现 24h 合并逻辑）
     # GitHub OAuth配置
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     COS_REGION: str = "ap-chengdu"  # COS地域
     COS_STS_DURATION: int = 1800  # STS临时密钥有效期（秒，默认30分钟）
     COS_MAX_FILE_SIZE: int = 10485760  # 上传文件大小上限（字节，默认10MB）
-    COS_ALLOWED_EXTENSIONS: str = ".pdf,.docx,.png,.jpg,.jpeg"  # 允许的扩展名白名单（简历仅 .pdf/.docx）
+    COS_ALLOWED_EXTENSIONS: str = ".pdf,.docx,.png,.jpg,.jpeg"  # 允许的扩展名白名单（全用途共用，.doc 已排除；简历分析仅支持 .pdf/.docx）
     COS_DAILY_UPLOAD_LIMIT: int = 20  # 单用户每日上传次数上限
 
     # ---- LLM 配置（LangChain 抽象层，供应商/模型可切换，见简历上传分析蓝图 §5.11） ----

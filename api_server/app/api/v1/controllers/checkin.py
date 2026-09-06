@@ -1,7 +1,5 @@
 """签到模块API端点，基于Redis Bitmap实现每日签到。"""
 
-from datetime import date
-
 from fastapi import APIRouter, Depends
 from redis import Redis
 

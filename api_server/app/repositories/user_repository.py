@@ -197,7 +197,7 @@ class SyncUserRepository:
     # ------------------------------------------------------------------
 
     def create_follow(self, db: Session, follower_id: int, following_id: int) -> None:
-        """新增一条关注关系（唯一索引uk_follower_following兜底幂等）。
+        """新增一条关注关系（uk_follower_following 已被迁移删除，防重复关注由服务层保证）。
 
         Args:
             db: 数据库同步会话。
@@ -332,7 +332,7 @@ class SyncUserRepository:
         )
 
     def is_following(self, db: Session, follower_id: int, following_id: int) -> bool:
-        """判断follower_id是否关注了following_id（命中uk_follower_following索引）。
+        """判断follower_id是否关注了following_id（uk_follower_following 索引已被迁移删除）。
 
         Args:
             db: 数据库同步会话。
@@ -366,7 +366,7 @@ class SyncUserRepository:
         return {user.id: user for user in db.execute(stmt).scalars().all()}
 
     def fetch_recent_following(self, db: Session, user_id: int, limit: int) -> list[tuple[int, datetime]]:
-        """查询用户最近N条关注记录（ZSET回源用，命中idx_follower_created覆盖索引）。
+        """查询用户最近N条关注记录（ZSET回源用，idx_follower_created 已被迁移删除，按 created_at 排序）。
 
         Args:
             db: 数据库同步会话。
@@ -385,7 +385,7 @@ class SyncUserRepository:
         return [(row[0], row[1]) for row in db.execute(stmt).all()]
 
     def fetch_recent_followers(self, db: Session, user_id: int, limit: int) -> list[tuple[int, datetime]]:
-        """查询用户最近N条粉丝记录（ZSET回源用，命中idx_following_created覆盖索引）。
+        """查询用户最近N条粉丝记录（ZSET回源用，idx_following_created 已被迁移删除，按 created_at 排序）。
 
         Args:
             db: 数据库同步会话。

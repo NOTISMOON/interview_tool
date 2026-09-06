@@ -555,8 +555,6 @@ def test_retry_analysis_only_failed_resumes(db_session, lock_redis):
 
 def test_retry_analysis_resets_and_reschedules(db_session, lock_redis, mock_cos_bytes):
     """测试失败简历一键重试：重置为解析中 + 清除残留锁 + 重新调度（Outbox事件+1）。"""
-    from app.cos import build_cos_url
-
     cos_key = "resumes/1/retry.pdf"
     mock_cos_bytes["store"][cos_key] = _FILE_A
     created = _upload(db_session, lock_redis, 1, cos_key, _FILE_A)
@@ -626,8 +624,6 @@ def test_lock_async_semantics():
 
 def test_read_contract_detail_with_ownership_check(db_session, lock_redis, mock_cos_bytes):
     """测试读取契约：本人可读详情与该简历status（供面试模块轮询）；他人读抛404。"""
-    from app.cos import build_cos_url
-
     cos_key = "resumes/1/read.pdf"
     mock_cos_bytes["store"][cos_key] = _FILE_A
     created = _upload(db_session, lock_redis, 1, cos_key, _FILE_A)

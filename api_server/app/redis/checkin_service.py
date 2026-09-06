@@ -120,7 +120,7 @@ class CheckinService:
 
         # 设置当天签到位
         self.redis.setbit(key, today.day, 1)
-        # 设置30天过期，自动清理旧数据
+        # 设置约一个月过期（31天），自动清理旧数据
         self.redis.expire(key, 86400 * 31)
         # 递增总天数
         self.redis.incr(total_key)

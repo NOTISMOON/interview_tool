@@ -18,15 +18,11 @@
 前提: uvicorn + mq.runner 运行中，MySQL/Redis/RabbitMQ/LLM 正常。
 """
 
-import hashlib
-import hmac
-import json
 import sys
 import threading
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import quote
 
 import jwt
 import requests

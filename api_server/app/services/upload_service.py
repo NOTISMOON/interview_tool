@@ -17,7 +17,7 @@ from datetime import datetime
 import redis
 from sqlalchemy.orm import Session
 
-from app.cos import CosError, build_cos_url, cos_client, format_upload_date
+from app.cos import build_cos_url, cos_client, format_upload_date
 from app.core.config import settings
 from app.repositories.resume_repository import resume_repository
 from app.repositories.upload_repository import upload_repository
@@ -347,7 +347,7 @@ class UploadService:
             user_id: 当前用户ID。
 
         Returns:
-            文件用途（resume/avatar）。
+            文件用途（resume/image）。
 
         Raises:
             CallbackInvalidError: 路径格式非法或归属不匹配。
