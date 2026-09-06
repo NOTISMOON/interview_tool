@@ -56,6 +56,10 @@ const BUSY_RETRY_DELAYS = [2000, 4000, 8000];
 /** 延时等待（退避重试用；卸载后由 unmountedRef 跳过后续 setState） */
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** 语音服务级不可用错误码（识别服务本身不可用/语言不支持，无法靠重启恢复） */
+const SERVICE_FATAL_ERRORS = new Set(['network', 'service-not-allowed', 'language-not-supported', 'audio-capture']);
+const serviceFatalSpeechError = (code: string | null) => code !== null && SERVICE_FATAL_ERRORS.has(code);
+
 /** 页面本地阶段（后端 Checkpoint phase 的超集） */
 type SessionPhase =
   | 'loading' // 初始加载
@@ -108,6 +112,13 @@ const InterviewSession = () => {
   }, [currentQuestion]);
   /** P2 题目卡打字机：当前题目已展示字数 */
   const [typedLen, setTypedLen] = useState(0);
+  /** 判题流式追问预览（interview:judge_stream 逐段累积，仅 judging 阶段展示）；
+   *  judged 到达时若下一题与该预览一致则预置打字机进度续打，实现"只打一遍"无缝过渡 */
+  const [judgeStreamText, setJudgeStreamText] = useState('');
+  const judgeStreamRef = useRef('');
+  useEffect(() => {
+    judgeStreamRef.current = judgeStreamText;
+  }, [judgeStreamText]);
 
   // ===== 单题作答 =====
   const [thinkingLeft, setThinkingLeft] = useState(THINKING_SECONDS);
@@ -136,7 +147,7 @@ const InterviewSession = () => {
 
   // ===== 语音识别 =====
   const speech = useSpeechRecognition();
-  const { isSupported, isListening, transcript, interim, error: speechError } = speech;
+  const { isSupported, isEdge, isListening, transcript, interim, error: speechError } = speech;
 
   // ------------------------------------------------------------------
   // 定时器清理
@@ -162,7 +173,10 @@ const InterviewSession = () => {
   // 阶段切换器
   // ------------------------------------------------------------------
 
-  /** 进入思考倒计时（新题/恢复均从此开始） */
+  /** 进入思考倒计时（新题/恢复均从此开始）。
+ *  注意：不在此处重置 typedLen——换题入口各自负责（applyState 换题清零、
+ *  SSE judged 续打设置 matchLen、提交成功清零），这里重置会把 judged 的
+ *  流式续打进度清掉导致"第二遍从头打印"。 */
   const startThinking = useCallback(() => {
     setPhase('thinking');
     setThinkingLeft(THINKING_SECONDS);
@@ -212,18 +226,24 @@ const InterviewSession = () => {
     return () => clearTimeout(t);
   }, [phase, startThinking]);
 
-  /** 换题/回退时重置题目打字机 */
+  /**
+   * typingOn 遮罩与续打的键：当前题目全文。所有换题入口显式管理 typedLen：
+   *   - applyState 换题 → setTypedLen(0)（新题从头打印）；
+   *   - SSE judged → setTypedLen(matchLen)（流式预览过则从预览处续打，只打一遍）；
+   *   - 提交成功 res.next_question → setTypedLen(0)。
+   * 故此处不再做 [question_id] 兜底重置——它会在 judged 续打后把进度清 0 造成"第二遍从头打印"。
+   */
   const questionText = currentQuestion?.question_text ?? '';
-  useEffect(() => {
-    setTypedLen(0);
-  }, [currentQuestion?.question_id]);
 
-  /** P2：题目卡打字机推进（thinking 期间逐字展示，进入作答即完整显示） */
+  /** P2：题目卡打字机遮罩（thinking + summary 期间逐字展示）。
+   *  summary 是 judged 直达下一题的首帧——若不做遮罩，新题会在切换到 thinking
+   *  前整屏闪现一次，随后又从头"打印"，即用户看到的"先出全题再逐字打印"怪象。 */
+  const typingOn = (phase === 'thinking' || phase === 'summary') && typedLen < questionText.length;
   useEffect(() => {
-    if (phase !== 'thinking' || typedLen >= questionText.length) return;
+    if (!typingOn) return;
     const t = setTimeout(() => setTypedLen((p) => Math.min(p + 2, questionText.length)), 24);
     return () => clearTimeout(t);
-  }, [typedLen, phase, questionText]);
+  }, [typedLen, typingOn, questionText]);
 
   /** 提交前停止计时与识别 */
   const beforeSubmit = useCallback(() => {
@@ -311,6 +331,8 @@ const InterviewSession = () => {
         ) {
           return;
         }
+        // 换题进入思考：打字机从零开始（仅 applyState 换题路径清零；SSE judged 续打由 judged 分支设置）
+        setTypedLen(0);
         startThinking();
         break;
     }
@@ -409,6 +431,21 @@ const InterviewSession = () => {
         clearTimers();
         speech.stop();
       }
+      // 判题流式追问（interview:judge_stream）：后端逐 chunk 推送追问生成增量，
+      // 前端在 judging 阶段实时预览（只服务判题中；done 终帧用于收尾清理）
+      if (data.kind === 'interview:judge_stream') {
+        if (phaseRef.current !== 'judging' && phaseRef.current !== 'recovering') return;
+        const st = data as { delta?: string; done?: boolean; is_none?: boolean };
+        if (st.done) {
+          // 终帧：is_none=True（无需追问）清空预览，避免把"NONE"展示给用户；
+          // 追问场景保留已流式文本，等 judged 到达后预置打字机进度续打
+          if (st.is_none) setJudgeStreamText('');
+        } else {
+          const delta = st.delta ?? '';
+          if (delta) setJudgeStreamText((p) => (p ? `${p}${delta}` : delta));
+        }
+        return;
+      }
       // v3 判题完成（T3.4）：SSE 为主通道——事件已携带下一题数据，
       // 直接进入下一题（零额外请求，网络面板不再出现"像轮询"的 getInterviewState）；
       // 仅事件缺数据时才回退一次拉取兜底（SSE 抖动场景由 3s 轮询续接）
@@ -427,8 +464,18 @@ const InterviewSession = () => {
           return;
         }
         if (judged.next_question) {
-          // 下一题（追问或基础题）已在事件内 → 直接切换，模拟流式由 summary→thinking 打字机呈现
+          // 下一题（追问或基础题）已在事件内 → 直接切换，模拟流式由 summary→thinking 打字机呈现；
+          // 若本判题已在 judging 阶段流式预览过该追问，则预置打字机进度从已打处续打（只打一遍）
+          const preview = judgeStreamRef.current;
+          judgeStreamRef.current = '';
+          setJudgeStreamText('');
+          const nextText = judged.next_question.question_text ?? '';
+          const matchLen =
+            preview && preview.length > 0 && nextText.startsWith(preview)
+              ? Math.min(preview.length, nextText.length)
+              : 0;
           setCurrentQuestion(judged.next_question);
+          setTypedLen(matchLen); // 已预览过则从预览长度续打，否则清零从新题打印
           setPhase('summary');
           return;
         }
@@ -520,6 +567,7 @@ const InterviewSession = () => {
           startReportPolling();
         } else {
           setCurrentQuestion(res.next_question);
+          setTypedLen(0); // 换题同步清零打字机进度，避免闪现全题
           setPhase('summary'); // 轻量过渡，随即进入思考/作答
         }
         return;
@@ -607,12 +655,14 @@ const InterviewSession = () => {
 
   /** 语音错误提示文案（§8.3） */
   const speechErrorText = !isSupported
-    ? '当前浏览器不支持语音识别，请使用 Chrome / Edge，或直接键盘输入'
-    : speechError === 'network'
-      ? '语音服务连接失败（Chrome 走 Google 云端识别），建议改用 Edge 或键盘输入'
-      : speechError === 'not-allowed'
-        ? '麦克风权限被拒绝，请在浏览器地址栏允许后重试，或改用键盘输入'
-        : null;
+    ? '当前浏览器不支持语音识别，请使用 Chrome，或直接键盘输入'
+    : serviceFatalSpeechError(speechError) && isEdge
+      ? 'Edge 内置语音服务不稳定（Edge 未完整支持 Web Speech API），建议使用 Chrome 或键盘输入'
+      : serviceFatalSpeechError(speechError)
+        ? `语音服务连接失败（识别依赖云端服务），可点击"继续语音识别"重试，或改用键盘输入`
+        : speechError === 'not-allowed'
+          ? '麦克风权限被拒绝，请在浏览器地址栏允许后重试，或改用键盘输入'
+          : null;
 
   if (loadError) {
     return (
@@ -841,10 +891,8 @@ const InterviewSession = () => {
             </span>
           </div>
           <h2 className="text-[22px] font-semibold leading-relaxed text-[#F7F8FA] tracking-wide relative z-[1]">
-            {phase === 'thinking' && typedLen < questionText.length
-              ? questionText.slice(0, typedLen)
-              : questionText}
-            {phase === 'thinking' && typedLen < questionText.length && (
+            {typingOn ? questionText.slice(0, typedLen) : questionText}
+            {typingOn && (
               <span className="inline-block w-[2px] h-[22px] ml-0.5 align-middle bg-[#E6AF4E] animate-pulse" />
             )}
           </h2>
@@ -971,7 +1019,7 @@ const InterviewSession = () => {
         )}
 
         {/* 判题中（v3.1 受理化）：答案已受理，后端异步判题，等待下一题。
-            追问预览已废弃（v1.3）：判题完成由 judged 直接带下一题，只打印一次 */}
+            追问生成经 judge_stream 流式推前端逐字预览（done 后 judged 一次性带下一题续打） */}
         {phase === 'judging' && (
           <div className="flex flex-col items-center gap-5 w-full">
             <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
@@ -979,6 +1027,16 @@ const InterviewSession = () => {
             <p className="text-[13px] text-[#666666] mt-1">
               {waitSeconds > 0 ? `已等待 ${waitSeconds}s · 判题时间视回答长度而定` : '判题完成将自动进入下一题'}
             </p>
+            {/* 判题流式预览（judge_stream）：追问生成逐字上屏，用户感知只剩一次全量纠错等待 */}
+            {judgeStreamText && (
+              <div className="w-full max-w-md">
+                <p className="text-[12px] text-[#666666] mb-1.5">AI 正在组织追问…</p>
+                <p className="text-[14px] leading-relaxed text-[#F0C970] bg-[rgba(217,164,65,0.06)] border border-[rgba(217,164,65,0.15)] rounded-xl px-4 py-3">
+                  {judgeStreamText}
+                  <span className="inline-block w-[2px] h-[14px] ml-0.5 align-middle bg-[#E6AF4E] animate-pulse" />
+                </p>
+              </div>
+            )}
           </div>
         )}
 

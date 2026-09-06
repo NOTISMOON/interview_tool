@@ -383,7 +383,6 @@ def stub_llm(monkeypatch: pytest.MonkeyPatch) -> dict:
 
     monkeypatch.setattr(isvc, "generate_questions", _fake_generate_questions)
     monkeypatch.setattr(isvc, "generate_follow_up_stream", _fake_follow_up_stream)
-    monkeypatch.setattr(isvc, "correct_speech_text", lambda question, transcript, resume_context: transcript)
     monkeypatch.setattr(isvc, "generate_report", _fake_generate_report)
     # SSE推送桩化（避免测试内起事件循环连Redis）
     monkeypatch.setattr(isvc.interview_service, "_publish_sse", lambda *a, **k: None)
@@ -987,8 +986,8 @@ class TestReport:
     ) -> None:
         """测试未生成时返回generating（§13.1）。
 
-        GET /report 惰性兜底触发后台生成线程；因 ai_score 未补齐会在
-        _wait_analysis_complete 内等待 60s，故此处先模拟补齐以免测试挂起。
+        GET /report 仅返回 generating（报告由 MQ Worker 异步生成，不再惰性触发）；
+        此处先模拟补齐异步分析，保证报告生成所需的 ai_score 就绪。
         """
         iid = self._finish_interview(client, fake_redis, ready_resume)
         self._simulate_async_analysis(db_session, iid)
@@ -1014,7 +1013,7 @@ class TestReport:
 
 
 # --------------------------------------------------------------------------
-# v2·异步分析投递 + Fast Decision 即时判定（单LangGraph架构方案 v2）
+# v3·受理化：受理事件投递 + Consumer 判题 / end 终止 / 追问防御回归
 # --------------------------------------------------------------------------
 
 class TestV2AsyncAnalysis:

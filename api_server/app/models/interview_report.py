@@ -24,7 +24,7 @@ class InterviewReport(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="用户ID")
     total_score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, comment="总分")
     dimension_scores: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="各维度得分（技术能力/问题理解/准确性/深度/工程经验/表达能力）"
+        JSON, nullable=True, comment="各维度得分（专业能力/项目实践/问题解决/沟通表达/综合素质/岗位匹配）"
     )
     summary: Mapped[str] = mapped_column(Text, nullable=False, comment="总结")
     strengths: Mapped[dict] = mapped_column(JSON, nullable=False, comment="优势列表")

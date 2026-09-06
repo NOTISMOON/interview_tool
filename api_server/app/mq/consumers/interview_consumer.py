@@ -3,7 +3,7 @@
     - InterviewResumeParseConsumer: 简历AI分析Worker（蓝图§3.4）。
       消费 interview.resume.parse.queue：锁校验 → COS下载 → LangGraph解析 →
       单事务落库 → 释放锁 → 缓存失效 → 完成通知；失败置 status=2 并通知可重试。
-    - InterviewReportConsumer: 面试报告生成消费者（骨架，待后续里程碑接入）。
+    - InterviewReportConsumer: 面试报告生成消费者（MQ 异步生成 + 消息中心通知 + SSE 推送，§13.1）。
 """
 
 import asyncio

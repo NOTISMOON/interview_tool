@@ -2,10 +2,10 @@
 
 编排《面试流程功能文档》主链路：
     创建面试（简历状态硬校验 + 操作锁内预生成基础题落库 + Checkpoint 初始化）
-    → 提交回答（epoch 租约 → 状态版本 → 操作锁 → 幂等检查 → 单次合并 LLM
-      分析 → 规则追问判定 → 逐题落库单事务）
+    → 提交回答（epoch 租约 → 状态版本 → 幂等检查 → analyzing 受理 + Outbox 投递 →
+      MQ Consumer 异步判题/落库/推进 → 流式追问 SSE）
     → 终止（全部答完/时长兜底 → phase=summarizing → 后台报告生成）
-    → 报告查询/重试（generating/ready/failed + 惰性兜底触发）。
+    → 报告查询/重试（generating/ready/failed，报告由 MQ Worker 异步生成，失败可 regenerate）。
 
 并发控制（§5 三层机制，校验顺序 §5.7：epoch 租约 → 状态版本 → 操作锁）：
     ① 操作锁 interview:lock:{id}：单次状态推进互斥，finally 必释放；
@@ -18,37 +18,33 @@
 
 import json
 import logging
+import time
 from datetime import datetime
 
 import redis
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.db.sync_session import SyncSessionLocal
 from app.llm.schemas.interview import InterviewReportResult
 from app.llm.workflow.interview import (
-    ACTION_END,
     ACTION_FOLLOW_UP,
-    correct_speech_text,
-    generate_follow_up_stream,
+    ACTION_NEXT_BASE,
+    analyze_answer,
     generate_questions,
     generate_report,
     invalidate_checkpoint,
-    is_follow_up_none,
     run_fast_decision,
 )
 from app.models.interview import (
     INTERVIEW_STATUS_COMPLETED,
     INTERVIEW_STATUS_IN_PROGRESS,
     INTERVIEW_STATUS_INTERRUPTED,
-    INTERVIEW_TYPE_FULL,
     Interview,
 )
 from app.models.interview_question import InterviewQuestion
 from app.models.resume import (
     RESUME_STATUS_ERROR,
     RESUME_STATUS_PARSING,
-    RESUME_STATUS_READY,
     Resume,
 )
 from app.redis import interview_session as isess
@@ -79,9 +75,9 @@ MAX_INTERVIEW_MINUTES = 90
 INACTIVITY_ABORT_MINUTES = 30
 # 同题分析连续失败跳过阈值（§21）
 MAX_ANALYSIS_FAILURES = 2
-# 同题排队复用等待窗口（秒，T2.2）：等待首个请求完成本判题并复用其结果（略高于 LLM_TIMEOUT=120s）
+# analyzing 残留超时判定阈值（秒，T3.5）：超过该值视为上次判题残留，可重新受理并重投
 WAIT_IN_FLIGHT_SECONDS = 130
-# 同题排队复用轮询间隔（秒，T2.2）
+# （预留）analyzing 残留轮询间隔，当前未使用
 WAIT_IN_FLIGHT_POLL_INTERVAL = 0.5
 # 报告后台生成重试次数（§13.1）
 MAX_REPORT_RETRIES = 3
@@ -92,6 +88,8 @@ REPORT_ANALYSIS_POLL_INTERVAL = 0.5
 # 基础题落库顺序（大众化四维度）：技术八股(1)→项目与社会实践(2)→架构设计(4)→综合素养(3)，
 # 综合素养固定放最后（排序兜底，防 LLM 输出乱序）
 CATEGORY_ORDER = {1: 0, 2: 1, 4: 2, 3: 3}
+# 基础题正文分片流推送间隔（秒）：3 字/55ms 慢节奏打字（服务端打字机）
+BaseQuestionSliceDelay = 0.055
 
 
 class InterviewNotFoundError(Exception):
@@ -598,6 +596,13 @@ class InterviewService:
                 db, cache, interview, question_index, answer, tab_epoch, answer_duration
             )
 
+            # 主链分析（先问题落库 → 分析 → 分析落库，§六 v3）：判题/落库完成后，
+            # 锁外调用 AnswerAnalysisGraph（4 路并行）并落库 ai_score/ai_comment，
+            # 以纠错后回答 corrected_answer 更新 user_answer；失败标记"分析失败"不阻断推进
+            qid = result.get("question_id")
+            if qid:
+                self._analyze_and_persist(db, cache, interview, int(qid))
+
             # SSE 判题完成（前端轮询兜底，SSE 加速进入下一题，T3.4）
             # 事件携带下一题数据：前端无需再额外请求状态即可直接进入下一题，
             # 网络面板不再出现"像轮询"的 getInterviewState 请求（SSE 为主通道）
@@ -645,8 +650,8 @@ class InterviewService:
             - Fast Decision 与追问规则判定移出操作锁（LLM 最长 120s 不再持锁）；
             - 操作锁只在 _persist_and_advance_locked 中持有（版本复校 + 单事务
               落库 + checkpoint 推进，毫秒级写）；
-            - 同题并发由入口 processing 互斥标记（T2.2）拦截，不再 409 busy，
-              排队者等待首请求完成并复用其结果。
+            - 同题并发由入口幂等预检 + analyzing 去重处理（T3.5）：残留超时后
+              重新受理并重投分析，不再依赖 409 busy 排队。
 
         Args:
             db: 数据库同步会话。
@@ -661,7 +666,7 @@ class InterviewService:
             提交回答响应字典。
 
         Raises:
-            InterviewConflictError: 版本不符或推进锁竞争（409，调用方清 processing）。
+            InterviewConflictError: 版本不符或推进锁竞争（409，调用方回退 phase 后可重试）。
         """
         interview_id = interview.id
         questions = list(interview_question_repository.list_by_interview(db, interview_id))
@@ -682,7 +687,7 @@ class InterviewService:
                 "version_mismatch", self._state_from(db, interview, checkpoint, questions)
             )
 
-        # 写入 analyzing 状态（崩溃后可凭未落库题目重试，§21；processing 标记 TTL 兜底）
+        # 写入 analyzing 状态（崩溃后可凭未落库题目重试，§21；analyzing 残留由超时兜底重新受理）
         checkpoint.update(
             {
                 "phase": PHASE_ANALYZING,
@@ -693,8 +698,8 @@ class InterviewService:
         )
         isess.save_checkpoint_sync(cache, interview_id, checkpoint)
 
-        # 无锁判题（规则判问尽 + 单次流式 LLM 产出追问，LLM 在消费端执行不持锁，T2.1/P1）
-        follow_up_text, corrected_answer = self._judge_no_lock(
+        # 无锁判题（interview_graph 判定下一动作 + 流式追问 SSE，LLM 在消费端执行不持锁，T2.1/P1）
+        next_action, follow_up_text = self._judge_no_lock(
             db, cache, interview, checkpoint, target, question_index, answer
         )
 
@@ -706,7 +711,7 @@ class InterviewService:
         try:
             return self._persist_and_advance_locked(
                 db, cache, interview, checkpoint, questions, target, question_index,
-                tab_epoch, answer_duration, follow_up_text, corrected_answer,
+                tab_epoch, answer_duration, next_action, follow_up_text, answer,
             )
         finally:
             isess.release_lock_sync(cache, interview_id, token)
@@ -720,14 +725,19 @@ class InterviewService:
         target: InterviewQuestion,
         question_index: int,
         answer: str,
-    ) -> tuple[str | None, str]:
-        """P1 判题链：规则判问尽 + 单次流式 LLM 产出追问（只读 DB，不持操作锁）。
+    ) -> tuple[str, str | None]:
+        """v3 判题链：经 interview_graph 判定下一动作（LLM 意图判定，只读 DB 不持锁）。
+
+        interview_graph 节点链：fast_decision（LLM 判 follow_up/next_base/end）
+        → follow_up_stream（判 follow_up 时流式生成追问，SSE question_stream 直推前端，
+        追问文本写入全局状态 pending_follow_up，不入问题队列）→ route（防御）。
+        语音纠错不再单独调用：纠错指令已融入分析/追问提示词，以分析结果
+        corrected_answer 落库时更新 user_answer。
 
         与旧 run_fast_decision 判定链的差异：
-            - end/下一基础 由规则判定（unanswered_base_after / 时长 / 追问上限），不依赖 LLM；
-            - 可追问候选时，单个 LLM 以【流式】输出追问文本或 NONE（回答质量判断隐含
-              在输出中），Consumer 边收集边经 SSE judge_stream 推送前端打字机（P1）；
-            - 判题前统一经优化后的纠错 LLM 做最小文本规整（不区分语音/键盘，混合输入安全）。
+            - 追问文本由 follow_up_stream 节点流式产出（单次 LLM，边生成边 SSE）；
+            - end/下一基础 动作仍由 LLM 判定（意图判定保留），route 节点叠加
+              Redis 中断/追问上限/超时等防御（v2 规则不再替代 LLM 判定）。
 
         LLM 连续失败 2 次跳过追问继续（§21）。
 
@@ -741,20 +751,14 @@ class InterviewService:
             answer: 回答文本。
 
         Returns:
-            (follow_up_text, corrected_answer)；follow_up_text 为空=无追问（走下一基础/结束）。
-
-        Raises:
-            Exception: 流式追问 LLM 失败且未达跳过阈值（调用方接管，前端可重试）。
+            (next_action, follow_up_text)；follow_up_text 非空=LLM 判追问（文本已SSE直推）。
+            异常时由调用方按 analysis_fail_count 兜底。
         """
         interview_id = interview.id
         resume = resume_repository.get_by_id(db, interview.resume_id)
         resume_context = self._load_resume_context(db, cache, resume)
 
-        # 统一文本规整（语音转写+键盘修正混合输入无法二分，不做 voice 条件判断）：
-        # 每次判题前经优化后的纠错 LLM 做最小规整（无识别错误特征则原样返回，P1）
-        corrected_answer = correct_speech_text(target.question_text, answer, resume_context)
-
-        # 基础题快照与计数（规则判定是否问尽 / 追问上限，§10/§12）
+        # 基础题快照与计数（供图 route 防御：追问上限 / 问尽 / 下一基础题）
         questions = list(interview_question_repository.list_by_interview(db, interview_id))
         base_questions = [
             {
@@ -769,86 +773,114 @@ class InterviewService:
         ]
         base_count = len(base_questions)
         total_follow_up_now = interview_question_repository.count_follow_up_total(db, interview_id)
-        unanswered_base_after = len(
-            [q for q in base_questions if q["question_no"] > target.question_no and q["question_no"] <= base_count]
-        )
-        elapsed_over = self._elapsed_over_limit(cache, interview_id, checkpoint, MAX_INTERVIEW_MINUTES)
-
-        # 规则：可追问候选（未超时 / 全场追问未达上限 / 本基础题尚未追问过）
-        follow_up_text: str | None = None
         parent = target if target.is_follow_up == 0 else self._find_parent(questions, target)
         per_base = (
             interview_question_repository.count_follow_up_by_parent(db, parent.id)
             if parent is not None else 1
         )
-        can_follow_up = (
-            not elapsed_over
-            and per_base < 1
-            and total_follow_up_now < base_count
-            and bool(corrected_answer.strip())
-        )
+        elapsed_over = self._elapsed_over_limit(cache, interview_id, checkpoint, MAX_INTERVIEW_MINUTES)
 
         try:
-            if can_follow_up:
-                # 单次流式 LLM：追问文本或 NONE（回答质量判断隐含在输出中）
-                follow_up_text = self._stream_follow_up(
-                    cache, interview, target.question_text, corrected_answer, resume_context
-                )
-            checkpoint["analysis_fail_count"] = 0
-            # 无锁段同样落 Checkpoint：失败计数归零需持久化（推进段以最新 load 为准，T2.1）
-            isess.save_checkpoint_sync(cache, interview_id, checkpoint)
+            # 图判定：fast_decision（LLM 意图判定）→ follow_up_stream（流式追问+SSE）→ route（防御）
+            result = run_fast_decision(
+                interview_id=interview_id,
+                interview_type=interview.type,
+                resume_context=resume_context,
+                base_questions=base_questions,
+                question_no=target.question_no,
+                question_text=target.question_text,
+                answer=answer,
+                follow_up_total=total_follow_up_now,
+                unanswered_base_after=len(base_questions)
+                - sum(1 for q in base_questions if q["question_no"] < target.question_no),
+                question_queue=None,
+                per_base_follow_up_count=per_base,
+                elapsed_over=elapsed_over,
+                interrupted=interview.status != INTERVIEW_STATUS_IN_PROGRESS,
+                user_id=interview.user_id,
+            )
+            next_action = result["next_action"]
+            follow_up_text = result.get("follow_up_question") or None
         except Exception:
             checkpoint["analysis_fail_count"] = int(checkpoint.get("analysis_fail_count", 0)) + 1
             if checkpoint["analysis_fail_count"] >= MAX_ANALYSIS_FAILURES:
-                # 连续2次追问生成失败：跳过追问并继续（§21），不留死锁态
+                # 连续2次判题失败：跳过追问并继续（§21），不留死锁态
                 logger.exception(
-                    "追问生成连续失败跳过: interview_id=%s question_index=%s",
+                    "判题连续失败跳过: interview_id=%s question_index=%s",
                     interview_id, question_index,
                 )
-                follow_up_text = None
-                isess.save_checkpoint_sync(cache, interview_id, checkpoint)
-            else:
-                # 回退 phase=answering 允许重试（§21），异常向上抛（调用方清 processing 标记）
-                checkpoint["phase"] = PHASE_ANSWERING
-                isess.save_checkpoint_sync(cache, interview_id, checkpoint)
-                raise
+                return ACTION_NEXT_BASE, None
+            # 回退 phase=answering 允许重试（§21），异常向上抛（调用方接管重试）
+            checkpoint["phase"] = PHASE_ANSWERING
+            isess.save_checkpoint_sync(cache, interview_id, checkpoint)
+            raise
+        finally:
+            pass
 
-        return follow_up_text, corrected_answer
+        # 基础题正文分片流（服务端打字机）：判定 next_base 且未结束 → DB 文本分片推前端
+        if next_action == ACTION_NEXT_BASE:
+            self._push_base_stream(
+                cache, interview, target.question_no,
+                questions, checkpoint, base_count,
+                result.get("next_base_text") or "",
+            )
+        else:
+            checkpoint["analysis_fail_count"] = 0
+            isess.save_checkpoint_sync(cache, interview_id, checkpoint)
+        return next_action, follow_up_text
 
-    def _stream_follow_up(
+    def _push_base_stream(
         self,
         cache: redis.Redis,
         interview: Interview,
-        question: str,
-        answer: str,
-        resume_context: dict,
-    ) -> str | None:
-        """流式收集追问文本（P1 预览已废弃，v1.3：不再推送 judge_stream）。
+        current_no: int,
+        questions: list[InterviewQuestion],
+        checkpoint: dict,
+        base_count: int,
+        fallback_text: str | None = None,
+    ) -> None:
+        """基础题正文分片流推送（服务端打字机，DB 文本按 3 字/55ms 分片，SSE question_stream）。
 
-        仍以流式方式收集 LLM 输出以获得完整追问文本（判定质量/生成 NONE），但
-        取消逐段 SSE 推送：判题完成后由 judged 事件一次性携带下一题（追问）直达
-        前端，题目卡仅打印一次，避免"判题中预览 + 进入下一题再打一遍"的重复体验。
+        追问文本流已由图 follow_up_stream 节点直推；基础题正文在此按慢节奏分片推送，
+        done 终帧携带完整文本（前端据此展示新题，不再模拟打字/预览续打）。
 
         Args:
             cache: 同步Redis客户端。
             interview: 面试会话ORM对象。
-            question: 当前题目文本。
-            answer: 用户回答（纠错后或原文）。
-            resume_context: 简历结构化上下文。
-
-        Returns:
-            追问文本（≤300字）；NONE/空返回 None（无追问）。
+            current_no: 当前基础题号（取下一题）。
+            questions: 发问顺序题目快照。
+            checkpoint: 当前Checkpoint（仅为占位兼容，未读取）。
+            base_count: 基础题总数（占位兼容，未读取）。
+            fallback_text: 图 route 给出的 next_base_text（优先使用）；空则查 DB。
         """
-        import time
+        text = fallback_text or ""
+        if not text:
+            nxt = self._next_base_question(questions, current_no)
+            if nxt is not None:
+                text = nxt.question_text
 
-        full: list[str] = []
-        for chunk in generate_follow_up_stream(question, answer, resume_context):
-            full.append(chunk)
+        def _publish(delta: str, done: bool = False, final_text: str | None = None) -> None:
+            """发布一条 question_stream 事件（正文增量或 done 终帧）。"""
+            self._publish_sse(
+                interview.user_id,
+                {
+                    "kind": "interview:question_stream",
+                    "session_id": interview.id,
+                    "question_index": current_no,
+                    "delta": delta,
+                    "done": done,
+                    "is_none": False,
+                    "final_text": final_text,
+                },
+            )
 
-        text = "".join(full).strip()
-        if is_follow_up_none(text):
-            return None
-        return text[:300]
+        if not text:
+            _publish("", done=True, final_text="")
+            return
+        for i in range(0, len(text), 3):
+            _publish(text[i : i + 3])
+            time.sleep(BaseQuestionSliceDelay)
+        _publish("", done=True, final_text=text)
 
     def _persist_and_advance_locked(
         self,
@@ -861,13 +893,18 @@ class InterviewService:
         question_index: int,
         tab_epoch: int,
         answer_duration: int | None,
+        next_action: str,
         follow_up_text: str | None,
-        corrected_answer: str,
+        answer: str,
     ) -> dict:
-        """T2.1 短持锁推进：锁内版本复校 + 单事务落库 + checkpoint 推进（毫秒级）。
+        """v3 短持锁推进：锁内版本复校 + 单事务落库（问题先落库）+ checkpoint 推进。
 
-        判题结果（follow_up_text/corrected_answer）已由无锁段 _judge_no_lock
+        判题结果（next_action/follow_up_text）已由无锁段 _judge_no_lock（interview_graph）
         求得，本方法不调 LLM；锁内只做版本复校与状态写，持锁窗口毫秒级。
+        追问落库沿用【生成即建行】（与本题 user_answer 同事务，保证 next_q/id/幂等稳定），
+        但【不入 Redis 问题队列】（enqueue_head 移除，追问不参与发问顺序镜像）；
+        追问文本已由 follow_up_stream 节点 SSE 直推前端。分析（AnswerAnalysisGraph）由
+        调用方在锁外主链同步执行（先问题落库 → 分析 → 分析落库，见 process_answer_submitted）。
 
         Args:
             db: 数据库同步会话。
@@ -879,8 +916,9 @@ class InterviewService:
             question_index: 所答题目题序。
             tab_epoch: 客户端租约epoch（回写Checkpoint）。
             answer_duration: 回答时长（秒）。
-            follow_up_text: 裁定生成的追问文本（无则 None）。
-            corrected_answer: 纠错后的回答文本（落库用）。
+            next_action: interview_graph 判定的下一动作（follow_up/next_base/end）。
+            follow_up_text: 判 follow_up 时生成的追问文本（已SSE直推；无则 None）。
+            answer: 用户回答原文（user_answer 落原文；纠错后文本由分析 corrected_answer 更新）。
 
         Returns:
             提交回答响应字典。
@@ -906,16 +944,16 @@ class InterviewService:
         questions = latest_questions
         target = questions[question_index - 1]
 
-        # 单事务：落库本题 user_answer（+ 可能追问题）+ 投递异步分析 outbox（§14.2/§六）
-        # user_answer 落纠错后文本，保证历史/报告与异步分析基于同一份文本
+        # 单事务：落库本题 user_answer（问题先落库）+ 追问题（若判 follow_up）→ 主链锁外分析
+        # user_answer 落原文（纠错后文本由主链分析 corrected_answer 更新，P2）
         try:
-            target.user_answer = corrected_answer
+            target.user_answer = answer
             if answer_duration is not None:
                 target.answer_duration = answer_duration
             db.flush()
 
-            follow_up_row = None
-            if follow_up_text:
+            follow_up_row: InterviewQuestion | None = None
+            if next_action == ACTION_FOLLOW_UP and follow_up_text:
                 follow_up_row = interview_question_repository.create_follow_up(
                     db,
                     interview_id,
@@ -923,16 +961,8 @@ class InterviewService:
                     question_type=target.question_type,
                     category=target.category,
                     parent_question_id=target.id,
-                    question_text=follow_up_text,
+                    question_text=follow_up_text[:300],
                 )
-
-            # 异步全量分析（OUTBOX 同事务原子投递；Worker 补 ai_score/ai_comment，§六）
-            self._dispatch_async_analysis(
-                db, interview_id, int(target.id), int(target.question_no),
-                target.question_text, corrected_answer, answer_duration, int(interview.resume_id or 0),
-                int(interview.user_id),
-            )
-
             db.commit()
         except Exception:
             db.rollback()
@@ -943,14 +973,13 @@ class InterviewService:
         # 刷新题目快照（含新追问），确定下一题（§12）
         questions = list(interview_question_repository.list_by_interview(db, interview_id))
         if follow_up_row is not None:
-            next_q = follow_up_row
+            next_q: InterviewQuestion | None = follow_up_row
         else:
             next_q = self._next_base_question(questions, target.question_no)
-        # T3.8/T3.9：推进后同步问题队列镜像（当前题出队；追问插队首，队首即下一题）
+        # T3.8/T3.9：推进后同步问题队列镜像（当前题出队）。追问【不入队】：
+        # 追问文本已 SSE 直推，不在 Redis 队列中占位（enqueue_head 移除）
         try:
             isess.remove_from_queue(cache, interview_id, target.id)
-            if follow_up_row is not None:
-                isess.enqueue_head(cache, interview_id, follow_up_row.id)
         except Exception:
             logger.exception("问题队列镜像同步失败: interview_id=%s", interview_id)
         elapsed_over = self._elapsed_over_limit(cache, interview_id, checkpoint, MAX_INTERVIEW_MINUTES)
@@ -1011,7 +1040,8 @@ class InterviewService:
                 {"kind": "interview:completed", "session_id": interview_id},
             )
 
-        # 全量分析异步化：同步响应不再携带逐题详评，标记为"待异步分析"（§七/§八决策2）
+        # 全量分析主链同步化：响应先返回下一题占位，分析（AnswerAnalysisGraph）由
+        # process_answer_submitted 在锁外调用并落库（先问题落库 → 分析 → 分析落库）
         analysis_out = {
             "score": 0,
             "comment": "分析中，稍后展示",
@@ -1029,53 +1059,71 @@ class InterviewService:
             "duplicated": False,
             "phase": phase,
             "next_question": next_out,
+            "question_id": int(target.id),
+            "has_follow_up": follow_up_row is not None,
         }
 
-    def _dispatch_async_analysis(
+    def _analyze_and_persist(
         self,
         db: Session,
-        interview_id: int,
+        cache: redis.Redis,
+        interview: Interview,
         question_id: int,
-        question_no: int,
-        question_text: str,
-        answer: str,
-        answer_duration: int | None,
-        resume_id: int,
-        user_id: int,
     ) -> None:
-        """投递面试回答异步分析事件（Transactional Outbox，§5.1）。
+        """主链分析：锁外调用 AnswerAnalysisGraph 并落库单题分析结果（§六 v3）。
 
-        与本题 user_answer 落库同一事务原子提交：Worker 消费后在 MySQL 补
-        ai_score/ai_comment，前端/同步 API 不等待（§六：返回下一题不等待分析）。
+        落库顺序（先问题落库 → 分析 → 分析落库）：本题 user_answer/追问题已由
+        _persist_and_advance_locked 落库为"原文"，分析完成后在此同一会话补
+        ai_score/ai_comment 与 answer_duration，并以纠错后回答 corrected_answer
+        更新 user_answer（语音/输入识别错误已由分析提示词顺带纠错，P2）。
+        分析失败标记 ai_comment="分析失败"（ai_score=NULL），不阻断下一题推进。
 
         Args:
-            db: 数据库同步会话（当前事务内）。
-            interview_id: 面试会话ID。
-            question_id: 题目ID。
-            question_no: 基础题号。
-            question_text: 题目文本。
-            answer: 用户回答。
-            answer_duration: 回答时长（秒）。
-            resume_id: 简历ID（Worker 加载简历上下文）。
-            user_id: 用户ID。
+            db: 数据库同步会话（独立会话，与消费主会话复用）。
+            cache: 同步Redis客户端。
+            interview: 面试会话ORM对象。
+            question_id: 已落库的题目ID。
         """
-        priority_ref = f"interview:{interview_id}:q{question_id}"
-        sync_outbox_repository.insert_event(
-            db,
-            event_type="interview.analysis",
-            aggregate_type="interview",
-            aggregate_id=str(interview_id),
-            payload={
-                "interview_id": interview_id,
-                "user_id": user_id,
-                "question_id": question_id,
-                "question_no": question_no,
-                "question_text": question_text,
-                "answer": answer,
-                "answer_duration": answer_duration,
-                "resume_id": resume_id,
-                "priority_ref": priority_ref,
-            },
+        question = interview_question_repository.get_by_id(db, question_id)
+        if question is None or question.ai_score is not None:
+            # 不存在或已分析（幂等）→ 跳过
+            return
+        resume = resume_repository.get_by_id(db, interview.resume_id)
+        resume_context = self._load_resume_context(db, cache, resume)
+        try:
+            analysis = analyze_answer(
+                question.question_text, question.user_answer or "", resume_context
+            )
+        except Exception as exc:  # noqa: BLE001 - 分析失败标记不阻断流程
+            logger.error(
+                "回答主链分析失败标记 interview_id=%s question_id=%s err=%s",
+                interview.id, question_id, exc,
+            )
+            try:
+                question.user_answer = question.user_answer or ""
+                question.ai_comment = "分析失败"
+                if question.answer_duration is None:
+                    question.answer_duration = 0
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("标记回答分析失败异常 question_id=%s", question_id)
+            return
+        try:
+            # 分析落库：ai_score/ai_comment + 纠错后回答更新 user_answer（P2）
+            corrected = (analysis.corrected_answer or "").strip() or question.user_answer or ""
+            question.user_answer = corrected
+            question.ai_score = analysis.score
+            question.ai_comment = analysis.comment
+            if question.answer_duration is None:
+                question.answer_duration = 0
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("分析结果落库失败 interview_id=%s question_id=%s", interview.id, question_id)
+        logger.info(
+            "主链分析完成 interview_id=%s question_id=%s score=%s",
+            interview.id, question_id, analysis.score,
         )
 
     def _dispatch_report_generation(
@@ -1106,31 +1154,6 @@ class InterviewService:
                 "user_id": user_id,
                 "resume_id": resume_id,
             },
-        )
-
-    def _wait_analysis_complete(self, db: Session, interview_id: int) -> None:
-        """报告生成前轮询等待异步分析补齐（§八决策4=可行，60s 上限）。
-
-        逐题检查 ai_score：已答但未分析完的题在等待期内补齐；超时后不再阻塞，
-        由报告组装时对缺分析分的题打"待补充"标记（§六：报告依赖完整性兜底）。
-
-        Args:
-            db: 数据库同步会话。
-            interview_id: 面试会话ID。
-        """
-        import time
-
-        deadline = time.monotonic() + REPORT_ANALYSIS_WAIT_SECONDS
-        while time.monotonic() < deadline:
-            questions = list(interview_question_repository.list_by_interview(db, interview_id))
-            pending = [q for q in questions if q.user_answer is not None and q.ai_score is None]
-            if not pending:
-                return
-            db.expire_all()
-            time.sleep(REPORT_ANALYSIS_POLL_INTERVAL)
-        logger.info(
-            "报告前异步分析等待超时，缺分析题将带待补充标记: interview_id=%s",
-            interview_id,
         )
 
     def _idempotent_response(
@@ -1236,7 +1259,7 @@ class InterviewService:
     # ------------------------------------------------------------------
 
     def get_report(self, db: Session, cache: redis.Redis, user_id: int, interview_id: int) -> dict:
-        """查询面试报告（未生成时惰性兜底触发一次并返回generating，§13.1）。
+        """查询面试报告（未生成时返回generating，由MQ Worker异步生成，§13.1）。
 
         Args:
             db: 数据库同步会话。
@@ -1524,8 +1547,8 @@ class InterviewService:
         """
         interview_id = interview.id
         checkpoint = isess.load_checkpoint_sync(cache, interview_id) or {}
-        # 报告前轮询补齐异步分析（§八决策4=可行：等待上限60s，超时带"待补充"）
-        self._wait_analysis_complete(db, interview_id)
+        # v3 主链分析（先问题落库→分析→分析落库）：各题 ai_score 已在 Answer Consumer
+        # 同步补齐，报告组装无需再轮询等待（_wait_analysis_complete 移除）
         questions = list(interview_question_repository.list_by_interview(db, interview_id))
         resume = resume_repository.get_by_id(db, interview.resume_id)
         resume_context = self._load_resume_context(db, cache, resume)

@@ -1,11 +1,10 @@
-"""LLM 输出 Schema 包，统一导出各业务结构化输出模型。"""
+"""LLM 输出 Schema 包，统一导出面试业务结构化输出模型（简历解析模型见 schemas/resume.py）。"""
 
 from app.llm.schemas.interview import (
     AnswerAnalysisResult,
     FastDecisionResult,
     InterviewReportResult,
     QuestionGenerationResult,
-    SpeechCorrectionResult,
 )
 
 __all__ = [
@@ -13,5 +12,4 @@ __all__ = [
     "FastDecisionResult",
     "InterviewReportResult",
     "QuestionGenerationResult",
-    "SpeechCorrectionResult",
 ]

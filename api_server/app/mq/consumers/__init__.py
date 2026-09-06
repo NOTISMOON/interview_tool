@@ -10,7 +10,8 @@ from app.mq.consumers.feed_consumer import FeedPushConsumer
 from app.mq.consumers.follow_consumer import FollowCacheSyncConsumer
 from app.mq.consumers.follow_post_consumer import FollowPostNotifyConsumer
 from app.mq.consumers.interaction_consumer import InteractionCacheSyncConsumer
-from app.mq.consumers.interview_analysis_consumer import InterviewAnalysisConsumer
+# v3：回答分析并入 Answer Consumer 主链（先问题落库→分析→分析落库），
+# 独立 interview.analysis 消费者停用（InterviewAnalysisConsumer 不再注册启动）
 from app.mq.consumers.interview_answer_consumer import InterviewAnswerConsumer
 from app.mq.consumers.interview_consumer import (
     InterviewReportConsumer,
@@ -23,7 +24,6 @@ from app.mq.consumers.notification_consumer import NotificationConsumer
 CONSUMER_REGISTRY: dict[str, type] = {
     "InterviewResumeParseConsumer": InterviewResumeParseConsumer,
     "InterviewReportConsumer": InterviewReportConsumer,
-    "InterviewAnalysisConsumer": InterviewAnalysisConsumer,
     "InterviewAnswerConsumer": InterviewAnswerConsumer,
     "FollowCacheSyncConsumer": FollowCacheSyncConsumer,
     "CommentCacheSyncConsumer": CommentCacheSyncConsumer,
@@ -42,7 +42,6 @@ __all__ = [
     "FollowCacheSyncConsumer",
     "FollowPostNotifyConsumer",
     "InteractionCacheSyncConsumer",
-    "InterviewAnalysisConsumer",
     "InterviewAnswerConsumer",
     "InterviewReportConsumer",
     "InterviewResumeParseConsumer",

@@ -5,8 +5,11 @@
  *   - webkitSpeechRecognition（Chrome/Edge）持续识别，lang=zh-CN；
  *   - interimResults 实时上屏，最终结果累加为 transcript；
  *   - 识别结果允许用户编辑修正后再提交（textarea 受控回填）；
- *   - onerror 分类处理：network（建议换 Edge）、not-allowed（提示开权限）、
+ *   - onerror 分类处理：network / service-not-allowed / language-not-supported
+ *     （服务级不可用，停止自动续听避免无限重试循环）、not-allowed（提示开权限）、
  *     no-speech（静默续听）；连续失败可随时改用键盘输入（不降级整场）；
+ *   - Edge 已知平台缺陷：Edge Chromium 未完整启用 SpeechRecognition，即使能
+ *     new 出对象也常报 network/language-not-supported -> isEdge 供 UI 给出专属提示；
  *   - Firefox 等不支持浏览器：isSupported=false，仅键盘输入；
  *   - Chrome 识别经 Google 云端处理，断网/防火墙可能报 network。
  */
@@ -34,6 +37,13 @@ interface SpeechRecognitionEventLike {
 
 type RecognitionCtor = new () => SpeechRecognitionLike;
 
+/** 服务级不可用错误码：识别服务本身挂了/不支持该语言，自动续听只会无限重试失败。
+ *  （Edge 未完整启用 SpeechRecognition 时即典型报 network/language-not-supported） */
+const SERVICE_FATAL_ERRORS = new Set(['network', 'service-not-allowed', 'language-not-supported', 'audio-capture']);
+
+/** 是否为 Edge（已知 SpeechRecognition 半套实现，报错频繁，UI 据此给出专属提示） */
+const isEdgeEnv = () => typeof navigator !== 'undefined' && /Edg\//.test(navigator.userAgent);
+
 /** 获取浏览器 SpeechRecognition 构造器（带 webkit 前缀） */
 function getRecognitionCtor(): RecognitionCtor | null {
   const w = window as unknown as {
@@ -47,6 +57,8 @@ function getRecognitionCtor(): RecognitionCtor | null {
 interface UseSpeechRecognition {
   /** 当前浏览器是否支持语音识别 */
   isSupported: boolean;
+  /** 是否为 Edge（SpeechRecognition 半套实现，UI 可提示改用 Chrome） */
+  isEdge: boolean;
   /** 是否正在识别（录音中） */
   isListening: boolean;
   /** 已确认的累计转写文本（可编辑，编辑后不会被覆盖） */
@@ -70,6 +82,7 @@ const RESTART_DELAY_MS = 400;
 
 export function useSpeechRecognition(): UseSpeechRecognition {
   const [isSupported] = useState<boolean>(() => getRecognitionCtor() !== null);
+  const [isEdge] = useState<boolean>(() => isEdgeEnv());
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscriptState] = useState('');
   const [interim, setInterim] = useState('');
@@ -117,11 +130,14 @@ export function useSpeechRecognition(): UseSpeechRecognition {
       if (code !== 'aborted') {
         setError(code);
       }
-      // no-speech：静默周期无输入，onend 会自动续听
-      if (code === 'not-allowed' || code === 'service-not-allowed') {
+      // not-allowed / service-not-allowed：权限被拒或服务被禁用 → 停止自动续听
+      // 服务级不可用（network 等）：Edge 等环境下会无限报错，停止自动续听防止
+      // 死循环重试（onend 不再重启，用户可点"继续语音识别"手动恢复）
+      if (code === 'not-allowed' || SERVICE_FATAL_ERRORS.has(code)) {
         manualStopRef.current = true;
         setIsListening(false);
       }
+      // no-speech：静默周期无输入，onend 会自动续听
     };
 
     recognition.onend = () => {
@@ -208,5 +224,5 @@ export function useSpeechRecognition(): UseSpeechRecognition {
     };
   }, []);
 
-  return { isSupported, isListening, transcript, interim, error, start, stop, reset, setTranscript };
+  return { isSupported, isEdge, isListening, transcript, interim, error, start, stop, reset, setTranscript };
 }

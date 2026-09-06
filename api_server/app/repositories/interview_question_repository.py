@@ -52,23 +52,6 @@ class InterviewQuestionRepository:
         stmt = select(InterviewQuestion).where(InterviewQuestion.interview_id == interview_id).order_by(*_ORDER)
         return db.execute(stmt).scalars().all()
 
-    def count_base(self, db: Session, interview_id: int) -> int:
-        """统计基础题数量（终止条件与追问上限判定用，§10/§12.1）。
-
-        Args:
-            db: 数据库同步会话。
-            interview_id: 面试会话ID。
-
-        Returns:
-            基础题（is_follow_up=0）总数。
-        """
-        stmt = (
-            select(func.count())
-            .where(InterviewQuestion.interview_id == interview_id)
-            .where(InterviewQuestion.is_follow_up == 0)
-        )
-        return db.execute(stmt).scalar_one() or 0
-
     def count_answered(self, db: Session, interview_id: int) -> int:
         """统计已答题目数量（含追问，Checkpoint 冗余字段）。
 

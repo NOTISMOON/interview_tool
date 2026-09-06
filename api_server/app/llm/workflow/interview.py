@@ -1,29 +1,36 @@
-"""面试模块 LangGraph 工作流（v2·单图承载面试节奏 + Fast Decision 即时判定）。
+"""面试模块 LangGraph 工作流（v3·interview_graph 重新掌控面试节奏 + AnswerAnalysisGraph 异步分析）。
 
-按《面试模块单LangGraph架构方案.md》重构：
-    - 单个 InterviewGraph 承载整场面试节奏控制（thread_id = interview_id），
-      用 LangGraph checkpointer（Redis，跨进程共享持久化）保存题目队列、
-      当前题序等图内状态，重启/刷新后可恢复。
-    - 图中含 question_generation / speech_correct / fast_decision / routing 节点：
-        创建面试:  init -> question_agent(批量预生成基础题) -> routing(出首题)
-        提交回答:  speech_correct(LLM 纠错语音识别文本)
-                   -> fast_decision(即时判定下一题: 追问/下一基础/结束)
-                   -> routing(出下一题 / 结束)。
-    - 全量分析评分（Answer Analysis / Score）不走同步路径，由异步 Worker
-      消费 outbox 事件完成（见 app/mq/consumers/interview_analysis_consumer.py）。
+对齐《面试模块单LangGraph架构方案.md》：
+    - interview_graph 承载整场面试的【运行时节奏控制】：每次提交回答后 invoke
+      （thread_id = interview_id），节点判定下一动作 / 产出追问并 SSE 直推前端，
+      用 LangGraph checkpointer（Redis，跨进程共享持久化）保存全局状态（基础题
+      快照、问题队列、当前题指针、pending 追问、中断标记），跨轮保留、重启可恢复。
+    - 创建面试【不进入图】：基础题仍由 service 直接调 generate_questions() 批量
+      预生成落库（runtime 图只做问答推进，不做出题）。
+    - 图的三态（compile(checkpointer, input=.., output=..) 标准用法）：
+        输入状态 InterviewInput ：本轮回答数据（question_no/question_text/answer/...）。
+        全局状态 InterviewState ：checkpointer 持久化的节奏事实源（跨轮保留）。
+        输出状态 InterviewOutput ：invoke 返回给 service（next_action/追问/下一基础题）。
+    - 追问【不入 question_queue】：fast_decision 判 follow_up 后，追问文本写入全局
+      状态 pending_follow_up，经 SSE 直推前端、Redis checkpoint 记为当前题；用户
+      回答追问后才在落库阶段建 DB 行（先出题落库 → 分析 → 分析落库，见 service）。
+    - 语音纠错不再单独成节点/调用：纠错指令融入分析/追问提示词，以纠错后回答更新
+      user_answer（P2）。
+    - answer_analysis（内容/技术深度/完整逻辑/综合评分 4 路并行聚合）仍由
+      AnswerAnalysisGraph 承担，转入主链判题后同步执行（由 service 调 analyze_answer_parallel）。
 
-安全设计（对齐项目记忆中的关键工程约束）：
-    - 幂等 MUST 留在 service 层：图只做「给定当前题回答，产出下一题」的单步推进，
-      不引入 interrupt/resume 双推进；重复 POST 由 _advance_with_lock 幂等预检拦截。
-    - persist / 并发控制留在 API 层：图不写库、不碰锁/epoch；只负责 LLM 决策与
-      状态轻量推进，题目与回答的落库、三层并发控制仍由 interview_service 编排。
-    - answer_analysis 仍是「单次合并 LLM 节点」（不拆分 Score），只是移到异步路径。
+安全设计（保持不变）：
+    - 幂等 MUST 留在 service 层：图只做「给定当前题回答，判定下一动作并产出追问」的
+      单步推进，重复 POST 由 service 层幂等预检（§5.9）拦截。
+    - persist / 并发控制留在 API 层：图不写库、不碰锁/epoch；只负责 LLM 决策与状态
+      轻量推进，题目与回答的落库、三层并发控制仍由 interview_service 编排。
 
-同步路径 LLM 调用仅三款：
-    1. question_generation（创建时一次，批量出题）
-    2. speech_correct（每次回答后，纠错语音识别文本，最小改动）
-    3. fast_decision（每次回答后亚秒级，判定追问/下一题）
-异步路径另用 AnswerAnalysisGraph（Worker 内 4 路并行分析后聚合），追问由主图生成。
+同步路径 LLM 调用：
+    1. question_generation（创建时一次，service 直接调用，不进图）
+    2. fast_decision（每次回答后，LLM 判定下一动作：follow_up/next_base/end）
+    3. follow_up_stream（fast_decision 判 follow_up 后，LLM 流式产出追问文本，
+       边生成边经 SSE question_stream 推前端，收集全文判 NONE）
+异步路径另用 AnswerAnalysisGraph（service 判题后调用，4 路并行分析后聚合落库）。
 """
 
 import asyncio
@@ -36,7 +43,7 @@ from langgraph.checkpoint.redis import RedisSaver
 from langgraph.graph import END, START, StateGraph
 
 from app.core.config import settings
-from app.llm.models import interview_model
+from app.llm.models import interview_model, judge_fast_model
 from app.llm.prompt import (
     COMPLETENESS_LOGIC_PROMPT,
     CONTENT_ANALYSIS_PROMPT,
@@ -45,7 +52,6 @@ from app.llm.prompt import (
     QUESTION_GENERATION_PROMPT,
     REPORT_SUMMARY_PROMPT,
     SCORING_PROMPT,
-    SPEECH_CORRECTION_PROMPT,
     TECHNICAL_DEPTH_PROMPT,
 )
 from app.llm.schemas.interview import (
@@ -56,9 +62,9 @@ from app.llm.schemas.interview import (
     InterviewReportResult,
     QuestionGenerationResult,
     ScoringResult,
-    SpeechCorrectionResult,
     TechnicalDepthResult,
 )
+from app.redis.sync_client import SyncRedisClient
 
 logger = logging.getLogger(__name__)
 
@@ -76,35 +82,67 @@ ACTION_END = "end"
 
 
 # --------------------------------------------------------------------------
-# 单图状态
+# 图三态：输入 / 全局（checkpointer 持久化）/ 输出
 # --------------------------------------------------------------------------
 
-class InterviewState(TypedDict, total=False):
-    """面试节奏控制图状态（thread 级）。"""
+class InterviewInput(TypedDict, total=False):
+    """面试图输入状态（service 每轮提交回答时填充，不持久化决策中间量）。
 
+    注意：LangGraph input schema 会【过滤】输入键——仅保留本 schema 声明的字段。
+    base_questions/base_count/question_queue 为跨轮节奏事实源（创建时装载、checkpointer
+    持久化），必须在此声明，否则输入时被丢弃导致问尽误判（此前 bug 根因）。
+    """
+
+    user_id: int  # SSE 发布目标用户
     interview_id: int  # thread_id（== interview 主键）
     interview_type: int  # 1-完整 2-快速
+    question_no: int  # 当前所答基础题号（追问与父题同号）
+    question_text: str  # 当前题目文本（追问时为追问文本，答基础题为基础题文本）
+    answer: str  # 用户回答文本
     resume_context: dict  # 简历结构化上下文
-
-    # 基础题（创建时预生成，已落库；此处为主要供 Fast Decision 判定是否问尽）
+    # 创建时装载（首次 invoke 由 service 从 DB 装载，checkpointer 跨轮保留）
     base_questions: list[dict]  # [{question_no, question_id, question_type, category, question_text}]
     base_count: int  # 基础题总数
+    # 问题队列（仅基础题发问顺序镜像；追问不进入本队列，见模块 docstring）
+    question_queue: list[int]  # 待发基础题 ID 序列（队首在前）
+    # 规则入参（service 算好传入，route 节点防御用）
+    follow_up_total: int  # 全场当前追问总数（用于追问上限防御）
+    per_base_follow_up_count: int  # 当前基础题已追问次数（每题最多1次）
+    elapsed_over: bool  # 是否超过最长面试时长（90分钟）
+    interrupted: bool  # Redis 中断标记（主动放弃/无活动超时）
+    unanswered_base_after: int  # 当前基础题之后未答的基础题数（兼容旧参数）
 
-    # 本轮输入（service 提交回答时写入）
-    question_no: int  # 当前回答的基础题号
-    question_text: str  # 当前题目文本（Fast Decision 判定追问贴合回答）
-    answer: str  # 用户回答文本
 
-    # 图输出（下一题判定结果）
+class InterviewState(InterviewInput):
+    """面试图全局状态（RedisSaver checkpointer 持久化，thread_id=interview_id）。
+
+    全局状态是节奏事实源：基础题快照、问题队列（仅基础题）、当前题指针、
+    未落库追问 pending_follow_up、计数值等跨轮保留，中断/恢复由此重建。
+    """
+
+    # 创建时装载（首次 invoke 由 service 从 DB 装载后传入，checkpointer 跨轮保留）
+    base_questions: list[dict]  # [{question_no, question_id, question_type, category, question_text}]
+    base_count: int  # 基础题总数
+    # 问题队列（仅基础题发问顺序镜像；追问不进入本队列，见模块 docstring）
+    question_queue: list[int]  # 待发基础题 ID 序列（队首在前）
+
+    # 本轮节点写入
     next_action: str  # follow_up / next_base / end
-    follow_up_question: str | None  # 判定的追问（若 follow_up）
+    pending_follow_up: str | None  # 未落库追问文本（fast_decision 判 follow_up 后写入）
+    next_base_text: str | None  # 下一基础题文本（next_base 时由 route 从基础题快照取）
 
-    # 计数值（service 落库后回写，供终止判断）
-    follow_up_total: int  # 全场追问总数（service 从 DB 统计回写）
-    unanswered_base_after: int  # 当前基础题之后未答的基础题数（service 回写）
 
-    # 问题队列（T3.8/T3.9：发问顺序镜像；input 与全局状态均携带，Redis List 备份兜底）
-    question_queue: list[int]  # 待发问题目ID序列（队首在前）
+class InterviewOutput(TypedDict, total=False):
+    """面试图输出状态（invoke 返回给 service，作为落库/SSE 编排依据）。
+
+    注意：LangGraph output schema 做键过滤——只返回本 schema 中定义的全局状态键，
+    因此字段名必须与节点实际写入的全局状态名一致（pending_follow_up，而非 follow_up_question）。
+    """
+
+    next_action: str  # follow_up / next_base / end（route 标准化后）
+    pending_follow_up: str | None  # 追问文本（fast_decision→follow_up_stream 写入；非追问置 None）
+    corrected_answer: str | None  # 纠错后回答（预留：分析链回填，图上不产出）
+    next_base_text: str | None  # 下一基础题文本（route 判 next_base 时写入）
 
 
 # --------------------------------------------------------------------------
@@ -135,54 +173,48 @@ interview_graph_checkpointer = build_checkpointer()
 # --------------------------------------------------------------------------
 
 def _init(state: InterviewState) -> InterviewState:
-    """节点 init：初始化基础题列表、问题队列与计数值。"""
+    """节点 init：装载/补全全局状态（基础题快照、问题队列、计数）。
+
+    LangGraph 输入经 input schema 合并进全局状态后传入本节点，此处【保留】
+    全部输入字段（base_questions/base_count/当前题/回答/规则入参）并补齐缺省，
+    避免后续节点丢失节奏事实源（此前实现曾误将 base_questions 置空导致问尽误判）。
+
+    Returns:
+        补全后的全局状态（保留输入值）。
+    """
     base = state.get("base_questions") or []
     return {
+        # 输入原样透传（防合并覆盖丢失）
+        "user_id": state.get("user_id"),
         "interview_id": state.get("interview_id"),
-        "interview_type": state.get("interview_type", 1),
+        "interview_type": state.get("interview_type"),
+        "question_no": state.get("question_no"),
+        "question_text": state.get("question_text"),
+        "answer": state.get("answer"),
+        "resume_context": state.get("resume_context") or {},
         "base_questions": base,
-        "base_count": len(base),
+        "base_count": len(base) or int(state.get("base_count", 0)),
         "question_queue": state.get("question_queue") or [],
+        "follow_up_total": int(state.get("follow_up_total", 0)),
+        "per_base_follow_up_count": int(state.get("per_base_follow_up_count", 0)),
+        "elapsed_over": bool(state.get("elapsed_over", False)),
+        "interrupted": bool(state.get("interrupted", False)),
     }
 
 
-def _question_agent(state: InterviewState) -> InterviewState:
-    """节点 question_agent：LLM 批量预生成基础题（创建时一次，§7.2）。
-
-    由 service 在创建时调用 generate_questions() 预生成并落库，此处仅在
-    state 未携带基础题时兜底生成（正常流程 service 已预置，跳过 LLM）。
-
-    Returns:
-        填入基础题列表的 state。
-    """
-    if state.get("base_questions"):
-        return {"base_questions": state["base_questions"], "base_count": len(state["base_questions"])}
-    resume_context = state.get("resume_context") or {}
-    interview_type = state.get("interview_type", 1)
-    result = _generate_questions_impl(resume_context, interview_type)
-    base = [
-        {
-            "question_text": q.question_text,
-            "question_type": q.question_type,
-            "category": q.category,
-        }
-        for q in result.questions
-    ]
-    return {"base_questions": base, "base_count": len(base)}
-
-
 def _fast_decision(state: InterviewState) -> InterviewState:
-    """节点 fast_decision：即时判定下一题（追问/下一基础/结束）。
+    """节点 fast_decision：LLM 即时判定下一动作（追问/下一基础/结束）。
 
-    轻量 Fast LLM（低 temp 短 prompt），亚秒级返回 {next_action, follow_up_question,
-    technical_depth_hint}。题目是否问尽由 service 依据 DB 题目推进判定传入。
+    保留 LLM 意图判定（LLM 判定全部动作）：以 judge_fast_model（关闭思考模式，
+    低延迟短 prompt）输出 next_action ∈ {follow_up, next_base, end}；仅判动作，
+    追问文本生成由 follow_up_stream 节点流式完成。非法动作回退 next_base。
 
     Returns:
-        next_action 与 follow_up_question。
+        写入 next_action 的 state。
     """
-    model: BaseChatModel = interview_model
+    model: BaseChatModel = judge_fast_model
     prompt = FAST_DECISION_PROMPT.format(
-        question=state.get("question_text", state.get("question_no", "")),
+        question=state.get("question_text", ""),
         answer=state.get("answer", ""),
         resume_context=json.dumps(state.get("resume_context") or {}, ensure_ascii=False, default=str),
     )
@@ -194,87 +226,164 @@ def _fast_decision(state: InterviewState) -> InterviewState:
     action = result.next_action
     if action not in (ACTION_FOLLOW_UP, ACTION_NEXT_BASE, ACTION_END):
         action = ACTION_NEXT_BASE
-    # follow_up 必须附带追问文本；缺省回退下一基础题
-    if action == ACTION_FOLLOW_UP and not result.follow_up_question:
-        action = ACTION_NEXT_BASE
     logger.info(
         "Fast Decision: interview_id=%s question_no=%s action=%s depth_hint=%s",
         state.get("interview_id"), state.get("question_no"), action, result.technical_depth_hint,
     )
-    return {
-        "next_action": action,
-        "follow_up_question": result.follow_up_question if action == ACTION_FOLLOW_UP else None,
-    }
+    return {"next_action": action, "pending_follow_up": None}
 
 
-def _speech_correct(state: InterviewState) -> InterviewState:
-    """节点 speech_correct：LLM 纠错语音识别文本（最小改动，仅修正识别错误）。
+def _follow_up_stream(state: InterviewState) -> InterviewState:
+    """节点 follow_up_stream：流式生成追问并直推前端（仅 fast_decision 判 follow_up 后）。
 
-    在 fast_decision 前对原始 ASR 文本做同音/近音/技术术语纠错，结果覆写
-    state.answer，供 fast_decision 路由与 service 落库、异步分析复用。
-    纠错失败（LLM 异常或空输出）回退原文，绝不阻塞提交链路。
+    以 judge_fast_model 流式产出追问文本，边生成边经 SSE question_stream 增量
+    推前端打字机（追问【不入 question_queue】，生成即输出）；收集全文后
+    is_follow_up_none 判定：NONE（回答已到位无需追问）回落 next_base，否则追问
+    文本写入全局状态 pending_follow_up 供 service 记录为当前题（用户回答后才落库）。
 
     Returns:
-        覆写 answer 为纠错后文本的 state。
+        next_action（follow_up / next_base）+ pending_follow_up。
     """
-    raw = (state.get("answer") or "").strip()
-    if not raw:
-        # 无回答（创建时兜底等场景）不纠错，原样返回
-        return {"answer": state.get("answer") or ""}
-    prompt = SPEECH_CORRECTION_PROMPT.format(
-        question=state.get("question_text", ""),
-        resume_context=json.dumps(state.get("resume_context") or {}, ensure_ascii=False, default=str),
-        transcript=raw,
-    )
-    model: BaseChatModel = interview_model
-    structured = model.with_structured_output(SpeechCorrectionResult, method="json_mode")
-    try:
-        result = structured.invoke(prompt)
-        corrected = result.corrected_text.strip() if isinstance(result, SpeechCorrectionResult) else ""
-    except Exception:
-        # 纠错 LLM 失败不阻塞提交：回退原文，由 service 原样落库/分析
-        logger.exception("语音纠错失败，回退原文: interview_id=%s", state.get("interview_id"))
-        corrected = ""
-    if not corrected:
-        corrected = raw
-    if corrected != raw:
-        logger.info(
-            "语音纠错: interview_id=%s len=%s->%s",
-            state.get("interview_id"), len(raw), len(corrected),
+    user_id = int(state.get("user_id") or 0)
+    question = state.get("question_text", "")
+    answer = state.get("answer") or ""
+    resume_context = state.get("resume_context") or {}
+
+    def _publish(delta: str, done: bool = False, is_none: bool = False, final_text: str | None = None) -> None:
+        """发布一条 question_stream 事件（正文增量或 done 终帧）。"""
+        _publish_sse_event(
+            user_id,
+            {
+                "kind": "interview:question_stream",
+                "session_id": state.get("interview_id"),
+                "question_index": state.get("question_no"),
+                "delta": delta,
+                "done": done,
+                "is_none": is_none,
+                "final_text": final_text,
+            },
         )
-    return {"answer": corrected}
+
+    buf: list[str] = []
+    for chunk in generate_follow_up_stream(question, answer, resume_context):
+        if not chunk:
+            continue
+        buf.append(chunk)
+        if chunk.strip():
+            _publish(chunk)
+    text = "".join(buf).strip()
+    if is_follow_up_none(text):
+        # LLM 判定无需追问 → 告诉前端清空回退，由 route 分派下一基础题
+        _publish("", done=True, is_none=True)
+        return {"next_action": ACTION_NEXT_BASE, "pending_follow_up": None}
+    _publish("", done=True, final_text=text[:300])
+    logger.info(
+        "追问流式生成完成: interview_id=%s question_no=%s len=%s",
+        state.get("interview_id"), state.get("question_no"), len(text),
+    )
+    return {"next_action": ACTION_FOLLOW_UP, "pending_follow_up": text[:300]}
 
 
 def _route(state: InterviewState) -> InterviewState:
-    """节点 routing：按 next_action 分派（服务层据以返回下一题/结束）。
+    """节点 route：动作标准化 + 循环（下次回答再次 invoke 图即续跑） + 中断/结束。
 
-    图内仅做动作标准化：end 且题目未问尽时回退下一基础题（防御）。
+    防御（v2 规则保留，仅在 LLM 意图判定之后兜底，不再替代 LLM）：
+        - Redis 中断标记（主动放弃/无活动超时）→ 强制 end；
+        - follow_up 触发条件不满足（超时/追问达上限/本基础题已追问/回答空）→ 回退 next_base；
+        - end 但还有未答基础题 → 回退 next_base（Fast LLM 误判兜底）。
+
+    Returns:
+        标准化后的 next_action（+ next_base_text）。
     """
     action = state.get("next_action", ACTION_NEXT_BASE)
-    unanswered_after = int(state.get("unanswered_base_after", 0))
-    if action == ACTION_END and unanswered_after > 0:
-        # 防御：Fast LLM 误判"无下一题"，但 DB 还有未答基础题 → 回退下一基础题
-        logger.warning(
-            "Fast Decision 误判 end 但仍有未答基础题: interview_id=%s unanswered_after=%s",
-            state.get("interview_id"), unanswered_after,
-        )
+    if state.get("interrupted"):
+        # Redis 中断/超时：无论 LLM 判定如何均结束（结束由业务状态收敛，不重复发题）
+        action = ACTION_END
+    elif action == ACTION_FOLLOW_UP and (
+        state.get("elapsed_over")
+        or int(state.get("follow_up_total", 0)) >= int(state.get("base_count", 0))
+        or int(state.get("per_base_follow_up_count", 0)) >= 1
+        or not str(state.get("answer", "")).strip()
+    ):
+        # 追问触发条件不满足 → 回退下一基础题
         action = ACTION_NEXT_BASE
-    return {"next_action": action}
+
+    out: dict = {"next_action": action}
+    if action == ACTION_NEXT_BASE:
+        # 取下一道未答基础题文本（基础题按 question_no 顺序，question_queue 为镜像）
+        next_text = _next_base_text(state)
+        out["next_base_text"] = next_text
+        if next_text is None:
+            # 基础题已问尽 → 结束
+            out["next_action"] = ACTION_END
+    if action != ACTION_FOLLOW_UP:
+        # 非追问（下一基础题/结束）：清掉未落库追问，避免跨轮残留
+        out["pending_follow_up"] = None
+    return out
+
+
+def _next_base_text(state: InterviewState) -> str | None:
+    """取下一道未答基础题文本（按 question_no 大于当前题号顺序选第一道）。
+
+    Args:
+        state: 全局状态（含 base_questions 快照与当前 question_no）。
+
+    Returns:
+        下一基础题文本；无则 None。
+    """
+    base = state.get("base_questions") or []
+    q_no = int(state.get("question_no", 0))
+    for q in sorted(base, key=lambda x: int(x.get("question_no", 0))):
+        if int(q.get("question_no", 0)) > q_no:
+            return str(q.get("question_text", ""))
+    return None
+
+
+# --------------------------------------------------------------------------
+# SSE 直推（图节点内发布，供追问流式推送；与 service._publish_sse 同一通道）
+# --------------------------------------------------------------------------
+
+def _publish_sse_event(user_id: int, event: dict) -> None:
+    """经用户频道推送 SSE 事件（同步 Redis，失败不阻断判题）。
+
+    Args:
+        user_id: 目标用户ID。
+        event: 事件数据（含 kind 等字段）。
+    """
+    try:
+        SyncRedisClient.get_client().publish(
+            f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}",
+            json.dumps(event, ensure_ascii=False, default=str),
+        )
+    except Exception:
+        logger.exception("面试图SSE推送失败: user_id=%s kind=%s", user_id, event.get("kind"))
 
 
 def build_interview_graph():
-    """构建并编译面试节奏控制图（绑定 SQLite checkpointer）。"""
-    builder = StateGraph(InterviewState)
+    """构建并编译面试节奏控制图（绑定 Redis checkpointer，跨进程共享图状态）。
+
+    节点链：init → fast_decision →（follow_up 时）follow_up_stream → route → END；
+    本图每轮提交回答 invoke 一次，route 输出的 next_action 决定 service 落库/推进
+    方向，整场面试由多次 invoke（route 循环语义）+ checkpointer 全局状态串联，
+    创建面试不经本图。
+
+    Returns:
+        编译后的 StateGraph（绑定 checkpointer）。
+    """
+    builder = StateGraph(InterviewState, input=InterviewInput, output=InterviewOutput)
     builder.add_node("init", _init)
-    builder.add_node("question_agent", _question_agent)
-    builder.add_node("speech_correct", _speech_correct)
     builder.add_node("fast_decision", _fast_decision)
+    builder.add_node("follow_up_stream", _follow_up_stream)
     builder.add_node("route", _route)
     builder.add_edge(START, "init")
-    builder.add_edge("init", "question_agent")
-    builder.add_edge("question_agent", "speech_correct")
-    builder.add_edge("speech_correct", "fast_decision")
-    builder.add_edge("fast_decision", "route")
+    builder.add_edge("init", "fast_decision")
+    # fast_decision 判 follow_up → 流式生成追问；其余动作直接进 route
+    builder.add_conditional_edges(
+        "fast_decision",
+        lambda s: "follow_up_stream" if s.get("next_action") == ACTION_FOLLOW_UP else "route",
+        {"follow_up_stream": "follow_up_stream", "route": "route"},
+    )
+    builder.add_edge("follow_up_stream", "route")
     builder.add_edge("route", END)
     graph = builder.compile(checkpointer=interview_graph_checkpointer)
     logger.info(
@@ -310,12 +419,16 @@ def run_fast_decision(
     follow_up_total: int,
     unanswered_base_after: int,
     question_queue: list[int] | None = None,
+    per_base_follow_up_count: int = 0,
+    elapsed_over: bool = False,
+    interrupted: bool = False,
+    user_id: int = 0,
 ) -> dict:
-    """执行单轮 Fast Decision，即时返回下一题判定结果。
+    """执行单轮 Fast Decision（v3：经 interview_graph 判定下一动作）。
 
     以 (question_no, question_text, answer) 推进图状态并调用 fast_decision + route，
-    完整结果供 service 落库与响应组装。question_queue 为 T3.8 问题队列（发问顺序
-    镜像），作为图输入/全局状态透传，由 service 侧以 Redis List 为准维护。
+    完整结果供 service 落库与响应组装。追问文本由 follow_up_stream 节点流式生成
+    并直推前端（追问【不入 question_queue】），经输出状态返回 service 后续落库。
 
     Args:
         interview_id: 面试会话ID（thread_id）。
@@ -325,33 +438,41 @@ def run_fast_decision(
         question_no: 当前回答的基础题号。
         question_text: 当前题目文本。
         answer: 用户回答文本。
-        follow_up_total: 全场当前追问总数（用于终止判断，由图状态保留）。
-        unanswered_base_after: 当前基础题之后未答的基础题数。
-        question_queue: 问题队列（待发问题目ID序列，队首在前）；None 不携带。
+        follow_up_total: 全场当前追问总数（终止/上限防御）。
+        unanswered_base_after: 当前基础题之后未答的基础题数（沿用参数，路由防御用）。
+        question_queue: 基础题发问顺序镜像（队列ID序列）；None 不携带。
+        per_base_follow_up_count: 当前基础题已追问次数（每题最多1次）。
+        elapsed_over: 是否超过最长面试时长。
+        interrupted: Redis 中断标记（主动放弃/无活动超时）。
+        user_id: 目标用户ID（追问流式 SSE 发布用）。
 
     Returns:
-        {"next_action", "follow_up_question", "corrected_text", "question_queue"}。
+        {"next_action", "follow_up_question", "next_base_text", "question_queue"}。
     """
     input_state: InterviewState = {
+        "user_id": user_id,
         "interview_id": interview_id,
         "interview_type": interview_type,
-        "resume_context": resume_context,
-        "base_questions": base_questions,
         "question_no": question_no,
         "question_text": question_text,
         "answer": answer,
+        "resume_context": resume_context,
+        "base_questions": base_questions,
+        "base_count": len(base_questions),
         "follow_up_total": follow_up_total,
         "unanswered_base_after": unanswered_base_after,
+        "per_base_follow_up_count": per_base_follow_up_count,
+        "elapsed_over": elapsed_over,
+        "interrupted": interrupted,
     }
     if question_queue is not None:
         input_state["question_queue"] = question_queue
     # RedisSaver 基于 redis-py 连接池，天然线程安全，无需额外互斥锁
     result = interview_graph.invoke(input_state, config=_thread_config(interview_id))
-    # speech_correct 节点已把 state.answer 覆写为纠错后文本（未纠错时等于原文）
     return {
         "next_action": result["next_action"],
-        "follow_up_question": result.get("follow_up_question"),
-        "corrected_text": result.get("answer") or "",
+        "follow_up_question": result.get("pending_follow_up"),
+        "next_base_text": result.get("next_base_text"),
         "question_queue": result.get("question_queue") or [],
     }
 
@@ -371,7 +492,7 @@ def invalidate_checkpoint(interview_id: int) -> None:
 
 
 # --------------------------------------------------------------------------
-# 流式追问生成（v3·判题链重构，见 BUG5 文档阶段三/优化计划 P1）
+# 流式追问生成（v2·判题链，经 SSE question_stream 直推前端）
 # --------------------------------------------------------------------------
 
 # 追问 NONE 判定标记（模型回答到位时的输出）
@@ -411,7 +532,7 @@ def generate_follow_up_stream(
 ) -> Iterator[str]:
     """流式生成追问文本（单次 LLM，输出为纯文本追问问题或 NONE）。
 
-    由 Answer Consumer 在判题阶段逐 token 收集，同时经 SSE（judge_stream 增量
+    由 service 在判题阶段逐 token 收集，同时经 SSE（judge_stream 增量
     事件）推给前端打字机展示；收集完成后由服务层判定 NONE/追问。抛 LLM 异常时
     由服务层按 analysis_fail_count 兜底。
 
@@ -429,7 +550,8 @@ def generate_follow_up_stream(
         answer=answer[:2000],  # 防超长回答撑爆上下文
         resume_context=json.dumps(subset, ensure_ascii=False, default=str),
     )
-    for chunk in interview_model.stream(prompt):
+    # 判题专用快速模型（judge_fast_model）：关闭思考模式，简单任务免思维链开销
+    for chunk in judge_fast_model.stream(prompt):
         content = getattr(chunk, "content", None)
         if content:
             yield content
@@ -447,41 +569,6 @@ def is_follow_up_none(text: str) -> bool:
     if not text:
         return True
     return text.upper() in FOLLOW_UP_NONE_MARKERS or text.upper().startswith("NONE")
-
-
-def correct_speech_text(question: str, transcript: str, resume_context: dict) -> str:
-    """回答文本规整（P1 统一调用：语音转写+键盘修正混合输入安全）。
-
-    仅修正确认的识别错误（同音/近音/术语），对纯键盘输入原样返回（无错误特征
-    不误伤）；失败或空输出回退原文，绝不阻塞判题。
-
-    Args:
-        question: 当前题目文本。
-        transcript: 用户回答原文（语音转写可含键盘修正）。
-        resume_context: 简历结构化上下文（内部仅取技能列表）。
-
-    Returns:
-        规整后文本（异常/空回退原文）。
-    """
-    raw = (transcript or "").strip()
-    if not raw:
-        return transcript or ""
-    prompt = SPEECH_CORRECTION_PROMPT.format(
-        question=question,
-        resume_context=json.dumps(
-            {"skills": (resume_context.get("skills") or [])[:12]},
-            ensure_ascii=False, default=str,
-        ),
-        transcript=raw,
-    )
-    model: BaseChatModel = interview_model
-    structured = model.with_structured_output(SpeechCorrectionResult, method="json_mode")
-    try:
-        result = structured.invoke(prompt)
-        corrected = result.corrected_text.strip() if isinstance(result, SpeechCorrectionResult) else ""
-    except Exception:
-        corrected = ""
-    return corrected or raw
 
 
 # --------------------------------------------------------------------------
@@ -614,7 +701,14 @@ def _scoring(state: AnswerAnalysisState) -> dict:
 
 
 def _aggregate(state: AnswerAnalysisState) -> dict:
-    """分析图节点·汇聚节点（等所有分支完成后执行），合并为 AnswerAnalysisResult。"""
+    """分析图节点·汇聚节点（等所有分支完成后执行），合并为 AnswerAnalysisResult。
+
+    corrected_answer 取评分分支顺带纠错的结果（无改动时为空串由调用方回退原文），
+    供 service 落库时以纠错后回答更新 user_answer（P2）。
+
+    Returns:
+        合并后的 result 字段。
+    """
     content = state["content"]
     technical = state["technical"]
     completeness = state["completeness"]
@@ -628,6 +722,7 @@ def _aggregate(state: AnswerAnalysisState) -> dict:
         weaknesses=content.weaknesses,
         score=scoring.score,
         comment=scoring.comment,
+        corrected_answer=scoring.corrected_answer,
     )
     return {"result": result}
 

@@ -7,7 +7,7 @@
     4. 双开裁决（旧epoch提交409）与幂等（重复提交不重跑LLM）
     5. 追问判定（Fast Decision 判定追问落库 is_follow_up=1）
     6. 全部答完 → summarizing → 报告生成（后台，强制等待异步分析补齐）
-    7. 主动放弃 → status=2
+    10. 主动放弃 → status=2（正文步骤 1-10，另含幂等重复提交/题目落库核验）
 
 用法: 在 api_server 目录下用 interview 环境运行
     python tests/e2e_interview_smoke_test.py
@@ -21,7 +21,6 @@ import sys
 import time
 from pathlib import Path
 
-import jwt
 import requests
 from sqlalchemy import text
 
@@ -35,7 +34,7 @@ from app.db.sync_session import SyncSessionLocal
 BASE = "http://127.0.0.1:8000/api/v1"
 AUTH_URL = "http://127.0.0.1:8000/api/v1/auth"
 USER_ID = 1  # E2E测试用户A
-INTERVIEW_TYPE = 2  # 快速面试（5题，控制LLM时长）
+INTERVIEW_TYPE = 2  # 快速面试（9题，控制LLM时长）
 
 PASS, FAIL = [], []
 

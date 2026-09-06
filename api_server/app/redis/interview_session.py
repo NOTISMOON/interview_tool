@@ -341,20 +341,6 @@ def remove_from_queue(client, session_id: int, question_id: int) -> None:
     client.lrem(queue_key(session_id), 0, str(question_id))
 
 
-def queue_ids(client, session_id: int) -> list[int]:
-    """读取队列全部题目ID（审计/恢复核对用）。
-
-    Args:
-        client: 同步 Redis 客户端。
-        session_id: 面试会话ID。
-
-    Returns:
-        题目ID列表（队首在前）。
-    """
-    raw = client.lrange(queue_key(session_id), 0, -1)
-    return [int(x) for x in raw] if raw else []
-
-
 def delete_queue(client, session_id: int) -> None:
     """删除问题队列（面试完成/中断/删除后清理，释放 Redis 空间）。"""
     client.delete(queue_key(session_id))

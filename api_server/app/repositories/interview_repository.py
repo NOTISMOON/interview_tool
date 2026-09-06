@@ -175,14 +175,14 @@ class InterviewRepository:
         db.flush()
 
     def get_stats(self, db: Session, user_id: int) -> dict:
-        """统计用户面试数据（含软删除记录，供控制台平均分展示）。
+        """统计用户面试数据（completed_count/avg_score 含软删除记录；total 仅统计未删除记录）。
 
         Args:
             db: 数据库同步会话。
             user_id: 用户ID。
 
         Returns:
-            {"total": 面试总次数, "completed_count": 已完成次数,
+            {"total": 面试总次数（未删除）, "completed_count": 已完成次数,
              "avg_score": 已完成面试平均分（无则None）}。
         """
         stmt = select(

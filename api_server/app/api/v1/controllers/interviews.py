@@ -351,7 +351,7 @@ def get_interview_report(
     db: Session = Depends(get_db),
     cache: redis.Redis = Depends(get_redis),
 ) -> ReportStatusResponse:
-    """获取面试报告（未生成时返回generating并惰性兜底触发，§13.1）。
+    """获取面试报告状态（未生成时返回generating，报告由MQ Worker在面试结束时异步生成，§13.1）。
 
     Args:
         interview_id: 面试会话ID。

@@ -1,9 +1,11 @@
 """面试模块 LLM 输出模型（LangGraph 结构化提取结果）。
 
-三个结构化输出（对应文档 §7/§9/§13）：
+主要结构化输出（对应文档 §7/§9/§13）：
     - QuestionGenerationResult: 创建面试时批量预生成基础题
-    - AnswerAnalysisResult:     单次合并调用完成分析+评分+追问预生成
+    - AnswerAnalysisResult:     4路并行分支（内容/技术深度/完整逻辑/综合评分）聚合后的
+                                分析+评分结果（不含追问，追问由判题链流式生成）
     - InterviewReportResult:    Summary Agent 最终报告
+其余为并行分支与判题链的辅助输出模型（FastDecisionResult/SpeechCorrectionResult 等）。
 
 字段全部带默认值：DeepSeek json_mode 输出不稳定，缺失/显式 null 均可能
 出现（同 resume.py WorkItem 经验），强制非空会导致偶发整体解析失败。
@@ -29,8 +31,10 @@ class QuestionGenerationResult(BaseModel):
 class AnswerAnalysisResult(BaseModel):
     """回答分析合并结果（并行分析图聚合，§9.2）。
 
-    score 落库 ai_score，comment 落库 ai_comment。
-    追问生成由面试主图 fast_decision 负责，分析图不产出 follow_up_question。
+    score 落库 ai_score，comment 落库 ai_comment；corrected_answer 为模型顺带
+    纠错后的回答（语音/输入识别错误已修正，口语词保留），落库 user_answer 用
+    （P2：纠错并入分析/追问提示词，不再单独起一次 LLM）。
+    追问生成由判题链流式生成（generate_follow_up_stream）负责，分析图不产出 follow_up_question。
     """
 
     correctness: str = Field(default="", description="是否切题、回答正确性简述")
@@ -41,6 +45,7 @@ class AnswerAnalysisResult(BaseModel):
     weaknesses: list[str] = Field(default_factory=list, description="薄弱点/缺失")
     score: int = Field(default=1, description="综合评分 1-5（落库 ai_score）")
     comment: str = Field(default="", description="综合评价（落库 ai_comment）")
+    corrected_answer: str = Field(default="", description="顺带纠错后的回答全文（无改动时等于原文）")
 
 
 class ContentAnalysisResult(BaseModel):
@@ -65,10 +70,15 @@ class CompletenessLogicResult(BaseModel):
 
 
 class ScoringResult(BaseModel):
-    """并行分支·综合评分与评价。"""
+    """并行分支·综合评分与评价（v3·顺带产出纠错后回答）。
+
+    corrected_answer 由评分分支顺带纠错生成（P2 起不再单独调语音纠错 LLM）：
+    仅修正确认的识别错误，无错误时等于原文；聚合进 AnswerAnalysisResult 落库 user_answer。
+    """
 
     score: int = Field(default=1, description="综合评分 1-5 分整数，综合各维度给出")
     comment: str = Field(default="", description="面试官视角的综合评价（两三句话，可直接展示给候选人）")
+    corrected_answer: str = Field(default="", description="顺带纠错后的回答全文（无改动时等于原文）")
 
 
 class FastDecisionResult(BaseModel):
@@ -90,16 +100,6 @@ class FastDecisionResult(BaseModel):
     technical_depth_hint: int = Field(
         default=3, description="回答深度轻度预判 1-5（1-2 倾向追问，供规则叠加判定）"
     )
-
-
-class SpeechCorrectionResult(BaseModel):
-    """语音识别文本纠错结果（图内同步节点，fast_decision 前执行）。
-
-    corrected_text 为纠错后的完整文本；纠错做最小改动（只改识别错误，
-    不润色、不增删内容），字段带默认值兼容 DeepSeek json_mode 不稳定输出。
-    """
-
-    corrected_text: str = Field(default="", description="纠错后的完整文本")
 
 
 class InterviewReportResult(BaseModel):
