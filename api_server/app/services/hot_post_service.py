@@ -9,7 +9,6 @@
   - 缓存对账：定时校验 Redis ZSET 与 MySQL 一致性
 """
 
-import json
 import logging
 from datetime import datetime, timedelta
 
@@ -124,8 +123,6 @@ class HotPostService:
                 return 0
 
             # 批量 UPDATE MySQL
-            from app.models.post import Post
-
             for post_id, views in batch.items():
                 db.execute(
                     text("UPDATE post SET views_count = views_count + :views WHERE id = :id"),

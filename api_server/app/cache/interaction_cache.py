@@ -9,12 +9,10 @@ Redis键设计:
 设计要点:
     - SET支持SISMEMBER O(1)判断，比查DB快两个数量级。
     - 一致性：由点赞/取消点赞时同步维护（同步SET + DB同事务），以DB为准可自愈。
-    - 容量限制：SET最大5000条，超出后降级查DB（正常帖子不会超过此阈值）。
     - 空标记：冷门帖子无点赞时缓存空标记，防止高频穿透。
 """
 
 import logging
-from typing import Any
 
 import redis
 
@@ -22,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 # 缓存TTL常量（秒）
 SET_CACHE_TTL = 86400  # 点赞/收藏SET缓存1天
-NULL_CACHE_TTL = 60  # 空标记1分钟
 
 # 缓存键前缀
 KEY_LIKE_SET = "post:like:{post_id}"
@@ -30,7 +27,7 @@ KEY_FAVORITE_SET = "post:favorite:{post_id}"
 KEY_LIKE_EMPTY = "post:like:empty:{post_id}"
 KEY_FAVORITE_EMPTY = "post:favorite:empty:{post_id}"
 
-# SET容量上限（超出后降级查DB）
+# SET容量上限（预留：当前未启用超限降级查DB逻辑）
 SET_MAX_SIZE = 5000
 
 
@@ -89,18 +86,6 @@ class InteractionCache:
         except Exception:
             logger.exception("点赞缓存移除失败 post_id=%s user_id=%s", post_id, user_id)
 
-    def set_like_empty(self, cache_client: redis.Redis, post_id: int) -> None:
-        """写入空点赞标记（防穿透）。
-
-        Args:
-            cache_client: 同步Redis客户端。
-            post_id: 帖子ID。
-        """
-        try:
-            cache_client.setex(KEY_LIKE_EMPTY.format(post_id=post_id), NULL_CACHE_TTL, "1")
-        except Exception:
-            logger.exception("空点赞标记写入失败 post_id=%s", post_id)
-
     # ------------------------------------------------------------------
     # 收藏 SET
     # ------------------------------------------------------------------
@@ -152,18 +137,6 @@ class InteractionCache:
             cache_client.srem(key, str(user_id))
         except Exception:
             logger.exception("收藏缓存移除失败 post_id=%s user_id=%s", post_id, user_id)
-
-    def set_favorite_empty(self, cache_client: redis.Redis, post_id: int) -> None:
-        """写入空收藏标记（防穿透）。
-
-        Args:
-            cache_client: 同步Redis客户端。
-            post_id: 帖子ID。
-        """
-        try:
-            cache_client.setex(KEY_FAVORITE_EMPTY.format(post_id=post_id), NULL_CACHE_TTL, "1")
-        except Exception:
-            logger.exception("空收藏标记写入失败 post_id=%s", post_id)
 
 
 # 模块级单例

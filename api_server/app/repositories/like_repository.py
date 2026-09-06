@@ -11,7 +11,7 @@ class LikeRepository:
     """帖子点赞数据访问层（同步），封装点赞/取消点赞与计数维护。"""
 
     def create_like(self, db: Session, post_id: int, user_id: int) -> bool:
-        """创建点赞记录（唯一索引uk_post_user兜底幂等）。
+        """创建点赞记录（无DB唯一索引兜底：uk_post_user 已被迁移 f15581dc7487 删除，防重复由服务层状态判断）。
 
         Args:
             db: 数据库同步会话。
@@ -19,7 +19,7 @@ class LikeRepository:
             user_id: 点赞用户ID。
 
         Returns:
-            True=新增点赞，False=已点赞（幂等）。
+            恒为 True（重复点赞由服务层状态判断幂等返回，本函数不做幂等判断）。
         """
         like = PostLike(post_id=post_id, user_id=user_id)
         db.add(like)

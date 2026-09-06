@@ -114,10 +114,6 @@ class FollowCache:
         """构建SET关系判断缓存键（公开方法，供消费端复用）。"""
         return self._set_key(user_id, direction)
 
-    def empty_key(self, user_id: int, direction: str) -> str:
-        """构建空列表防穿透标记键（公开方法，供消费端复用）。"""
-        return self._empty_key(user_id, direction)
-
     # ------------------------------------------------------------------
     # 游标分页（ZSET）
     # ------------------------------------------------------------------

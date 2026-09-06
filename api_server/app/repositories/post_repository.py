@@ -1,8 +1,6 @@
 """帖子模块数据访问层，封装 post / post_tag 表操作（同步，供普通业务使用）。"""
 
-from datetime import datetime
-
-from sqlalchemy import delete, desc, func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
@@ -248,20 +246,6 @@ class PostRepository:
             .values(comments_count=func.greatest(Post.comments_count - 1, 0))
         )
 
-    def increment_views_count(self, db: Session, post_id: int, delta: int = 1) -> None:
-        """将帖子浏览数增加delta。
-
-        Args:
-            db: 数据库同步会话。
-            post_id: 帖子ID。
-            delta: 增量（默认1）。
-        """
-        db.execute(
-            update(Post)
-            .where(Post.id == post_id, Post.status == POST_STATUS_NORMAL)
-            .values(views_count=Post.views_count + delta)
-        )
-
     def increment_posts_count(self, db: Session, user_id: int) -> None:
         """将用户发帖数加1（User表冗余计数）。
 
@@ -293,7 +277,7 @@ class PostRepository:
     # ------------------------------------------------------------------
 
     def create_tags(self, db: Session, post_id: int, tags: list[str]) -> None:
-        """批量创建帖子标签关联（唯一索引uk_post_tag兜底幂等）。
+        """批量创建帖子标签关联（uk_post_tag 唯一索引已被迁移删除，调用方保证标签已去重）。
 
         Args:
             db: 数据库同步会话。

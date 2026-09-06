@@ -12,7 +12,6 @@
 """
 
 import sys
-import time
 
 import jwt
 import requests
@@ -106,7 +105,7 @@ if resp.status_code == 200:
 # ===================================================================
 print("\n=== 3. 热门排序降级验证 ===")
 
-# 请求 sort=hot 时，等价于按 is_hot DESC, likes_count DESC 排序
+# 请求 sort=hot 时，服务端过滤 is_hot=1，按 likes_count DESC, id DESC 排序
 resp = sa.get(f"{BASE}/posts/?sort=hot&limit=10")
 check("GET /posts?sort=hot 返回200", resp.status_code == 200)
 if resp.status_code == 200:

@@ -16,12 +16,8 @@ POST_STATUS_NORMAL = 1
 class Post(Base):
     """帖子ORM模型，映射 post 表。
 
-    索引设计（DB层）:
-        - PRIMARY KEY(id): 主键
-        - idx_author_id(author_id): 查某用户发的帖子
-        - idx_status_pinned(status, is_pinned DESC, created_at DESC): 社区首页置顶优先
-        - idx_status_hot(status, is_hot DESC, likes_count DESC): 热门排序
-        - idx_created_at(status, created_at DESC): 最新排序
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        idx_* 相关索引，如需请经 DDL 补充）。主键 id 自增。
     """
 
     __tablename__ = "post"

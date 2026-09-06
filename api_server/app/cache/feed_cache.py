@@ -18,7 +18,6 @@ Push-Pull流程:
 
 import logging
 import random
-from typing import Any
 
 import redis
 
@@ -43,25 +42,6 @@ class FeedCache:
     # ------------------------------------------------------------------
     # 写入
     # ------------------------------------------------------------------
-
-    def push_post(self, cache_client: redis.Redis, follower_id: int, post_id: int, created_at_ms: int) -> None:
-        """Push帖子到粉丝的Feed收件箱。
-
-        Args:
-            cache_client: 同步Redis客户端。
-            follower_id: 粉丝用户ID。
-            post_id: 帖子ID。
-            created_at_ms: 发帖时间戳（毫秒）。
-        """
-        key = KEY_FEED_INBOX.format(user_id=follower_id)
-        try:
-            pipe = cache_client.pipeline()
-            pipe.zadd(key, {str(post_id): created_at_ms})
-            pipe.zremrangebyrank(key, 0, -(FEED_MAX_SIZE + 1))  # 保留最新1000条
-            pipe.expire(key, FEED_CACHE_TTL + random.randint(0, TTL_JITTER))
-            pipe.execute()
-        except Exception:
-            logger.exception("Feed Push失败 follower_id=%s post_id=%s", follower_id, post_id)
 
     def batch_push_post(
         self,

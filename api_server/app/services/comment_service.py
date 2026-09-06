@@ -10,7 +10,6 @@
 import logging
 from datetime import datetime
 
-import redis
 from sqlalchemy.orm import Session
 
 from app.models.comment import Comment

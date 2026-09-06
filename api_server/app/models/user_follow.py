@@ -11,10 +11,9 @@ from app.db.base import Base
 class UserFollow(Base):
     """用户关注关系ORM模型，映射 user_follow 表。
 
-    索引设计（对称覆盖两个方向的列表查询）:
-        - uk_follower_following(follower_id, following_id): 唯一约束，防重复关注
-        - idx_follower_created(follower_id, created_at DESC): 关注列表按时间查询
-        - idx_following_created(following_id, created_at DESC): 粉丝列表按时间查询
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        uk_follower_following/idx_follower_created/idx_following_created，
+        防重复关注由服务层保证，如需请经 DDL 补充）。
     """
 
     __tablename__ = "user_follow"

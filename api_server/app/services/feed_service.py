@@ -13,7 +13,6 @@ Push-Pull流程:
 """
 
 import logging
-from typing import Any
 
 import redis
 from sqlalchemy.orm import Session

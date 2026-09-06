@@ -11,10 +11,9 @@ from app.db.base import Base
 class PostFavorite(Base):
     """帖子收藏ORM模型，映射 post_favorite 表。
 
-    索引设计（DB层）:
-        - PRIMARY KEY(id): 主键
-        - uk_post_user(post_id, user_id): 唯一索引，防止重复收藏
-        - idx_user_id(user_id, created_at DESC): 用户收藏列表按时间倒序
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        uk_post_user/idx_user_id，防重复收藏由服务层捕获 IntegrityError 保证，
+        如需请经 DDL 补充）。主键 id 自增。
     """
 
     __tablename__ = "post_favorite"

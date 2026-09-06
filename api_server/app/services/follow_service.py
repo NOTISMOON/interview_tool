@@ -90,7 +90,7 @@ class FollowService:
                 if target.status == USER_STATUS_DISABLED:
                     raise TargetUserForbiddenError("用户已被禁用")
 
-                # ① 关注关系（唯一索引uk_follower_following兜底幂等）
+                # ① 关注关系（uk_follower_following 索引已被迁移删除，重复关注由服务层状态判断避免重复落库）
                 sync_user_repository.create_follow(db, follower_id, following_id)
                 # ② Outbox事件（同一事务，payload由服务端计算created_at_ms，规避时区换算偏差）
                 sync_outbox_repository.insert_event(

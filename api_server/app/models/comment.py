@@ -20,11 +20,8 @@ class Comment(Base):
         - 一级评论: root_id IS NULL, reply_user_id IS NULL
         - 回复:     root_id = 一级评论ID, reply_user_id = 被回复者ID
 
-    索引设计（DB层）:
-        - PRIMARY KEY(id): 主键
-        - idx_post_root(post_id, root_id, created_at): 帖子评论列表 + 回复列表
-        - idx_author_id(author_id): 查某用户的评论
-        - idx_root_created(root_id, created_at): 某条一级评论的回复列表
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        idx_* 相关索引，如需请经 DDL 补充）。主键 id 自增。
     """
 
     __tablename__ = "comment"

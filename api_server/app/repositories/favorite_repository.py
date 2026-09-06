@@ -10,7 +10,7 @@ class FavoriteRepository:
     """帖子收藏数据访问层（同步），封装收藏/取消收藏操作。"""
 
     def create_favorite(self, db: Session, post_id: int, user_id: int) -> bool:
-        """创建收藏记录（唯一索引uk_post_user兜底幂等）。
+        """创建收藏记录（无DB唯一索引兜底：uk_post_user 已被迁移 f15581dc7487 删除，防重复由服务层状态判断）。
 
         Args:
             db: 数据库同步会话。
@@ -59,25 +59,6 @@ class FavoriteRepository:
             PostFavorite.user_id == user_id,
         )
         return db.execute(stmt).first() is not None
-
-    def batch_is_favorited(self, db: Session, post_ids: list[int], user_id: int) -> set[int]:
-        """批量判断用户是否收藏了多个帖子（单次IN查询，避免N+1）。
-
-        Args:
-            db: 数据库同步会话。
-            post_ids: 帖子ID列表。
-            user_id: 用户ID。
-
-        Returns:
-            已收藏的帖子ID集合。
-        """
-        if not post_ids:
-            return set()
-        stmt = select(PostFavorite.post_id).where(
-            PostFavorite.post_id.in_(post_ids),
-            PostFavorite.user_id == user_id,
-        )
-        return {row[0] for row in db.execute(stmt).all()}
 
     def list_favorites(
         self,

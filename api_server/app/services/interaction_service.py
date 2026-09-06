@@ -4,7 +4,9 @@
     业务变更与事件写入同一个MySQL本地事务，事务提交即保证事件不丢；
     独立Relay轮询outbox_event投递RabbitMQ，Consumer异步处理通知。
 
-幂等性: 点赞/取消点赞由DB唯一索引uk_post_user兜底，重复操作捕获IntegrityError后幂等返回。
+幂等性: 切换前先查Redis/DB状态（toggle_like/toggle_favorite 先判后写），重复操作由
+状态判断避免重复落库；IntegrityError 分支为历史兼容（原 uk_post_user 唯一索引已被
+迁移 f15581dc7487 删除，实际不会触发）。
 """
 
 import logging
@@ -19,7 +21,6 @@ from app.repositories.favorite_repository import favorite_repository
 from app.repositories.like_repository import like_repository
 from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.post_repository import post_repository
-from app.repositories.user_repository import sync_user_repository
 from app.services.hot_post_service import LIKE_WEIGHT, hot_post_service
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ class InteractionService:
                         aggregate_id=str(post_author_id),
                         payload={
                             "recipient_id": post_author_id,
-                            "type": 1,  # MESSAGE_TYPE_LIKE
+                            "type": 3,  # MESSAGE_TYPE_LIKE（点赞通知）
                             "title": "新点赞",
                             "content": "有人点赞了你的帖子",
                             "from_user_id": user_id,

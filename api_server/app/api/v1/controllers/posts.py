@@ -82,7 +82,7 @@ def get_hot_posts(
             # 保持 ZSET 排序顺序
             ordered_posts = [posts_dict[pid] for pid in hot_ids if pid in posts_dict]
         else:
-            # Redis 缓存空，降级：按 is_hot DESC, likes_count DESC 查 MySQL
+            # Redis 缓存空，降级：过滤 is_hot=1，按 likes_count DESC, id DESC 查 MySQL
             ordered_posts = post_service.post_repository.list_posts(
                 db, sort="hot", limit=limit
             )

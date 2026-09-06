@@ -30,9 +30,9 @@ class SyncOutboxRepository:
 
         Args:
             db: 数据库同步会话（必须与业务操作同一会话，随业务事务一起提交/回滚）。
-            event_type: 事件类型（follow_created/follow_deleted/user_deactivated）。
-            aggregate_type: 聚合根类型（user_follow/user）。
-            aggregate_id: 聚合根标识（如 "1:2" 或 "5"）。
+            event_type: 业务事件名（如 follow_created/user_deactivated/comment.created/post.liked/notification.created/interview.report.generate/chat.message.sent 等）。
+            aggregate_type: 聚合根类型（user_follow/user/comment/message/post_like/post_favorite/interview/chat）。
+            aggregate_id: 聚合根标识（user_follow 为 "follower_id:following_id"，post_like/post_favorite 为 "post_id:user_id"，其余为实体ID字符串）。
             payload: 事件负载字典（业务字段快照）。
 
         Returns:
@@ -55,14 +55,14 @@ class OutboxRepository:
     """Outbox事件数据访问层（异步），供Relay轮询投递与清理任务使用。"""
 
     async def fetch_pending(self, db: AsyncSession, batch_size: int) -> list[OutboxEvent]:
-        """查询一批待发布事件（按id升序保证投递顺序，命中idx_status_retry）。
+        """查询一批待发布事件（按id升序保证投递顺序）。
 
         Args:
             db: 数据库异步会话。
             batch_size: 单批最大条数。
 
         Returns:
-            待发布事件列表（已到重试时间的优先）。
+            已到重试时间的待发布事件列表（按 id ASC，无额外优先级排序）。
         """
         stmt = (
             select(OutboxEvent)

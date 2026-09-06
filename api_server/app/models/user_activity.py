@@ -14,8 +14,8 @@ ACTIVITY_TYPE_FOLLOW = 3
 class UserActivity(Base):
     """用户动态ORM模型，映射 user_activity 表。
 
-    索引设计:
-        - idx_user_created(user_id, created_at DESC): 个人主页动态列表按时间倒序
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        idx_user_created，如需请经 DDL 补充）。
     """
 
     __tablename__ = "user_activity"

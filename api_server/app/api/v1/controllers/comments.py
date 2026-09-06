@@ -103,7 +103,7 @@ def list_comments(
     sort: str = Query("latest", pattern="^(latest|hot)$", description="排序：latest=最新 hot=最热"),
     db: Session = Depends(get_db),
 ) -> CommentListResponse:
-    """查询帖子的一级评论列表（游标分页，按时间倒序）。
+    """查询帖子的一级评论列表（游标分页；latest 按时间倒序，hot 按点赞数倒序）。
 
     Args:
         post_id: 帖子ID。

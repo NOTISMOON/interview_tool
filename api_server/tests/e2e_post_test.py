@@ -11,7 +11,6 @@
     5. Redis 缓存行为验证（点赞 SET）
 """
 
-import json
 import sys
 import time
 
@@ -216,7 +215,7 @@ def main() -> None:
 
     print("=" * 60)
     print("阶段4: 关注 + Feed")
-    # 4.1 用户A关注用户B？改为：用户A关注用户17已有帖子？本阶段：用户A 关注 用户B
+    # 4.1 用户A关注用户B（先清理可能存在的关注关系，保证幂等）
     # 先清理可能存在的关注关系（幂等）
     sa.delete(f"{BASE}/users/{USER_B}/follow", timeout=5)
     r = sa.post(f"{BASE}/users/{USER_B}/follow", timeout=10)

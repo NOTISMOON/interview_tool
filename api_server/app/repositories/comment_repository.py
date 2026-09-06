@@ -1,6 +1,6 @@
 """评论模块数据访问层，封装 comment 表操作（同步，供普通业务使用）。"""
 
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.comment import Comment, COMMENT_STATUS_DELETED, COMMENT_STATUS_NORMAL

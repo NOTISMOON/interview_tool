@@ -17,8 +17,6 @@ social.user.deactivated），与outbox event_type一一对应。
 import logging
 from typing import Any
 
-import redis.asyncio as aioredis
-
 from app.cache.follow_cache import (
     DIRECTION_FOLLOWERS,
     DIRECTION_FOLLOWING,
@@ -34,7 +32,7 @@ logger = logging.getLogger(__name__)
 # 注销事件关联键清理的分批大小（每批pipeline命令数，避免大pipeline阻塞事件循环）
 DEACTIVATED_BATCH_SIZE = 500
 
-# routing_key常量（与outbox_relay.EVENT_ROUTING_KEY_MAP一致）
+# routing_key常量（与outbox_relay.EVENT_EXCHANGE_MAP 中的 routing_key 对应一致）
 ROUTING_FOLLOW_CREATED = "social.follow.created"
 ROUTING_FOLLOW_DELETED = "social.follow.deleted"
 ROUTING_USER_DEACTIVATED = "social.user.deactivated"

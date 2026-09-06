@@ -11,10 +11,8 @@ from app.db.base import Base
 class PostTag(Base):
     """帖子标签关联ORM模型，映射 post_tag 表。
 
-    索引设计（DB层）:
-        - PRIMARY KEY(id): 主键
-        - uk_post_tag(post_id, tag): 唯一索引，同一帖子不重复打同一标签
-        - idx_tag(tag, created_at DESC): 按标签筛选帖子，按时间倒序
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        uk_post_tag/idx_tag，如需请经 DDL 补充）。主键 id 自增。
     """
 
     __tablename__ = "post_tag"

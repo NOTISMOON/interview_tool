@@ -23,17 +23,16 @@ class OutboxEvent(Base):
         - 通用基础设施：不与 user_follow 耦合字段，业务字段全部在 payload JSON 中，
           后续帖子点赞、评论等事件直接复用该表。
 
-    索引设计:
-        - idx_status_retry(status, next_retry_at, id): Relay 轮询扫描
-        - idx_published(status, published_at): 清理任务删除超期已发布事件
+    索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+        idx_status_retry/idx_published，Relay 按 id ASC 顺序扫描，如需请经 DDL 补充）。
     """
 
     __tablename__ = "outbox_event"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    event_type: Mapped[str] = mapped_column(String(50), nullable=False, comment="事件类型 follow_created/follow_deleted/user_deactivated")
-    aggregate_type: Mapped[str] = mapped_column(String(50), nullable=False, comment="聚合根类型 user_follow/user")
-    aggregate_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="聚合根标识，user_follow为 follower_id:following_id，user为user_id")
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False, comment="业务事件名（如 follow_created/user_deactivated/comment.created/post.liked/notification.created/interview.report.generate/chat.message.sent 等）")
+    aggregate_type: Mapped[str] = mapped_column(String(50), nullable=False, comment="聚合根类型（user_follow/user/comment/message/post_like/post_favorite/interview/chat）")
+    aggregate_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="聚合根标识（user_follow 为 follower_id:following_id，post_like/post_favorite 为 post_id:user_id，其余为实体ID字符串）")
     payload: Mapped[dict] = mapped_column(JSON, nullable=False, comment="事件负载（含实体字段快照，消费端免回查）")
     status: Mapped[int] = mapped_column(
         Integer,

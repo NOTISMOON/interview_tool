@@ -4,7 +4,7 @@
     事务提交即保证事件不丢；独立Relay轮询outbox_event投递RabbitMQ，Consumer异步
     同步缓存与Feed（最终一致，秒级）。写接口不等待MQ/Redis，DB事务内完成全部操作。
 
-读路径: 详情走Cache-Aside（缓存穿透/击穿防护），列表走DB直查+批量作者信息组装。
+读路径: 详情与列表均走DB直查+批量作者信息组装（无缓存层）。
 """
 
 import json
@@ -14,7 +14,7 @@ from datetime import datetime
 import redis
 from sqlalchemy.orm import Session
 
-from app.models.post import POST_STATUS_DELETED, POST_STATUS_NORMAL, Post
+from app.models.post import Post
 from app.repositories.outbox_repository import sync_outbox_repository
 from app.repositories.post_repository import post_repository
 from app.repositories.user_repository import sync_user_repository
