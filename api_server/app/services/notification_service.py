@@ -94,18 +94,6 @@ class NotificationService:
             related_type=related_type,
         )
 
-    def get_unread_count_sync(self, db: Session, user_id: int) -> int:
-        """同步获取用户未读消息总数。
-
-        Args:
-            db: 数据库同步会话。
-            user_id: 用户ID。
-
-        Returns:
-            未读消息数量。
-        """
-        return sync_message_repository.get_unread_count(db, user_id)
-
     # ------------------------------------------------------------------
     # 读路径（异步，供SSE和REST接口使用）
     # ------------------------------------------------------------------
@@ -331,29 +319,6 @@ class NotificationService:
                 event_kind,
                 message_id,
             )
-
-    async def publish_broadcast(self, event_data: dict) -> None:
-        """通过 Redis Pub/Sub 广播系统消息。
-
-        Args:
-            event_data: 广播事件数据字典。
-        """
-        started_at = time.monotonic()
-        channel = settings.NOTIFY_BROADCAST_CHANNEL
-        try:
-            redis_client = await AsyncRedisClient.get_client()
-            receivers = await redis_client.publish(
-                channel, json.dumps(event_data, ensure_ascii=False, default=str)
-            )
-            level = logger.warning if receivers == 0 else logger.info
-            level(
-                "SSE广播已发布 channel=%s receivers=%s elapsed_ms=%d",
-                channel,
-                receivers,
-                (time.monotonic() - started_at) * 1000,
-            )
-        except Exception:
-            logger.exception("SSE广播发布失败 channel=%s", channel)
 
     @staticmethod
     def publish_to_user_sync(user_id: int, event_data: dict) -> None:

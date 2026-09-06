@@ -55,9 +55,3 @@ class UnreadCountResponse(BaseModel):
 
     total: int = 0
     by_type: dict[str, int] = Field(default_factory=dict)
-
-
-class MarkReadRequest(BaseModel):
-    """标记已读请求模型。"""
-
-    message_id: int = Field(..., ge=1, description="消息ID")

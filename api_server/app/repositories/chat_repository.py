@@ -3,7 +3,7 @@
 供流消费端批量落库 Worker 使用：
     - batch_insert_messages：批量 INSERT dm_message，用 client_msg_id 唯一索引做幂等
       （INSERT IGNORE 冲突自动跳过，不重复落库）。
-    - update_conversation_tail：批量/单条更新 dm_conversation 的最后消息摘要。
+    - update_conversation_tail：更新 dm_conversation 的最后消息摘要（单条）。
     - insert_outbox：与消息落库同一异步事务写入 chat.message.sent Outbox 事件。
 """
 
@@ -45,7 +45,7 @@ class ChatRepository:
                 conversation_id/from_user_id/receiver_id/client_msg_id/content_type/content/seq。
 
         Returns:
-            实际插入的消息条数。
+            本批处理的消息条数（INSERT IGNORE 幂等跳过的重复行不单独计数）。
 
         Raises:
             Exception: 数据库写入失败时抛出。

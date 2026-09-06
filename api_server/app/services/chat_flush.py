@@ -8,8 +8,9 @@
 
 流程：
     1. 轮询活跃会话集合 chat:convs:flush（写路径 append_message 时 SADD 登记）。
-    2. 对每个会话 XREADGROUP 读取一批待落库消息（设消费组初始监控 $）。
-    3. 攒批到 CHAT_FLUSH_BATCH 或超 CHAT_FLUSH_INTERVAL 窗口后批量落库：
+    2. 对每个会话 XREADGROUP 读取一批待落库消息（消费组以 id="0" 创建，mkstream 自动建流）。
+    3. 每轮按会话读取一批（≤_READ_COUNT=50）即批量落库，落库频率由
+       CHAT_FLUSH_INTERVAL 轮询间隔控制：
         - 批量 INSERT dm_message（INSERT IGNORE，client_msg_id 唯一索引幂等去重）；
         - 更新 dm_conversation 最后消息摘要；
         - 同事务写入 outbox_event（chat.message.sent，outbox_relay 域内扇出）。
@@ -22,7 +23,6 @@
 import asyncio
 import logging
 import time
-from datetime import datetime
 
 from app.core.config import settings
 from app.db.async_session import AsyncSessionLocal
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 _ACTIVE_CONVS_KEY = "chat:convs:flush"
 # 消费组名称（每会话独立分组名）
 _GROUP_NAME = "chat-flush"
-# XREADGROUP 阻塞超时（秒）：有活跃会话时等待新消息
+# XREADGROUP 阻塞超时（毫秒）：有活跃会话时等待新消息
 _BLOCK_MS = 1000
 # XREADGROUP 单次读取条数（每次每个会话最多读这么多，攒批更可控）
 _READ_COUNT = 50
@@ -113,7 +113,7 @@ class ChatFlushWorker:
         """
         s_key = stream_key(conversation_id)
 
-        # 确保消费组存在（首次创建从 $ 开始，后续消息被监控）
+        # 确保消费组存在（首次创建 id="0"，XREADGROUP 以 ">" 仅消费新消息）
         try:
             await redis_client.xgroup_create(s_key, _GROUP_NAME, id="0", mkstream=True)
         except Exception:

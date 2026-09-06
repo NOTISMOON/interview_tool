@@ -15,8 +15,6 @@
 故扇出事件实际单次，此处依赖该前置约束）。
 """
 
-import asyncio
-import json
 import logging
 import time
 

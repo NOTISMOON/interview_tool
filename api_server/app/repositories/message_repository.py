@@ -13,7 +13,7 @@ from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models.message import MESSAGE_TYPE_SYSTEM, Message
+from app.models.message import Message
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +37,12 @@ class SyncMessageRepository:
         Args:
             db: 数据库同步会话（必须与业务操作同一会话）。
             user_id: 消息接收者用户ID。
-            msg_type: 消息类型（1-系统 2-评论 3-点赞 4-关注 5-面试 6-私信）。
+            msg_type: 消息类型（1-系统 2-评论 3-点赞 4-关注 5-面试 6-私信 7-关注动态）。
             title: 消息标题。
             content: 消息内容。
             from_user_id: 消息触发者用户ID（系统消息为空）。
             related_id: 关联实体ID。
-            related_type: 关联实体类型（1-帖子 2-报告 3-用户）。
+            related_type: 关联实体类型（1-帖子 2-报告 3-用户 4-简历）。
 
         Returns:
             创建的Message对象（含自增ID）。

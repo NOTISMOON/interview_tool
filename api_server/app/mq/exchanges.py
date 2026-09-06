@@ -49,20 +49,3 @@ async def declare_exchange(
         durable=durable,
     )
     return exchange
-
-
-async def declare_all_exchanges(channel: aio_pika.RobustChannel) -> dict[str, aio_pika.RobustExchange]:
-    """声明所有已注册的交换机。
-
-    在消费者进程启动时统一调用，确保拓扑结构就绪。
-
-    Args:
-        channel: RabbitMQ 异步通道。
-
-    Returns:
-        交换机名称字符串 -> RobustExchange 的映射字典。
-    """
-    exchanges: dict[str, aio_pika.RobustExchange] = {}
-    for name in ExchangeName:
-        exchanges[name.value] = await declare_exchange(channel, name)
-    return exchanges

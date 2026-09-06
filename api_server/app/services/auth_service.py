@@ -1,7 +1,7 @@
 """认证服务模块，负责双Token（access + refresh）的签发、刷新与吊销。
 
 Redis键设计:
-    refresh_token:{sha256(token)} → JSON({"user_id", "login", "created_at"})，TTL 7天。
+    refresh_token:{sha256(token)} → JSON({"user_id", "login", "jti", "created_at"})，TTL 7天。
     user:deactivated:{user_id} → 注销吊销标记（用户服务写入），refresh时校验拒绝续签。
 """
 
@@ -83,6 +83,7 @@ class AuthService:
                 try:
                     channel = f"{settings.NOTIFY_PUSH_CHANNEL_PREFIX}:{user_id}"
                     receivers = await redis.publish(
+                        channel,
                         json.dumps({
                             "kind": "session_kicked",
                             "message": "账号已在其他设备登录",
@@ -102,12 +103,14 @@ class AuthService:
                 except Exception:
                     logger.warning("推送下线通知失败: user_id=%s", user_id)
 
-        # 长期不透明刷新令牌（7天），Redis中只存SHA256哈希
+        # 长期不透明刷新令牌（7天），Redis中只存SHA256哈希。
+        # value 内同时记录本会话签发时的 jti，供续签时做单设备会话归属校验。
         refresh_token = create_refresh_token()
         value = json.dumps(
             {
                 "user_id": str(user_id),
                 "login": login,
+                "jti": jti,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -148,11 +151,29 @@ class AuthService:
                 detail="账号已注销",
             )
 
+        # 单设备登录（顶号）会话归属校验：若该 refresh 会话已不是当前活跃会话
+        # （账号已在其他设备重新登录），拒绝续签并吊销该 refresh token，
+        # 使被顶设备无法通过 refresh 静默复活，杜绝两设备互相顶号的死循环。
+        # 兼容旧数据：无 jti 字段的旧 refresh token 按与 middleware 相同语义处理
+        # （Redis 中已有活跃 jti 记录即视为已被顶掉）。
+        user_id = data["user_id"]
+        active_jti = await redis.get(f"auth:active_jti:{user_id}")
+        if active_jti is not None and data.get("jti") != active_jti:
+            await redis.delete(key)
+            logger.info(
+                "会话已被新设备顶替，拒绝续签并吊销refresh token: user_id=%s",
+                user_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="账号已在其他设备登录，请重新登录",
+            )
+
         # 轮转：删除旧token，使其立即失效（防重放攻击）
         await redis.delete(key)
 
-        logger.info("刷新token: user_id=%s", data.get("user_id"))
-        return await self.create_auth_tokens(redis, data["user_id"], data["login"], publish_kick_event=False)
+        logger.info("刷新token: user_id=%s", user_id)
+        return await self.create_auth_tokens(redis, user_id, data["login"], publish_kick_event=False)
 
     async def revoke_refresh_token(self, redis: Redis, refresh_token: str) -> None:
         """删除Redis中的refresh token（幂等，不存在也不报错）。

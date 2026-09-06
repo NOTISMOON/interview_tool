@@ -45,6 +45,25 @@ export function getSSEStatus(): SSEStatus {
   return s.readyState === EventSource.OPEN ? 'open' : s.readyState === EventSource.CONNECTING ? 'connecting' : 'closed';
 }
 
+/**
+ * 强制重建 SSE 连接（仅当连接已断开/不存在时）。
+ *
+ * 场景：页面在后台标签页期间 EventSource 可能被浏览器中断且后台重连被节流，
+ * 恢复前台时调用本方法可立即以最新 Cookie 重建连接，并触发服务端增量补偿拉取，
+ * 减少顶号/通知事件在断线窗口丢失的窗口期。
+ */
+export function reconnectSSE(): void {
+  if (!source) {
+    ensureConnection();
+    return;
+  }
+  if (source.readyState === EventSource.CLOSED) {
+    source.close();
+    source = null;
+    ensureConnection();
+  }
+}
+
 /** 订阅 SSE 连接状态变化（实时通道指示用），返回退订函数 */
 export function subscribeSSEStatus(cb: (s: SSEStatus) => void): () => void {
   statusHandlers.add(cb);

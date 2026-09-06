@@ -81,9 +81,9 @@ class ChatService:
     async def get_or_create_conversation(
         self, db: AsyncSession, user_id: int, other_id: int
     ) -> CreateConversationResponse:
-        """获取或创建与另一用户（Id>0）的会话。
+        """获取或创建与另一用户的会话（user1<user2 规范化防并发重复创建）。
 
-        不允许与自己私信（其他_id == user_id 时拒绝）。
+        注意：self-chat 校验由控制器层负责（other_id == user_id 时返回400），本方法不校验。
 
         Args:
             db: 数据库异步会话。

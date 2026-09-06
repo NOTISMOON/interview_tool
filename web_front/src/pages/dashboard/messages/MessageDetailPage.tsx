@@ -77,7 +77,7 @@ const MessageDetailPage = () => {
   const [detail, setDetail] = useState<MessageResponse | null>(null);
   const [post, setPost] = useState<PostDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [, setNotFound] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   /** 拉取消息详情；关联帖子时顺带拉取帖子摘要用于关联卡片 */

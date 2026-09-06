@@ -266,7 +266,7 @@ async def list_conversation_messages(
     payload: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> MessageListResponse:
-    """分页查询会话历史消息（最新在前），并将会话中发给当前用户的未读标记为已读、清未读缓存。
+    """分页查询会话历史消息（最新在前）；仅首页（cursor=0）时将会话中发给当前用户的未读标记为已读、清未读缓存并取消隐藏。
 
     Args:
         conversation_id: 会话ID。

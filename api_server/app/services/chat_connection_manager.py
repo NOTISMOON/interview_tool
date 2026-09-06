@@ -137,17 +137,6 @@ class ChatConnectionManager(RedisPubSubListener):
         channel = f"{self.push_channel_prefix}:{receiver_id}"
         await redis_client.publish(channel, json.dumps(data, ensure_ascii=False, default=str))
 
-    async def user_online_count(self, user_id: int) -> int:
-        """查询某用户在当前实例的在线连接数。
-
-        Args:
-            user_id: 用户唯一标识。
-
-        Returns:
-            本实例持有的在线连接数。
-        """
-        return len(self._connections.get(user_id) or [])
-
     async def on_message(self, channel: str, payload: Any) -> None:
         """处理一条 Pub/Sub 私信推送消息，分发到对应用户的本地连接。
 

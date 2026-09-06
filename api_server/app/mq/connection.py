@@ -83,17 +83,6 @@ class MQConnection:
         logger.info("RabbitMQ 连接与通道已关闭")
 
 
-async def get_mq_channel() -> aio_pika.RobustChannel:
-    """获取 RabbitMQ 异步通道（依赖注入用）。
-
-    适用于 FastAPI 路由/服务层注入 Producer 的场景。
-
-    Returns:
-        aio_pika.RobustChannel 实例。
-    """
-    return await MQConnection.get_channel()
-
-
 def _mask_url(url: str) -> str:
     """脱敏 RabbitMQ URL，隐藏密码，避免日志泄露。
 

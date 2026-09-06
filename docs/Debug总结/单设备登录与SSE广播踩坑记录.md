@@ -7,8 +7,10 @@
 ## 技术栈
 
 - 后端：FastAPI + SQLAlchemy 2.0 + Redis Pub/Sub
+
 - 前端：React + Ant Design + EventSource (SSE)
-- 部署：Docker Compose + Nginx (least_conn 负载均衡)
+
+- 部署：Docker Compose + Nginx (least\_conn 负载均衡)
 
 ## 完整链路
 
@@ -40,7 +42,7 @@
 
 ### 坑2：Pub/Sub 监听器因日志异常崩溃
 
-**问题**：`sse_manager.py` 的 `_push_to_user` 方法中，`payload.get("message", {}).get("id")` 在 `message` 字段为字符串时（`session_kicked` 事件）抛 `AttributeError: 'str' object has no attribute 'get'`。该异常未被捕获，导致整个 Pub/Sub 监听器崩溃，进入 2~60 秒指数退避重连，期间所有消息丢失。
+**问题**：`sse_manager.py` 的 `_push_to_user` 方法中，`payload.get("message", {}).get("id")` 在 `message` 字段为字符串时（`session_kicked` 事件）抛 `AttributeError: 'str' object has no attribute 'get'`。该异常未被捕获，导致整个 Pub/Sub 监听器崩溃，进入 2\~60 秒指数退避重连，期间所有消息丢失。
 
 **日志表现**：`SSE Pub/Sub 监听异常，2秒后重连` + `AttributeError: 'str' object has no attribute 'get'`
 
@@ -78,7 +80,7 @@
 
 **文件**：`web_front/src/lib/messageVersion.tsx`、`web_front/src/components/layout/DashboardLayout.tsx`
 
-### 坑6：Token 刷新触发重复 session_kicked
+### 坑6：Token 刷新触发重复 session\_kicked
 
 **问题**：`refresh_tokens()` 内部调用了 `create_auth_tokens()`，而 `create_auth_tokens()` 在检测到旧 jti 存在时会发布 `session_kicked`。token 刷新时 `auth:active_jti:{user_id}` 刚被覆盖，`old_jti` 永远存在，导致每次页面刷新（自动续期 token）都发布一次 `session_kicked`，形成循环通知。
 
@@ -106,7 +108,7 @@
 
 **文件**：`web_front/src/lib/api/auth.ts`
 
-### 坑9：新设备接收自身 session_kicked 事件
+### 坑9：新设备接收自身 session\_kicked 事件
 
 **问题**：`session_kicked` 通过 Redis Pub/Sub 广播给所有实例，新设备建立 SSE 连接后也会收到该事件，导致新设备自己弹出下线提示。
 
@@ -117,6 +119,63 @@
 **注意**：旧设备（在 `auth_jti` 功能部署前登录的）`localStorage` 中没有 `auth_jti`，此时 `myJti` 为 null，`if (myJti && ...)` 为 false，事件正常触发下线提示，不受影响。
 
 **文件**：`api_server/app/services/auth_service.py`、`web_front/src/components/layout/DashboardLayout.tsx`
+
+### 坑10：重构误删 redis.publish 的 channel 参数，session\_kicked 从未发布
+
+**问题**：2026-08-31 提交 `fa0c185`（Redis广播抽离 + 面试回答分析并行化）重构 `auth_service.py` 时，
+`redis.publish` 的第一个参数 `channel` 被误删，变成单参调用：
+
+```python
+receivers = await redis.publish(
+    json.dumps({...}),   # ← 缺少 channel 参数（正确应为 publish(channel, message)）
+)
+```
+
+`redis.asyncio.Redis.publish()` 签名要求 `(channel, message)` 两个参数，单参调用运行期抛
+`TypeError: publish() missing 1 required positional argument`，被 `except Exception` 静默吞掉
+只记一条 WARNING「推送下线通知失败」。**自 8/31 起 session\_kicked 事件从未真正发布**，
+任何新设备登录都不会触发旧设备下线提示，但登录/gti校验等其它一切正常（全项目仅此一处
+publish 被误伤，notification\_service / chat\_connection\_manager 的发布调用均为正确的两参）。
+
+**日志表现**：登录正常，但登录日志中无任何 `session_kicked 已推送`；仅有一条
+`WARNING 推送下线通知失败: user_id=X`（WARNING 级别易被忽略）。
+
+**修复**：补回 `channel` 参数（一行）。
+
+**文件**：`api_server/app/services/auth_service.py`
+
+### 坑11：refresh 无会话归属校验导致顶号死循环 + SSE 断线窗口事件永久丢失
+
+**问题（设计缺陷，两点叠加）**：
+
+1. **refresh 绕过单设备约束**：`refresh_tokens()` 只校验 refresh\_token 在 Redis 中存在与否，
+   不校验该会话是否已被新设备顶掉。被顶设备的 refresh\_token（7天有效）在浏览器 cookie 中仍存，
+   其任一 401 请求触发前端 axios 自动调 `/auth/refresh`，后端**无条件签发新 Token 并覆盖
+   `auth:active_jti:{user_id}`** → 被顶设备静默复活 → 另一端反被顶掉，两端反复互顶形成死循环。
+   而 refresh 流程 `publish_kick_event=False` 不发布 session\_kicked，整个循环中再无任何下线提示。
+
+2. **session\_kicked 为瞬时事件、无落库补偿**：事件经 Redis Pub/Sub 实时转发，若旧设备 SSE
+   恰好离线（后台标签页浏览器中断连接/重连被节流），投递时无队列 → 事件永久丢失，旧设备
+   既收不到弹框、也无任何兜底（EventSource 的 401 重试走不到 axios 拦截器，不会触发登录跳转）。
+
+**日志表现**：日志中大量 `jti不匹配，账号已在其他设备登录` 与 `POST /auth/refresh 200` 交替出现
+（两设备互相顶号）；`session_kicked 已推送 receivers=2` 后紧跟
+`目标用户不在本实例，跳过`——事件发布时旧设备无活跃 SSE 队列。
+
+**修复（治本 + 加固）**：
+
+1. **治本（后端）**：`refresh_token` 的 Redis value 增加 `jti` 字段（签发时记录本会话 jti）；
+   `refresh_tokens` 续签前比对 `auth:active_jti:{user_id}` 与本会话 jti，不一致（已被顶掉）则
+   **删除该 refresh\_token 并返回 401**。效果：被顶设备无法再通过 refresh 复活，死循环终结；
+   且其后续任一请求必然 401，由前端 axios 拦截器清除登录态并跳转 `/login`，形成可靠兜底。
+   兼容：无 jti 的旧 refresh\_token 沿用 middleware 语义（Redis 有活跃 jti 即视为被顶掉）。
+
+2. **加固（前端）**：`sseBus.ts` 新增 `reconnectSSE()`（连接 CLOSED/缺失时用最新 Cookie 重建）；
+   `DashboardLayout` 监听 `visibilitychange`，页面从后台恢复前台时调用，补上后台标签页
+   节流导致的 SSE 断线窗口，重连后由服务端增量补偿拉取补回错过的通知。
+
+**文件**：`api_server/app/services/auth_service.py`、`web_front/src/lib/sseBus.ts`、
+`web_front/src/components/layout/DashboardLayout.tsx`
 
 ## 旧设备未收到下线提示排查步骤
 
@@ -131,7 +190,9 @@ docker compose logs --tail=200 backend-1 backend-2 | grep "session_kicked 已推
 期望输出：`session_kicked 已推送 user_id=X receivers=Y`
 
 - `receivers=0` → 两个实例的 SSE 监听器都没有运行（监听器全挂了）
+
 - `receivers=1` → 只有一个实例的监听器在运行（另一个实例的监听器可能崩溃了）
+
 - `receivers=2` → 正常，两个实例都收到了
 
 ### 步骤2：确认实例收到 Pub/Sub 消息
@@ -153,10 +214,13 @@ docker compose logs --tail=200 backend-1 backend-2 | grep "session_kicked 已分
 期望：输出 `session_kicked 已分发到本地队列 user_id=X queues=Y`
 
 - `queues=0` 或没有此日志 → 该实例上该用户的 SSE 队列不存在（用户未连接到此实例）
+
 - `queues=1` → 正常，事件已推送到该用户的 SSE 队列
 
 如果 `queues=0`，检查是否有 `session_kicked 目标用户不在本实例，跳过` 日志：
+
 - 有该日志 → 用户的 SSE 连接在另一个实例上，这是正常的（跨实例由 Pub/Sub 保证投递到正确的实例）
+
 - 无该日志 + 无 `已分发到本地队列` → 监听器可能未运行，检查步骤1
 
 ### 步骤4：确认事件已下发到前端
@@ -168,6 +232,7 @@ docker compose logs --tail=200 backend-1 backend-2 | grep "SSE事件已下发.*s
 期望：输出 `SSE事件已下发 user_id=X kind=session_kicked`
 
 - 有该日志 → 后端已正常发送，问题在前端
+
 - 无该日志 → SSE 流生成器未读取到队列消息（队列可能被其他协程消费了）
 
 ### 步骤5：前端排查
@@ -175,8 +240,8 @@ docker compose logs --tail=200 backend-1 backend-2 | grep "SSE事件已下发.*s
 如果后端日志完整（事件已下发到前端），但前端未弹出提示，检查：
 
 1. **浏览器控制台**：查看是否有 SSE 连接错误（EventSource 的 `onerror`）
-2. **session_kicked 事件数据**：在 `DashboardLayout` 的 handler 开头加 `console.log('session_kicked', data)`，确认事件是否到达
-3. **auth_jti 检查**：检查 `localStorage.getItem('auth_jti')` 的值和 `data.jti` 的值是否相同（如果相同说明是新设备自身的 jti，事件被正确跳过）
+2. **session\_kicked 事件数据**：在 `DashboardLayout` 的 handler 开头加 `console.log('session_kicked', data)`，确认事件是否到达
+3. **auth\_jti 检查**：检查 `localStorage.getItem('auth_jti')` 的值和 `data.jti` 的值是否相同（如果相同说明是新设备自身的 jti，事件被正确跳过）
 4. **浏览器缓存**：Ctrl+Shift+R 强制刷新，确保加载最新前端代码
 
 ### 步骤6：SSE 监听器健康检查
@@ -186,22 +251,25 @@ docker compose logs --tail=200 backend-1 backend-2 | grep "SSE Pub/Sub 监听"
 ```
 
 期望输出（启动时）：
+
 ```
 SSE Pub/Sub 监听已启动 channels=notify:push:*,notify:broadcast
 ```
 
 不期望：
+
 ```
 SSE Pub/Sub 监听异常，2秒后重连
 ```
 
 如果看到 `监听异常`，检查前后是否有 `AttributeError` 或其他异常，修复后重启服务。
 
-## auth_jti 兼容性说明
+## auth\_jti 兼容性说明
 
 `auth_jti` 功能是在部署后新增的，旧设备（功能部署前登录的）的 `localStorage` 中没有 `auth_jti`。
 
 前端 `DashboardLayout` 的 handler 中：
+
 ```typescript
 const myJti = localStorage.getItem('auth_jti');
 if (myJti && data.jti === myJti) {
@@ -209,8 +277,10 @@ if (myJti && data.jti === myJti) {
 }
 ```
 
-- **旧设备（无 `auth_jti`）**：`myJti` 为 null，`if (myJti && ...)` 为 false，事件正常触发下线提示 ✓
-- **新设备（有 `auth_jti`）**：`myJti` 为自身 jti，`data.jti` 为新登录设备的 jti，两者不同，事件正常触发下线提示 ✓
+- **旧设备（无** **`auth_jti`）**：`myJti` 为 null，`if (myJti && ...)` 为 false，事件正常触发下线提示 ✓
+
+- **新设备（有** **`auth_jti`）**：`myJti` 为自身 jti，`data.jti` 为新登录设备的 jti，两者不同，事件正常触发下线提示 ✓
+
 - **新设备接收自身事件**：`myJti` 与 `data.jti` 相同，事件被跳过 ✓
 
 不需要额外兼容处理。
@@ -219,15 +289,15 @@ if (myJti && data.jti === myJti) {
 
 ### 关键日志点
 
-| 日志 | 级别 | 位置 | 含义 |
-|------|------|------|------|
-| `session_kicked 已推送 user_id=X receivers=Y` | INFO | `auth_service.py` | 事件已发布，Y 个实例收到 |
-| `session_kicked 推送无实例接收` | WARNING | `auth_service.py` | 无实例订阅推送通道（SSE 监听器全挂） |
-| `SSE Pub/Sub 收到 session_kicked` | INFO | `sse_manager.py` | SSE 管理器收到 Pub/Sub 消息 |
-| `session_kicked 目标用户不在本实例，跳过` | INFO | `sse_manager.py` | 该实例无该用户 SSE 连接 |
-| `session_kicked 已分发到本地队列` | INFO | `sse_manager.py` | 事件已推送到用户 SSE 队列 |
-| `SSE事件已下发 user_id=X kind=session_kicked` | DEBUG | `messages.py` | 事件已发送到前端 |
-| `SSE Pub/Sub 监听异常` | ERROR | `sse_manager.py` | 监听器崩溃，消息丢失 |
+| 日志                                         | 级别      | 位置                | 含义                   |
+| ------------------------------------------ | ------- | ----------------- | -------------------- |
+| `session_kicked 已推送 user_id=X receivers=Y` | INFO    | `auth_service.py` | 事件已发布，Y 个实例收到        |
+| `session_kicked 推送无实例接收`                   | WARNING | `auth_service.py` | 无实例订阅推送通道（SSE 监听器全挂） |
+| `SSE Pub/Sub 收到 session_kicked`            | INFO    | `sse_manager.py`  | SSE 管理器收到 Pub/Sub 消息 |
+| `session_kicked 目标用户不在本实例，跳过`              | INFO    | `sse_manager.py`  | 该实例无该用户 SSE 连接       |
+| `session_kicked 已分发到本地队列`                  | INFO    | `sse_manager.py`  | 事件已推送到用户 SSE 队列      |
+| `SSE事件已下发 user_id=X kind=session_kicked`   | DEBUG   | `messages.py`     | 事件已发送到前端             |
+| `SSE Pub/Sub 监听异常`                         | ERROR   | `sse_manager.py`  | 监听器崩溃，消息丢失           |
 
 ### 排查命令
 
@@ -244,15 +314,19 @@ docker compose logs --tail=100 backend-1 backend-2 | grep "监听异常"
 
 ## 最终修复清单
 
-| # | 文件 | 修改 |
-|---|------|------|
-| 1 | `api_server/app/api/v1/controllers/messages.py` | 新增 `session_kicked` 事件分支，透传完整数据 |
-| 2 | `api_server/app/services/sse_manager.py` | 日志加 `isinstance` 检查，`_dispatch` 加 try-except，`_push_to_user` 加 session_kicked 专用日志 |
-| 3 | `api_server/app/services/auth_service.py` | 新增 `publish_kick_event` 参数，刷新时不发通知；加 receivers 日志 |
-| 4 | `web_front/src/lib/messageVersion.tsx` | 移除 SSE 订阅，由 DashboardLayout 统一管理 |
-| 5 | `web_front/src/components/layout/DashboardLayout.tsx` | 统一处理 SSE 事件：bump 版本号 + jti 检查 |
-| 6 | `web_front/src/lib/sseBus.ts` | `ensureConnection` 检查 `readyState`，断开时重建连接 |
-| 7 | `web_front/src/lib/api/auth.ts` | callback 超时从 5s 改为 30s |
-| 8 | `web_front/src/store/index.ts` | 登录后存储 `auth_jti`，退出时清除 |
-| 9 | `web_front/src/lib/request.ts` | 401 拦截器清除 `auth_jti` |
-| 10 | `api_server/app/schemas/auth.py` | `TokenResponse` 增加 `jti` 字段 |
+| #  | 文件                                                                                  | 修改                                                                                  |
+| -- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1  | `api_server/app/api/v1/controllers/messages.py`                                     | 新增 `session_kicked` 事件分支，透传完整数据                                                     |
+| 2  | `api_server/app/services/sse_manager.py`                                            | 日志加 `isinstance` 检查，`_dispatch` 加 try-except，`_push_to_user` 加 session\_kicked 专用日志 |
+| 3  | `api_server/app/services/auth_service.py`                                           | 新增 `publish_kick_event` 参数，刷新时不发通知；加 receivers 日志                                   |
+| 4  | `web_front/src/lib/messageVersion.tsx`                                              | 移除 SSE 订阅，由 DashboardLayout 统一管理                                                    |
+| 5  | `web_front/src/components/layout/DashboardLayout.tsx`                               | 统一处理 SSE 事件：bump 版本号 + jti 检查                                                       |
+| 6  | `web_front/src/lib/sseBus.ts`                                                       | `ensureConnection` 检查 `readyState`，断开时重建连接                                          |
+| 7  | `web_front/src/lib/api/auth.ts`                                                     | callback 超时从 5s 改为 30s                                                              |
+| 8  | `web_front/src/store/index.ts`                                                      | 登录后存储 `auth_jti`，退出时清除                                                              |
+| 9  | `web_front/src/lib/request.ts`                                                      | 401 拦截器清除 `auth_jti`                                                                |
+| 10 | `api_server/app/services/auth_service.py`                                           | 补回 `redis.publish` 误删的 `channel` 参数（恢复 session\_kicked 发布）                          |
+| 11 | `api_server/app/services/auth_service.py`                                           | refresh\_token 值存 jti；`refresh_tokens` 增加会话归属校验，被顶设备拒绝续签并吊销（终结顶号死循环）                |
+| 12 | `web_front/src/lib/sseBus.ts`、`web_front/src/components/layout/DashboardLayout.tsx` | 新增 `reconnectSSE()`，`visibilitychange` 恢复前台时重建 SSE，缩小断线窗口                           |
+| 13 | `api_server/app/schemas/auth.py`                                                    | `TokenResponse` 增加 `jti` 字段                                                         |
+

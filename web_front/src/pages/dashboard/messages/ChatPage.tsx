@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Avatar from 'antd/es/avatar';
 import App from 'antd/es/app';
@@ -88,9 +88,8 @@ const ChatPage = () => {
   }, []);
 
   /** 建立 WS 连接并绑定收发回调 */
-  const connectWS = useCallback(
-    (convId: number) => {
-      const socket = connectChatWS();
+  const connectWS = useCallback(() => {
+    const socket = connectChatWS();
       wsRef.current = socket;
       socket.onmessage = (ev) => {
         try {
@@ -148,7 +147,7 @@ const ChatPage = () => {
         // 简单重连（带退避避免风暴）
         setTimeout(() => {
           if (convIdRef.current && wsRef.current?.readyState === WebSocket.CLOSED) {
-            connectWS(convIdRef.current);
+            connectWS();
           }
         }, 3000);
       };
@@ -176,7 +175,7 @@ const ChatPage = () => {
         if (!cancelled) setMessages(history);
 
         // 3. 建立 WS 连接
-        connectWS(conv.id);
+        connectWS();
       } catch (e: unknown) {
         const msg = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail;
         if (msg === '不能与自己私信') {

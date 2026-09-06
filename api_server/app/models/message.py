@@ -29,11 +29,8 @@ class Message(Base):
     设计要点:
         - user_id 为消息接收者，from_user_id 为消息触发者（系统消息为空）。
         - id 自增 BIGINT 全局有序，SSE 增量补偿和前端 last_msg_id 均基于此。
-        - 索引 idx_user_unread 支撑未读计数与未读列表快速查询。
-
-    索引设计:
-        - idx_user_type(user_id, type, created_at DESC): 按类型筛选消息
-        - idx_user_unread(user_id, is_read, created_at DESC): 未读列表查询
+        - 索引说明: 当前 ORM 未定义二级索引（历史迁移 f15581dc7487 已删除
+          idx_user_type/idx_user_unread，如需请经 DDL 补充）。
     """
 
     __tablename__ = "message"
@@ -45,7 +42,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(String(1000), nullable=False, comment="消息内容")
     from_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="消息发送者（系统消息为空）")
     related_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="关联实体ID")
-    related_type: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="1-帖子 2-报告 3-用户")
+    related_type: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="1-帖子 2-报告 3-用户 4-简历")
     is_read: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"), comment="0-未读 1-已读")
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="已读时间")
     created_at: Mapped[datetime] = mapped_column(

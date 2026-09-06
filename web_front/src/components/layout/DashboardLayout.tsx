@@ -1,4 +1,4 @@
-﻿﻿﻿import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+﻿﻿import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Suspense } from 'react';
 import Badge from 'antd/es/badge';
 import Modal from 'antd/es/modal';
@@ -16,7 +16,7 @@ import {
 import { useAppStore } from '@/store';
 import { getUnreadCount } from '@/lib/api/messages';
 import { useMessageVersion } from '@/lib/messageVersion';
-import { subscribeSSE } from '@/lib/sseBus';
+import { reconnectSSE, subscribeSSE } from '@/lib/sseBus';
 import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 
@@ -205,6 +205,17 @@ const DashboardLayout = () => {
     });
     return unsub;
   }, [bumpRevision]);
+
+  /** 页面从后台恢复前台时，若 SSE 已断开则立即重建（补上后台节流导致的断线窗口） */
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        reconnectSSE();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   return (
     <div className="h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-ink)] flex">
