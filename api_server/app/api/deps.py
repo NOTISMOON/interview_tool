@@ -60,11 +60,11 @@ def get_current_user(request: Request) -> dict:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="账号已在其他设备登录，请重新登录",
             )
-        # 首次部署兼容：写入占位 jti
+        # 首次部署兼容：写入占位 jti（TTL 与会话周期对齐，避免提前过期影响单设备校验）
         placeholder = hashlib.sha256(user_id.encode()).hexdigest()[:16]
         redis.setex(
             f"auth:active_jti:{user_id}",
-            timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+            timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
             placeholder,
         )
 

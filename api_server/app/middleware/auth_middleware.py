@@ -159,12 +159,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if active_jti is not None:
                     return False
                 # 首次部署兼容：将当前 token 的 hash 写入 Redis 作为 jti 占位
-                # 下次登录时会被真实 jti 覆盖
+                # 下次登录时会被真实 jti 覆盖；TTL 与会话周期对齐，避免提前过期
                 placeholder = hashlib.sha256(payload.get("sub", "").encode()).hexdigest()[:16]
                 await redis.set(
                     f"auth:active_jti:{user_id}",
                     placeholder,
-                    ex=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+                    ex=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
                 )
                 return True
             # 有 jti：必须与 Redis 一致

@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+import { isKickDialogOpen } from '@/lib/kickGate';
+
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
   timeout: 5000,
@@ -46,8 +48,15 @@ request.interceptors.response.use(
         // 注意：/callback 是 GitHub OAuth 回调页，不能在此处跳转登录，否则会打断 OAuth 流程
         localStorage.removeItem('auth_user');
         localStorage.removeItem('auth_jti');
+        // 若已被"账号在其它设备登录"弹窗接管（isKickDialogOpen），
+        // 不在拦截器内硬跳转，改由弹窗"确定"按钮触发跳转，避免打断弹窗交互。
         const pathname = window.location.pathname;
-        if (!pathname.includes('/login') && !pathname.includes('/callback') && pathname !== '/') {
+        if (
+          !isKickDialogOpen() &&
+          !pathname.includes('/login') &&
+          !pathname.includes('/callback') &&
+          pathname !== '/'
+        ) {
           window.location.href = '/login';
         }
       }

@@ -69,14 +69,16 @@ class AuthService:
         payload = decode_access_token(access_token)
         jti = payload.get("jti") if payload else ""
 
-        # 单设备登录校验：先检查是否有旧 jti（另一设备已登录），有则推送下线通知
+        # 单设备登录校验：先检查是否有旧 jti（另一设备已登录），有则推送下线通知。
+        # active_jti 的 TTL 与会话（refresh token）周期对齐，而不用 30 分钟的 access_token
+        # 生命周期——否则旧设备 jti 过期后，另一设备顶号时读不到 old_jti 而不推送下线通知。
         jti_key = f"auth:active_jti:{user_id}"
         old_jti = await redis.get(jti_key)
         if jti:
             await redis.set(
                 jti_key,
                 jti,
-                ex=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+                ex=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
             )
             # 仅在初次登录时推送下线通知，不做 token 刷新（避免循环通知）
             if old_jti is not None and publish_kick_event:

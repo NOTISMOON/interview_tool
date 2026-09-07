@@ -1,4 +1,4 @@
-﻿﻿import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+﻿import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Suspense } from 'react';
 import Badge from 'antd/es/badge';
 import Modal from 'antd/es/modal';
@@ -17,6 +17,7 @@ import { useAppStore } from '@/store';
 import { getUnreadCount } from '@/lib/api/messages';
 import { useMessageVersion } from '@/lib/messageVersion';
 import { reconnectSSE, subscribeSSE } from '@/lib/sseBus';
+import { isKickDialogOpen, setKickDialogOpen } from '@/lib/kickGate';
 import { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 
@@ -183,10 +184,16 @@ const DashboardLayout = () => {
         if (myJti && data.jti === myJti) {
           return;
         }
+        // 弹窗已打开时重复收到事件则忽略，避免连续弹多个框
+        if (isKickDialogOpen()) {
+          return;
+        }
         // 清除本地登录状态
         localStorage.removeItem('auth_user');
         localStorage.removeItem('auth_jti');
-        // 弹出下线提示框
+        // 置位弹窗门闩：阻塞 401 拦截器的自动跳转，避免打断本弹窗交互
+        setKickDialogOpen(true);
+        // 弹出下线提示框，由用户点击"确定"后才跳转登录页
         Modal.confirm({
           title: '账号已在其他设备登录',
           icon: null,
@@ -198,6 +205,7 @@ const DashboardLayout = () => {
           maskClosable: false,
           keyboard: false,
           onOk: () => {
+            setKickDialogOpen(false);
             window.location.href = '/login';
           },
         });
