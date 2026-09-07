@@ -45,7 +45,9 @@ class AnswerAnalysisResult(BaseModel):
     weaknesses: list[str] = Field(default_factory=list, description="薄弱点/缺失")
     score: int = Field(default=1, description="综合评分 1-5（落库 ai_score）")
     comment: str = Field(default="", description="综合评价（落库 ai_comment）")
-    corrected_answer: str = Field(default="", description="顺带纠错后的回答全文（无改动时等于原文）")
+    # 必填：json_mode 下模型表缺失省字段（有默认值时常被省略）→ 空串导致 service
+    # 回退原文、纠正失效。强制 min_length>=1 堵死空回退，无错误时也须逐字原样返回。
+    corrected_answer: str = Field(..., min_length=1, description="顺带纠错后的回答全文（无改动时等于原文）")
 
 
 class ContentAnalysisResult(BaseModel):
@@ -78,7 +80,8 @@ class ScoringResult(BaseModel):
 
     score: int = Field(default=1, description="综合评分 1-5 分整数，综合各维度给出")
     comment: str = Field(default="", description="面试官视角的综合评价（两三句话，可直接展示给候选人）")
-    corrected_answer: str = Field(default="", description="顺带纠错后的回答全文（无改动时等于原文）")
+    # 必填：堵死 json_mode 省略有默认值字段导致 corrected 为空、落库回退原文的问题
+    corrected_answer: str = Field(..., min_length=1, description="顺带纠错后的回答全文（无改动时等于原文）")
 
 
 class FastDecisionResult(BaseModel):

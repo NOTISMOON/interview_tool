@@ -92,6 +92,38 @@ class InterviewRepository:
         """
         return db.get(Interview, interview_id)
 
+    def get_active_draft(
+        self, db: Session, user_id: int, resume_id: int, interview_type: int
+    ) -> Interview | None:
+        """查询用户对指定简历的未启动草稿（设备检测前），用于创建面试幂等复用。
+
+        草稿判定：进行中(status=0) + 未删除 + 设备检测未通过(未正式启动) + 同面试类型，
+        取最新一条。命中时 create_interview 复用该草稿而非新建，避免重复请求产生多个草稿。
+
+        Args:
+            db: 数据库同步会话。
+            user_id: 用户ID。
+            resume_id: 简历ID。
+            interview_type: 面试类型 1-完整 2-快速。
+
+        Returns:
+            Interview对象，无匹配草稿返回None。
+        """
+        stmt = (
+            select(Interview)
+            .where(
+                Interview.user_id == user_id,
+                Interview.resume_id == resume_id,
+                Interview.type == interview_type,
+                Interview.status == INTERVIEW_STATUS_IN_PROGRESS,
+                Interview.device_check_passed == 0,
+                Interview.is_deleted == 0,
+            )
+            .order_by(desc(Interview.id))
+            .limit(1)
+        )
+        return db.execute(stmt).scalar_one_or_none()
+
     def update_progress(
         self,
         db: Session,

@@ -45,7 +45,6 @@ const RING_RADIUS = 68;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 /** 报告轮询间隔与轮询提示阈值 */
 const REPORT_POLL_INTERVAL = 3000;
-const REPORT_POLL_HINT_ROUNDS = 40;
 /** 判题等待轮询超时（秒，v3）：> LLM_TIMEOUT(120s)+排队缓冲，超时回退作答重提 */
 const JUDGE_WAIT_TIMEOUT = 150;
 /** SSE 在线但长时间未收到 judged（事件丢失/后端卡住的兜底检测），超过后降级轮询防卡死 */
@@ -252,33 +251,26 @@ const InterviewSession = () => {
   }, [speech]);
 
   // ------------------------------------------------------------------
-  // 报告轮询（summarizing → completed/失败重试）
+  // 报告轮询（面试完成即进入完成态，报告后台生成，不阻塞等待）
   // ------------------------------------------------------------------
   const startReportPolling = useCallback(() => {
-    setPhase('summarizing');
-    let rounds = 0;
+    // 面试完成立即切 completed：用户可直接返回工作台/查看报告（提交最后一题、SSE
+    // 或刷新恢复进入 summarizing 时均走到这里），报告由 MQ Worker 后台生成。
+    setPhase('completed');
+    // 后台轻轮询仅用于刷新报告按钮态（ready→可查看 / failed→可重试），不 gate 完成态
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     pollTimerRef.current = setInterval(async () => {
-      rounds += 1;
       try {
         const res = await getInterviewReport(interviewId);
         setReportStatus(res);
-        if (res.status === 'ready' || res.status === 'invalid') {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          setPhase('completed');
-        }
-        // failed：停在轮询外由 UI 提供手动重试（regenerate 后重新轮询）
-        if (res.status === 'failed') {
+        if (res.status === 'ready' || res.status === 'invalid' || res.status === 'failed') {
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
         }
       } catch {
         // 单次轮询失败忽略，下轮重试
       }
-      if (rounds === REPORT_POLL_HINT_ROUNDS) {
-        message.info('报告生成较慢，仍在努力中…');
-      }
     }, REPORT_POLL_INTERVAL);
-  }, [interviewId, message]);
+  }, [interviewId]);
 
   /** 手动重试报告（后端 LLM 失败后暴露的 regenerate，§13.1） */
   const handleRegenerateReport = useCallback(async () => {

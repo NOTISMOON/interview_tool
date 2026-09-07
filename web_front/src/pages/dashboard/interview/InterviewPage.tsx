@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import App from 'antd/es/app';
 import {
@@ -57,6 +57,8 @@ const InterviewPage = () => {
 
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
+  /** 生成请求进行中标记（ref防快速双击/重复触发产生多个草稿，配合后端幂等复用） */
+  const generatingRef = useRef(false);
 
   /** 拉取当前用户的简历列表（含解析状态，供选择/轮询） */
   const loadResumes = async () => {
@@ -147,6 +149,9 @@ const InterviewPage = () => {
       message.warning('请先选择一份简历');
       return;
     }
+    // 防重复提交：生成请求进行中或已完成时忽略再次点击（后端另有幂等复用兜底）
+    if (generatingRef.current || genState !== null) return;
+    generatingRef.current = true;
     setGenState('generating');
     setAnalysisStepIdx(0);
     try {
@@ -164,6 +169,8 @@ const InterviewPage = () => {
       } else {
         message.error('面试创建失败（题目生成异常），请稍后重试');
       }
+    } finally {
+      generatingRef.current = false;
     }
   };
 

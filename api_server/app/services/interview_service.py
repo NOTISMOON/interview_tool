@@ -177,6 +177,34 @@ class InterviewService:
         # 2. 简历上下文（缓存优先，未命中回源MySQL并回写，§4）
         resume_context = self._load_resume_context(db, cache, resume)
 
+        # 2.5 幂等复用：同一简历同类型已有未启动草稿（设备检测前）则复用，避免
+        #     重复请求/用户重试产生多个草稿（§3）。草稿题目已生成才复用；无题目
+        #     视为出题中断的孤儿记录，删除后走正常创建。
+        draft = interview_repository.get_active_draft(db, user_id, resume_id, interview_type)
+        if draft is not None:
+            draft_questions = list(interview_question_repository.list_by_interview(db, draft.id))
+            draft_base = [q for q in draft_questions if q.is_follow_up == 0]
+            if draft_base:
+                logger.info(
+                    "复用未启动草稿面试: interview_id=%s user_id=%s resume_id=%s",
+                    draft.id, user_id, resume_id,
+                )
+                epoch = isess.activate_client_sync(cache, draft.id, tab_id)
+                return {
+                    "interview_id": draft.id,
+                    "epoch": epoch,
+                    "status": draft.status,
+                    "type": draft.type,
+                    "total_questions": len(draft_base),
+                    "current_question": self._question_out(draft_base, 0),
+                }
+            # 草稿无题目（创建中断）：清理后走正常创建，不留孤儿记录
+            interview_repository_hard_delete(db, draft.id)
+            logger.warning(
+                "清理无题目的孤儿草稿后重建: interview_id=%s user_id=%s",
+                draft.id, user_id,
+            )
+
         # 3. 创建会话记录（id 即 session_id，§3.2）
         interview = interview_repository.create(db, user_id, resume_id, interview_type)
 
