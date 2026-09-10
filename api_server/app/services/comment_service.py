@@ -109,7 +109,7 @@ class CommentService:
                         "recipient_id": post_author_id,
                         "type": 2,  # MESSAGE_TYPE_COMMENT
                         "title": "新评论",
-                        "content": f"有人评论了你的帖子",
+                        "content": "有人评论了你的帖子",
                         "from_user_id": author_id,
                         "related_id": comment.id,
                         "related_type": 1,  # RELATED_TYPE_POST
@@ -127,7 +127,7 @@ class CommentService:
                         "recipient_id": data.reply_user_id,
                         "type": 2,  # MESSAGE_TYPE_COMMENT
                         "title": "新回复",
-                        "content": f"有人回复了你的评论",
+                        "content": "有人回复了你的评论",
                         "from_user_id": author_id,
                         "related_id": comment.id,
                         "related_type": 1,  # RELATED_TYPE_POST

@@ -73,7 +73,6 @@ def get_hot_posts(
     Returns:
         PostListResponse: 热门帖子列表。
     """
-    current_user_id = _try_get_viewer_id(request)
     try:
         # 优先从 Redis ZSET 获取热门帖子 ID
         hot_ids = hot_post_service.get_hot_post_ids(limit)

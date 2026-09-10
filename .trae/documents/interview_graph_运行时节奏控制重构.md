@@ -71,13 +71,13 @@ MQ Answer Consumer 处理事件（to_thread 同步链路）
 
 - `_judge_no_lock` 整体替换为 `run_fast_decision`（图）调用；删掉 service 内散落的"规则判定 can_follow_up + generate_follow_up_stream 收集"逻辑
 - `_stream_next_question` 拆为两部分：
-  - 追问流：图节点产出或节点内 SSE 推送（增量 judge_stream/question_stream + done 帧）
+  - 追问流：图节点产出或节点内 SSE 推送（累积快照 judge_stream + done 帧）
   - 基础题分片流：保留在 service（DB 文本 3 字/55ms 分片推送），`_next_base_question` 复用
 - `_persist_and_advance_locked` 调整落库顺序（对应"先出题落库 → 分析 → 分析落库"）：
   - follow_up 场景：**不再立即 create_follow_up**，只推进 checkpoint（current_question=追问文本）
   - 用户回答追问后：此刻创建追问题行（question_text 取 checkpoint.current_question）→ 作答分析完成后再落库 ai_score/ai_comment，user_answer=纠错后文本
 - 移除：`correct_speech_text` 同步调用、问题队列 `enqueue_head` 追问插队（T3.8/T3.9 视觉镜像简化；追问不再入队，基础题按 question_no 顺序推进即可）
-- SSE：`_publish_sse` 保留；新增/调整事件 `interview:question_stream`（追问增量/基础题分片/done 终帧）、`interview:judged`（判题完成，携带纠正后回答可选）
+- SSE：`_publish_sse` 保留；新增/调整事件 `interview:judge_stream`（追问/基础题正文累积快照 text + done 终帧）、`interview:judged`（判题完成，携带纠正后回答可选）
 
 ### 3. `app/mq/consumers/interview_answer_consumer.py` — 编排顺序
 
@@ -87,11 +87,11 @@ MQ Answer Consumer 处理事件（to_thread 同步链路）
 ### 4. 提示词与纠错融合（`app/prompt.py` / `app/llm/schemas/interview.py`）
 
 - `CONTENT_ANALYSIS_PROMPT` / `TECHNICAL_DEPTH_PROMPT` / `COMPLETENESS_LOGIC_PROMPT` / `SCORING_PROMPT` / `FOLLOW_UP_STREAM_PROMPT`: 增加"若识别到语音/输入错误先纠正，在纠正后的语义上分析；输出 corrected_answer"
-- 分析结果 schema 增加 `corrected_answer` 字段（可选），落库时用纠错后回答更新 `user_answer`
+- 分析结果 schema 增加 `corrected_answer` 字段（必填，min_length=1，避免模型 json_mode 省略导致空串回退原文），落库时用纠错后回答更新 `user_answer`
 
 ### 5. 前端（承接正文流改造，已在进行）
 
-- 消费 `interview:question_stream`：追问增量逐字展示；基础题分片逐字展示；done 终帧携带完整文本与元数据
+- 消费 `interview:judge_stream`：累积快照 text 整段替换直印题目卡片（无独立预览框）；done 终帧携带完整文本与元数据
 - `judged` 事件补全分析元数据；移除前端 typedLen 模拟打字/预览续打（第三轮改造已完成主体）
 
 ## 明确的取舍 / 不做的事
@@ -115,7 +115,7 @@ MQ Answer Consumer 处理事件（to_thread 同步链路）
 
 1. 后端单测/冒烟：`run_fast_decision` 被调用（不再是死代码）；创建面试不发图
 2. 完整面试流程（dev-login + 快速面试）：
-   - 提交回答 → 追问以流式逐字出现于前端（SSE question_stream）
+   - 提交回答 → 追问以流式出现于前端题目卡片（SSE judge_stream 累积快照，前端整段替换）
    - 回答追问 → 追问行此时才落库 → 分析完成后 ai_score/ai_comment 就绪
    - 追问不占问题队列；基础题按序推进；全题答完/超时/Redis 手动中断均能结束并触发报告生成
 3. Docker 日志：Answer Consumer 单条消息全链路完成（判题→落库→分析→落库），无"分析未就绪"轮询等待

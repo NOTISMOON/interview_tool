@@ -799,7 +799,6 @@ class InterviewService:
             for q in questions
             if q.is_follow_up == 0
         ]
-        base_count = len(base_questions)
         total_follow_up_now = interview_question_repository.count_follow_up_total(db, interview_id)
         parent = target if target.is_follow_up == 0 else self._find_parent(questions, target)
         per_base = (
@@ -1593,13 +1592,11 @@ class InterviewService:
             for q in questions
         ]
         result: InterviewReportResult | None = None
-        last_error: Exception | None = None
         for _ in range(MAX_REPORT_RETRIES):
             try:
                 result = generate_report(resume_context, records)
                 break
             except Exception as exc:  # noqa: BLE001 - 重试需吞掉LLM异常
-                last_error = exc
                 logger.warning("报告生成重试: interview_id=%s", interview_id, exc_info=exc)
 
         if result is None:
