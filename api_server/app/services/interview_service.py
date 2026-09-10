@@ -757,7 +757,7 @@ class InterviewService:
         """v3 判题链：经 interview_graph 判定下一动作（LLM 意图判定，只读 DB 不持锁）。
 
         interview_graph 节点链：fast_decision（LLM 判 follow_up/next_base/end）
-        → follow_up_stream（判 follow_up 时流式生成追问，SSE question_stream 直推前端，
+        → follow_up_stream（判 follow_up 时流式生成追问，SSE judge_stream 累积快照直推前端，
         追问文本写入全局状态 pending_follow_up，不入问题队列）→ route（防御）。
         语音纠错不再单独调用：纠错指令已融入分析/追问提示词，以分析结果
         corrected_answer 落库时更新 user_answer。
@@ -845,11 +845,11 @@ class InterviewService:
         finally:
             pass
 
-        # 基础题正文分片流（服务端打字机）：判定 next_base 且未结束 → DB 文本分片推前端
+        # 基础题正文累积快照流（服务端打字机）：判定 next_base 且未结束 → DB 文本快照推前端
         if next_action == ACTION_NEXT_BASE:
             self._push_base_stream(
-                cache, interview, target.question_no,
-                questions, checkpoint, base_count,
+                interview, target.question_no,
+                questions,
                 result.get("next_base_text") or "",
             )
         else:
@@ -859,26 +859,20 @@ class InterviewService:
 
     def _push_base_stream(
         self,
-        cache: redis.Redis,
         interview: Interview,
         current_no: int,
         questions: list[InterviewQuestion],
-        checkpoint: dict,
-        base_count: int,
         fallback_text: str | None = None,
     ) -> None:
-        """基础题正文分片流推送（服务端打字机，DB 文本按 3 字/55ms 分片，SSE question_stream）。
+        """基础题正文累积快照推送（服务端打字机，DB 文本按 3 字/55ms 分片，SSE judge_stream）。
 
-        追问文本流已由图 follow_up_stream 节点直推；基础题正文在此按慢节奏分片推送，
+        追问文本已由图 follow_up_stream 节点直推；基础题正文在此按慢节奏累积快照推送，
         done 终帧携带完整文本（前端据此展示新题，不再模拟打字/预览续打）。
 
         Args:
-            cache: 同步Redis客户端。
             interview: 面试会话ORM对象。
             current_no: 当前基础题号（取下一题）。
             questions: 发问顺序题目快照。
-            checkpoint: 当前Checkpoint（仅为占位兼容，未读取）。
-            base_count: 基础题总数（占位兼容，未读取）。
             fallback_text: 图 route 给出的 next_base_text（优先使用）；空则查 DB。
         """
         text = fallback_text or ""
@@ -887,15 +881,19 @@ class InterviewService:
             if nxt is not None:
                 text = nxt.question_text
 
-        def _publish(delta: str, done: bool = False, final_text: str | None = None) -> None:
-            """发布一条 question_stream 事件（正文增量或 done 终帧）。"""
+        def _publish(snapshot: str, done: bool = False, final_text: str | None = None) -> None:
+            """发布一条 judge_stream 事件（正文累积快照或 done 终帧）。
+
+            采用"累积快照"而非增量 delta：每帧携带当前已上屏的完整文本，前端整段
+            替换而非追加拼接，即使中途丢帧也能在下帧自愈为一致文本。
+            """
             self._publish_sse(
                 interview.user_id,
                 {
-                    "kind": "interview:question_stream",
+                    "kind": "interview:judge_stream",
                     "session_id": interview.id,
                     "question_index": current_no,
-                    "delta": delta,
+                    "text": snapshot,
                     "done": done,
                     "is_none": False,
                     "final_text": final_text,
@@ -906,7 +904,7 @@ class InterviewService:
             _publish("", done=True, final_text="")
             return
         for i in range(0, len(text), 3):
-            _publish(text[i : i + 3])
+            _publish(text[: i + 3])  # 累积快照：每帧带当前已上屏的完整文本
             time.sleep(BaseQuestionSliceDelay)
         _publish("", done=True, final_text=text)
 

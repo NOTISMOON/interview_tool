@@ -111,7 +111,7 @@ const InterviewSession = () => {
   }, [currentQuestion]);
   /** P2 题目卡打字机：当前题目已展示字数 */
   const [typedLen, setTypedLen] = useState(0);
-  /** 判题流式追问预览（interview:judge_stream 逐段累积，仅 judging 阶段展示）；
+  /** 判题流式追问/基础题正文（interview:judge_stream 累积快照，判题期直印题目卡片）；
    *  judged 到达时若下一题与该预览一致则预置打字机进度续打，实现"只打一遍"无缝过渡 */
   const [judgeStreamText, setJudgeStreamText] = useState('');
   const judgeStreamRef = useRef('');
@@ -423,18 +423,18 @@ const InterviewSession = () => {
         clearTimers();
         speech.stop();
       }
-      // 判题流式追问（interview:judge_stream）：后端逐 chunk 推送追问生成增量，
-      // 前端在 judging 阶段实时预览（只服务判题中；done 终帧用于收尾清理）
+      // 判题流式追问（interview:judge_stream）：后端每帧推送当前已生成全文的
+      // 累积快照，前端整段替换（幂等），即使中途丢帧也能在下帧自愈为一致文本
       if (data.kind === 'interview:judge_stream') {
         if (phaseRef.current !== 'judging' && phaseRef.current !== 'recovering') return;
-        const st = data as { delta?: string; done?: boolean; is_none?: boolean };
+        const st = data as { text?: string; done?: boolean; is_none?: boolean };
         if (st.done) {
           // 终帧：is_none=True（无需追问）清空预览，避免把"NONE"展示给用户；
           // 追问场景保留已流式文本，等 judged 到达后预置打字机进度续打
           if (st.is_none) setJudgeStreamText('');
         } else {
-          const delta = st.delta ?? '';
-          if (delta) setJudgeStreamText((p) => (p ? `${p}${delta}` : delta));
+          const snapshot = st.text ?? '';
+          if (snapshot) setJudgeStreamText(snapshot);
         }
         return;
       }
@@ -883,8 +883,8 @@ const InterviewSession = () => {
             </span>
           </div>
           <h2 className="text-[22px] font-semibold leading-relaxed text-[#F7F8FA] tracking-wide relative z-[1]">
-            {typingOn ? questionText.slice(0, typedLen) : questionText}
-            {typingOn && (
+            {judgeStreamText || (typingOn ? questionText.slice(0, typedLen) : questionText)}
+            {(judgeStreamText || typingOn) && (
               <span className="inline-block w-[2px] h-[22px] ml-0.5 align-middle bg-[#E6AF4E] animate-pulse" />
             )}
           </h2>
@@ -1011,7 +1011,7 @@ const InterviewSession = () => {
         )}
 
         {/* 判题中（v3.1 受理化）：答案已受理，后端异步判题，等待下一题。
-            追问生成经 judge_stream 流式推前端逐字预览（done 后 judged 一次性带下一题续打） */}
+            追问/基础题正文经 judge_stream 累积快照流式直推，实时打印在题目卡片上 */}
         {phase === 'judging' && (
           <div className="flex flex-col items-center gap-5 w-full">
             <div className="w-14 h-14 rounded-full border-4 border-[rgba(255,255,255,0.06)] border-t-[#D9A441] animate-spin" />
@@ -1019,16 +1019,6 @@ const InterviewSession = () => {
             <p className="text-[13px] text-[#666666] mt-1">
               {waitSeconds > 0 ? `已等待 ${waitSeconds}s · 判题时间视回答长度而定` : '判题完成将自动进入下一题'}
             </p>
-            {/* 判题流式预览（judge_stream）：追问生成逐字上屏，用户感知只剩一次全量纠错等待 */}
-            {judgeStreamText && (
-              <div className="w-full max-w-md">
-                <p className="text-[12px] text-[#666666] mb-1.5">AI 正在组织追问…</p>
-                <p className="text-[14px] leading-relaxed text-[#F0C970] bg-[rgba(217,164,65,0.06)] border border-[rgba(217,164,65,0.15)] rounded-xl px-4 py-3">
-                  {judgeStreamText}
-                  <span className="inline-block w-[2px] h-[14px] ml-0.5 align-middle bg-[#E6AF4E] animate-pulse" />
-                </p>
-              </div>
-            )}
           </div>
         )}
 

@@ -29,7 +29,7 @@
     1. question_generation（创建时一次，service 直接调用，不进图）
     2. fast_decision（每次回答后，LLM 判定下一动作：follow_up/next_base/end）
     3. follow_up_stream（fast_decision 判 follow_up 后，LLM 流式产出追问文本，
-       边生成边经 SSE question_stream 推前端，收集全文判 NONE）
+       边生成边经 SSE judge_stream 累积快照推前端，收集全文判 NONE）
 异步路径另用 AnswerAnalysisGraph（service 判题后调用，4 路并行分析后聚合落库）。
 """
 
@@ -236,8 +236,8 @@ def _fast_decision(state: InterviewState) -> InterviewState:
 def _follow_up_stream(state: InterviewState) -> InterviewState:
     """节点 follow_up_stream：流式生成追问并直推前端（仅 fast_decision 判 follow_up 后）。
 
-    以 judge_fast_model 流式产出追问文本，边生成边经 SSE question_stream 增量
-    推前端打字机（追问【不入 question_queue】，生成即输出）；收集全文后
+    以 judge_fast_model 流式产出追问文本，边生成边经 SSE judge_stream 累积
+    快照推前端打字机（追问【不入 question_queue】，生成即输出）；收集全文后
     is_follow_up_none 判定：NONE（回答已到位无需追问）回落 next_base，否则追问
     文本写入全局状态 pending_follow_up 供 service 记录为当前题（用户回答后才落库）。
 
@@ -249,15 +249,19 @@ def _follow_up_stream(state: InterviewState) -> InterviewState:
     answer = state.get("answer") or ""
     resume_context = state.get("resume_context") or {}
 
-    def _publish(delta: str, done: bool = False, is_none: bool = False, final_text: str | None = None) -> None:
-        """发布一条 question_stream 事件（正文增量或 done 终帧）。"""
+    def _publish(snapshot: str, done: bool = False, is_none: bool = False, final_text: str | None = None) -> None:
+        """发布一条 judge_stream 事件（正文累积快照或 done 终帧）。
+
+        采用"累积快照"而非增量 delta：每帧携带当前已生成的全部文本，前端整段
+        替换而非追加拼接，即使中途丢帧也能在下帧自愈为一致文本（无缺字缺口）。
+        """
         _publish_sse_event(
             user_id,
             {
-                "kind": "interview:question_stream",
+                "kind": "interview:judge_stream",
                 "session_id": state.get("interview_id"),
                 "question_index": state.get("question_no"),
-                "delta": delta,
+                "text": snapshot,
                 "done": done,
                 "is_none": is_none,
                 "final_text": final_text,
@@ -270,7 +274,9 @@ def _follow_up_stream(state: InterviewState) -> InterviewState:
             continue
         buf.append(chunk)
         if chunk.strip():
-            _publish(chunk)
+            # 累积快照：逐 chunk 累积后，每帧推送当前已生成全文（langchain stream
+            # 本身只产增量 token，没有"带全文"的内置模式，全文需在此手动累积）
+            _publish("".join(buf))
     text = "".join(buf).strip()
     if is_follow_up_none(text):
         # LLM 判定无需追问 → 告诉前端清空回退，由 route 分派下一基础题
@@ -492,7 +498,7 @@ def invalidate_checkpoint(interview_id: int) -> None:
 
 
 # --------------------------------------------------------------------------
-# 流式追问生成（v2·判题链，经 SSE question_stream 直推前端）
+# 流式追问生成（v2·判题链，经 SSE judge_stream 累积快照直推前端）
 # --------------------------------------------------------------------------
 
 # 追问 NONE 判定标记（模型回答到位时的输出）
