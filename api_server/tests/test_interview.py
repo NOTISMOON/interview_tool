@@ -845,9 +845,8 @@ class TestStateAndRecovery:
         iid, epoch = created["interview_id"], created["epoch"]
         _submit(client, iid, 1, "第一题回答", epoch)
         assert _consume(fake_redis, iid, 1, "第一题回答", epoch) is True
-        # 模拟Redis故障丢失Checkpoint
+        # 模拟Redis故障丢失Checkpoint（问题队列镜像已随 v4 删除）
         fake_redis.strings.pop(isess.checkpoint_key(iid), None)
-        fake_redis.delete(isess.queue_key(iid))  # 队列一并丢失，验证 MySQL 重建兜底
         resp = client.get(f"/api/v1/interviews/{iid}")
         body = resp.json()
         assert body["question_index"] == 2  # 重建到第2题

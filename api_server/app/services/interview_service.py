@@ -32,8 +32,10 @@ from app.llm.workflow.interview import (
     analyze_answer,
     generate_questions,
     generate_report,
+    get_graph_current_question,
     invalidate_checkpoint,
-    run_fast_decision,
+    resume_interview_graph,
+    start_interview_graph,
 )
 from app.models.interview import (
     INTERVIEW_STATUS_COMPLETED,
@@ -373,8 +375,9 @@ class InterviewService:
             checkpoint["started_at"] = now_iso
             checkpoint["last_activity_at"] = now_iso
             isess.save_checkpoint_sync(cache, interview.id, checkpoint)
-            # T3.8：基础题按发问顺序入队（Redis List 镜像，备份/恢复防漏题）
-            isess.init_queue(cache, interview.id, [q.id for q in questions])
+            # 首题入图：种入面试图线程（init → ask interrupt 挂起），
+            # 后续每轮提交回答以 resume_interview_graph 恢复（循环图，v4）
+            self._ensure_graph_seeded(db, cache, interview, checkpoint)
             logger.info("面试正式启动: interview_id=%s", interview.id)
         state = self._state_from(db, interview, checkpoint, questions)
         state["epoch"] = isess.get_client_epoch_sync(cache, interview.id) or 1
@@ -754,20 +757,17 @@ class InterviewService:
         question_index: int,
         answer: str,
     ) -> tuple[str, str | None]:
-        """v3 判题链：经 interview_graph 判定下一动作（LLM 意图判定，只读 DB 不持锁）。
+        """v4 判题链：经 interview_graph resume 判定下一动作（LLM 意图判定，只读 DB 不持锁）。
 
-        interview_graph 节点链：fast_decision（LLM 判 follow_up/next_base/end）
+        interview_graph（真实循环图）恢复执行：fast_decision（LLM 判 follow_up/next_base/end）
         → follow_up_stream（判 follow_up 时流式生成追问，SSE judge_stream 累积快照直推前端，
-        追问文本写入全局状态 pending_follow_up，不入问题队列）→ route（防御）。
+        追问文本写入全局状态 pending_follow_up）→ route（防御 + 推进当前题）→ 回边 ask
+        interrupt 出下一题挂起（或 END）。
         语音纠错不再单独调用：纠错指令已融入分析/追问提示词，以分析结果
         corrected_answer 落库时更新 user_answer。
 
-        与旧 run_fast_decision 判定链的差异：
-            - 追问文本由 follow_up_stream 节点流式产出（单次 LLM，边生成边 SSE）；
-            - end/下一基础 动作仍由 LLM 判定（意图判定保留），route 节点叠加
-              Redis 中断/追问上限/超时等防御（v2 规则不再替代 LLM 判定）。
-
-        LLM 连续失败 2 次跳过追问继续（§21）。
+        LLM 失败已由图节点内兜底回退 next_base；此处异常（Redis checkpointer 等）按
+        analysis_fail_count 重试兜底（连续 2 次跳过追问继续，§21）。
 
         Args:
             db: 数据库同步会话。
@@ -780,54 +780,37 @@ class InterviewService:
 
         Returns:
             (next_action, follow_up_text)；follow_up_text 非空=LLM 判追问（文本已SSE直推）。
-            异常时由调用方按 analysis_fail_count 兜底。
         """
         interview_id = interview.id
-        resume = resume_repository.get_by_id(db, interview.resume_id)
-        resume_context = self._load_resume_context(db, cache, resume)
+        # 确保图线程已种入且与业务 checkpoint 对齐（首启/Redis丢失/落库失败回退时重建）
+        self._ensure_graph_seeded(db, cache, interview, checkpoint)
 
-        # 基础题快照与计数（供图 route 防御：追问上限 / 问尽 / 下一基础题）
+        # 每轮动态规则入参（单一数据源=DB，随 resume 传入图供 route 防御）
         questions = list(interview_question_repository.list_by_interview(db, interview_id))
-        base_questions = [
-            {
-                "question_no": q.question_no,
-                "question_id": q.id,
-                "question_type": q.question_type,
-                "category": q.category,
-                "question_text": q.question_text,
-            }
-            for q in questions
-            if q.is_follow_up == 0
-        ]
-        total_follow_up_now = interview_question_repository.count_follow_up_total(db, interview_id)
         parent = target if target.is_follow_up == 0 else self._find_parent(questions, target)
         per_base = (
             interview_question_repository.count_follow_up_by_parent(db, parent.id)
             if parent is not None else 1
         )
+        total_follow_up_now = interview_question_repository.count_follow_up_total(db, interview_id)
         elapsed_over = self._elapsed_over_limit(cache, interview_id, checkpoint, MAX_INTERVIEW_MINUTES)
 
         try:
-            # 图判定：fast_decision（LLM 意图判定）→ follow_up_stream（流式追问+SSE）→ route（防御）
-            result = run_fast_decision(
-                interview_id=interview_id,
-                interview_type=interview.type,
-                resume_context=resume_context,
-                base_questions=base_questions,
-                question_no=target.question_no,
-                question_text=target.question_text,
-                answer=answer,
-                follow_up_total=total_follow_up_now,
-                unanswered_base_after=len(base_questions)
-                - sum(1 for q in base_questions if q["question_no"] < target.question_no),
-                question_queue=None,
-                per_base_follow_up_count=per_base,
-                elapsed_over=elapsed_over,
-                interrupted=interview.status != INTERVIEW_STATUS_IN_PROGRESS,
-                user_id=interview.user_id,
+            # 图恢复：从挂起 ask 恢复（仅传增量 answer + 动态规则入参），
+            # 判题/出题后再次 interrupt（下一题挂起）或 END（整场结束）
+            result = resume_interview_graph(
+                interview_id,
+                {
+                    "answer": answer,
+                    "elapsed_over": elapsed_over,
+                    "interrupted": interview.status != INTERVIEW_STATUS_IN_PROGRESS,
+                    "follow_up_total": total_follow_up_now,
+                    "per_base_follow_up_count": per_base,
+                },
             )
             next_action = result["next_action"]
-            follow_up_text = result.get("follow_up_question") or None
+            follow_up_text = result.get("pending_follow_up") or None
+            checkpoint["analysis_fail_count"] = 0
         except Exception:
             checkpoint["analysis_fail_count"] = int(checkpoint.get("analysis_fail_count", 0)) + 1
             if checkpoint["analysis_fail_count"] >= MAX_ANALYSIS_FAILURES:
@@ -841,8 +824,6 @@ class InterviewService:
             checkpoint["phase"] = PHASE_ANSWERING
             isess.save_checkpoint_sync(cache, interview_id, checkpoint)
             raise
-        finally:
-            pass
 
         # 基础题正文累积快照流（服务端打字机）：判定 next_base 且未结束 → DB 文本快照推前端
         if next_action == ACTION_NEXT_BASE:
@@ -851,10 +832,79 @@ class InterviewService:
                 questions,
                 result.get("next_base_text") or "",
             )
-        else:
-            checkpoint["analysis_fail_count"] = 0
-            isess.save_checkpoint_sync(cache, interview_id, checkpoint)
+        isess.save_checkpoint_sync(cache, interview_id, checkpoint)
         return next_action, follow_up_text
+
+    def _ensure_graph_seeded(
+        self,
+        db: Session,
+        cache: redis.Redis,
+        interview: Interview,
+        checkpoint: dict,
+    ) -> None:
+        """确保面试图线程已种入且与业务 checkpoint 对齐；否则重建。
+
+        对齐校验：图当前挂起题文本 == 业务 checkpoint 当前题文本。不对齐/线程
+        不存在（首启/Redis checkpointer 丢失/落库失败回退）时，清旧线程并以
+        checkpoint 当前题重建（start_interview_graph → init → ask interrupt 挂起）。
+
+        Args:
+            db: 数据库同步会话。
+            cache: 同步Redis客户端。
+            interview: 面试会话ORM对象。
+            checkpoint: 业务Checkpoint（当前题指针）。
+        """
+        cur_text = str(checkpoint.get("current_question") or "")
+        if cur_text and get_graph_current_question(interview.id) == cur_text:
+            return  # 已对齐
+
+        # 重建线程：清旧后以 checkpoint 当前题重新种入
+        invalidate_checkpoint(interview.id)
+        questions = list(interview_question_repository.list_by_interview(db, interview.id))
+        base_questions = [
+            {
+                "question_no": q.question_no,
+                "question_id": q.id,
+                "question_type": q.question_type,
+                "category": q.category,
+                "question_text": q.question_text,
+            }
+            for q in questions
+            if q.is_follow_up == 0
+        ]
+        resume = resume_repository.get_by_id(db, interview.resume_id)
+        resume_context = self._load_resume_context(db, cache, resume)
+        # 当前题基础题号（追问与其父题同号）
+        cur_qid = checkpoint.get("current_question_id")
+        q_no = 1
+        cur_q: InterviewQuestion | None = None
+        for q in questions:
+            if q.id == cur_qid:
+                q_no = q.question_no
+                cur_q = q
+                break
+        per_base = 1
+        if cur_q is not None:
+            parent = cur_q if cur_q.is_follow_up == 0 else self._find_parent(questions, cur_q)
+            per_base = (
+                interview_question_repository.count_follow_up_by_parent(db, parent.id)
+                if parent is not None else 1
+            )
+        start_interview_graph(
+            interview_id=interview.id,
+            user_id=interview.user_id,
+            resume_context=resume_context,
+            base_questions=base_questions,
+            question_no=q_no,
+            question_text=cur_text,
+            current_question_id=cur_qid,
+            follow_up_total=interview_question_repository.count_follow_up_total(db, interview.id),
+            per_base_follow_up_count=per_base,
+        )
+        logger.info(
+            "面试图重建线程: interview_id=%s question_no=%s question=%s",
+            interview.id, q_no, cur_text[:30],
+        )
 
     def _push_base_stream(
         self,
@@ -1001,12 +1051,7 @@ class InterviewService:
             next_q: InterviewQuestion | None = follow_up_row
         else:
             next_q = self._next_base_question(questions, target.question_no)
-        # T3.8/T3.9：推进后同步问题队列镜像（当前题出队）。追问【不入队】：
-        # 追问文本已 SSE 直推，不在 Redis 队列中占位（enqueue_head 移除）
-        try:
-            isess.remove_from_queue(cache, interview_id, target.id)
-        except Exception:
-            logger.exception("问题队列镜像同步失败: interview_id=%s", interview_id)
+        # v4：基础题按 question_no 顺序推进，Redis 问题队列镜像已整体删除
         elapsed_over = self._elapsed_over_limit(cache, interview_id, checkpoint, MAX_INTERVIEW_MINUTES)
 
         answered_count = interview_question_repository.count_answered(db, interview_id)
@@ -1275,7 +1320,6 @@ class InterviewService:
         finally:
             # 清理客户端租约与面试图检查点（v2，§14.4）；Checkpoint 保留供回看
             isess.clear_client_sync(cache, interview_id)
-            isess.delete_queue(cache, interview_id)
             invalidate_checkpoint(interview_id)
             isess.release_lock_sync(cache, interview_id, token)
 
@@ -1429,7 +1473,7 @@ class InterviewService:
         finally:
             isess.clear_client_sync(cache, interview_id)
             isess.delete_checkpoint_sync(cache, interview_id)
-            isess.delete_queue(cache, interview_id)
+            invalidate_checkpoint(interview_id)
             isess.release_lock_sync(cache, interview_id, token)
         logger.info("软删除面试记录: interview_id=%s", interview_id)
 
@@ -1642,9 +1686,8 @@ class InterviewService:
 
         checkpoint.update({"phase": PHASE_COMPLETED, "report_fail_count": 0})
         isess.save_checkpoint_sync(cache, interview_id, checkpoint)
-        # 清理客户端租约、问题队列与面试图检查点（§14.4）；Checkpoint 保留供报告页回看
+        # 清理客户端租约与面试图检查点（§14.4）；Checkpoint 保留供报告页回看
         isess.clear_client_sync(cache, interview_id)
-        isess.delete_queue(cache, interview_id)
         invalidate_checkpoint(interview_id)
         self._publish_sse(
             interview.user_id,
